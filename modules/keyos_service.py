@@ -82,29 +82,34 @@ def get_keyos_session(username, password):
         
         # Login form'unu bul ve action'ı al
         form = soup.find('form')
-        login_post_url = LOGIN_URL # Default
-        if form and form.get('action'):
-            action = form.get('action')
-            if action.startswith('http'): login_post_url = action
-            else: login_post_url = BASE_URL + (action if action.startswith('/') else '/' + action)
+        # Subagent bulgusu: Gerçek login endpoint'i /login/login
+        login_post_url = f"{BASE_URL}/login/login"
             
-        # Login form'u POST et
-        data = { "userName": username, "password": password }
-        if csrf_token: data["_token"] = csrf_token
+        # Login form'u JSON POST et (Subagent bulgusu: AJAX/JSON kullanılıyor)
+        json_data = { "userName": username, "password": password }
+        
+        headers = {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/javascript, */*; q=0.01'
+        }
         
         try:
-            login_resp = session.post(login_post_url, data=data, timeout=45, verify=False, allow_redirects=True)
+            login_resp = session.post(login_post_url, json=json_data, headers=headers, timeout=45, verify=False, allow_redirects=True)
         except requests.exceptions.RequestException as e:
             print(f"KeyOS Connection Error (POST Login): {str(e)}")
             return None
         
         final_url = login_resp.url.lower()
-        response_text = login_resp.text.lower()
-        
-        login_failed = (
-            '/login' in final_url or
-            ('kullanıcı adı' in response_text and 'şifre' in response_text)
-        )
+        # AJAX yanıtı genellikle JSON döner
+        try:
+            response_json = login_resp.json()
+            is_success = response_json.get('type') == 'success'
+        except:
+            is_success = False
+            response_text = login_resp.text.lower()
+            
+        login_failed = not is_success
         
         if login_resp.status_code in [200, 302] and not login_failed:
             # Oturumu önbelleğe al
