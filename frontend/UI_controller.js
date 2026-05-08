@@ -68,12 +68,11 @@ var appData = {
                 if (userDataStr) {
                     try { token = JSON.parse(userDataStr).token; } catch(e) {}
                 }
-                // Sadece kendi API'mize giden isteklere token ekle
                 if (token && typeof resource === 'string' && resource.includes('/api/')) {
                     config = config || {};
                     config.headers = config.headers || {};
-                    // FormData ise Content-Type dokunma, sadece auth ekle
                     config.headers['Authorization'] = 'Bearer ' + token;
+                    console.log(`[API Request] ${resource} - Token added`);
                 }
                 const response = await originalFetch(resource, config);
                 // 401 hatası gelirse token patlamı demektir, çıkı yap
@@ -102,8 +101,12 @@ var appData = {
             this.setupLoginListeners();
             this.setupSessionTimeout();
             this.setupPwaPrompt();
-            // Dashboard refresh
             this.startDashboardRefresh();
+
+            window.onpopstate = () => {
+                const view = new URLSearchParams(window.location.search).get('view') || 'dashboard';
+                this.navigateTo(view, false);
+            };
         } catch (e) {
             console.error("Critical Init Error:", e);
             this.showLoginOverlay();
@@ -388,8 +391,11 @@ var appData = {
     },
     loadNoteCounts: async function() {
         try {
-            const resp = await fetch(this.state.API_BASE + '/notes/counts/pc');
-            this.state.noteCounts = await resp.json();
+            const resp = await fetch(this.state.API_BASE + '/notes/get_counts');
+            const data = await resp.json();
+            if (data && !data.error) {
+                this.state.noteCounts = data;
+            }
         } catch(e) {
             console.error('Not sayıları yüklenemedi:', e);
             this.state.noteCounts = {};
@@ -1560,8 +1566,14 @@ var appData = {
         try {
             const response = await fetch(this.state.API_BASE + '/areas/get_all');
             const data = await response.json();
-            this.state.areas = data;
-            this.renderAreas(data);
+            if (Array.isArray(data)) {
+                this.state.areas = data;
+                this.renderAreas(data);
+            } else {
+                console.error("Alanlar verisi dizi değil:", data);
+                this.state.areas = [];
+                this.renderAreas([]);
+            }
         } catch (e) { console.error("Alanlar yüklenemedi:", e); }
     },
     renderAreas: function(data) {
@@ -5515,15 +5527,6 @@ for (var key in appData) {
         app[key] = appData[key];
     }
 }
-
-app.init = function() {
-    this.checkLoginStatus(); 
-    
-    window.onpopstate = () => {
-        const view = new URLSearchParams(window.location.search).get('view') || 'dashboard';
-        this.navigateTo(view, false);
-    };
-};
 
 app.init();
 window.app = app;
