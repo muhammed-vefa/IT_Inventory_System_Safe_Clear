@@ -725,8 +725,8 @@ var appData = {
             await this.loadInventory();
             await this.loadDashboardStats();
             if (this.state.view === 'depot') await this.loadDepot();
-            if (this.state.view === 'printers') this.loadPrinters();
-            if (this.state.view === 'general-notes') this.loadKBEntries();
+            if (this.state.view === 'printers') await this.renderPrinters();
+            if (this.state.view === 'general-notes') await this.loadGeneralNotes();
         } catch (e) {
             alert('Senkronizasyon Hatası: ' + e.message);
         } finally {
@@ -740,10 +740,14 @@ var appData = {
         try {
             const response = await fetch(this.state.API_BASE + '/inventory/get_all');
             const data = await response.json();
-            this.state.inventory = data;
-            this.updatePeripheralDatalists();
-            this.filterInventory();
-            this.renderStatsFromLocal();
+            if (Array.isArray(data)) {
+                this.state.inventory = data;
+                this.updatePeripheralDatalists();
+                this.filterInventory();
+                this.renderStatsFromLocal();
+            } else {
+                throw new Error(data.error || "Beklenmeyen veri formatı");
+            }
         } catch (e) { 
             console.error("Envanter yüklenemedi:", e); 
             this.showToast('Envanter yüklenemedi! Veritabanı bağlantısını kontrol edin.', 'error');
@@ -5511,7 +5515,7 @@ for (var key in appData) {
 
 app.init = function() {
     this.loadInventory();
-    this.loadPrinters();
+    this.renderPrinters();
     this.loadDepot();
     this.loadDashboardStats();
     this.checkAuth();
