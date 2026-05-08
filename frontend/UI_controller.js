@@ -697,7 +697,15 @@ var appData = {
                 if(line.includes('[ERROR]')) color = '#ff4b2b';
                 else if(line.includes('[WARNING]')) color = '#ffb400';
                 else if(line.includes('[INFO]')) color = '#00ff88';
-                return `<div style="color:${color}; border-bottom:1px solid #111; padding:2px 0;">${line}</div>`;
+
+                // Tarih kısmını (YYYY-MM-DD HH:MM:SS,sss) vurgula
+                let formattedLine = line;
+                const dateMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})/);
+                if (dateMatch) {
+                    formattedLine = `<span style="color:var(--accent); font-weight:700; margin-right:10px;">${dateMatch[1]}</span>` + line.substring(dateMatch[1].length);
+                }
+
+                return `<div style="color:${color}; border-bottom:1px solid rgba(255,255,255,0.05); padding:4px 0; font-family: monospace; font-size: 0.75rem;">${formattedLine}</div>`;
             }).join('');
             container.innerHTML = html;
         } catch(e) {

@@ -1107,17 +1107,10 @@ def get_dashboard_stats():
     by_kurulu = conn.execute("SELECT COUNT(*) FROM inventory WITH (NOLOCK) WHERE by_seri IS NOT NULL AND by_seri != ''").fetchone()[0] or 0
     
     # Depo (Depot Items'dan) - Daha hassas filtreleme
-    # Mükerrer sayımı önlemek için
-    bo_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE (name LIKE '%BARKOD OKUYUCU%' OR name LIKE '%BARKOD OKUYUCU%') OR (category='DONANIM' AND name LIKE '%OKUYUCU%')").fetchone()[0] or 0
-    by_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE (name LIKE '%BARKOD YAZICI%' OR name LIKE '%BARKOD YAZICI%') AND category != 'SARF MALZEME'").fetchone()[0] or 0
-    
-    # Barkod Yazıcı için eğer 0 ise kategorisiz bak (Eskiden sarf malzeme içindeydi)
-    if by_depo == 0:
-        by_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%BARKOD YAZICI%'").fetchone()[0] or 0
-
-    # Eğer 0 gelirse (BO için 9 olması lazım dedin), daha geniş ama tekil bir filtre deneyelim
-    if bo_depo == 0:
-        bo_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%OKUYUCU%'").fetchone()[0] or 0
+    # Kullanıcı bildirimi: BY: 9, BO: 51
+    # Bu değerlere ulaşmak için kategori ve isim filtrelerini sadeleştiriyoruz.
+    bo_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%OKUYUCU%'").fetchone()[0] or 0
+    by_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%BARKOD YAZICI%'").fetchone()[0] or 0
 
     # 5. OS Bilgileri ve KeyOS Uptime
     keyos_count = pc_data['keyos'] or 0
