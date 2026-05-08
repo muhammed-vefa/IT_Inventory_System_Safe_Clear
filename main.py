@@ -1085,8 +1085,8 @@ def get_dashboard_stats():
     
     # Model bazlı kurulu sayısı
     # Printers tablosundaki statüye bak, C230 ve G2090 için
-    tr_c230_kurulu = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE (model LIKE '%C230%' OR name LIKE '%C230%') AND status IN ('Sahada', 'Kurulu', 'Aktif')").fetchone()[0] or 0
-    tr_g2090_kurulu = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE (model LIKE '%G2090%' OR name LIKE '%G2090%') AND status IN ('Sahada', 'Kurulu', 'Aktif')").fetchone()[0] or 0
+    tr_c230_kurulu = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE (model LIKE '%C230%' OR pr_no LIKE '%C230%') AND status IN ('Sahada', 'Kurulu', 'Aktif')").fetchone()[0] or 0
+    tr_g2090_kurulu = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE (model LIKE '%G2090%' OR pr_no LIKE '%G2090%') AND status IN ('Sahada', 'Kurulu', 'Aktif')").fetchone()[0] or 0
 
     # Eğer 0 gelirse, inventory tablosundaki tarayici_seri'si olanların count'unu toplama yedek olarak ekleyelim 
     # (Not: Model bilgisi inventory'de yok, o yüzden toplam tr_kurulu_count daha güvenilir bir referans)
