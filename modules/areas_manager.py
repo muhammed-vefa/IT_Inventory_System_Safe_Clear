@@ -56,3 +56,13 @@ def update_area(id):
         return jsonify({"message": "Ortak alan güncellendi"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+@areas_manager_bp.route('/delete/<int:id>', methods=['DELETE'])
+@require_admin
+def delete_area(id):
+    try:
+        conn = get_db_connection()
+        conn.execute("DELETE FROM shared_areas WHERE id=?", (id,))
+        conn.commit()
+        return jsonify({"message": "Ortak alan silindi"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

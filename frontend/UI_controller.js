@@ -443,6 +443,10 @@ var appData = {
             set('stat-by-toplam', stats.by.kurulu + stats.by.depo);
         }
         // Tarayıcılar
+        if(stats.tr) {
+            set('stat-tr-kurulu', stats.tr.kurulu);
+            set('stat-tr-depo', stats.tr.depo);
+        }
         if(stats.tr_c230) {
             set('stat-tr-c230-sahada', stats.tr_c230.kurulu);
             set('stat-tr-c230-depo', stats.tr_c230.depo);
@@ -3701,13 +3705,25 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         }
     },
     updatePrinterDatalist: function() {
-        // HTML'de id="printer-pr-datalist" olarak tanımlandı
         const dl = document.getElementById('printer-pr-datalist');
-        if (!dl || !this.state.printers) return;
-        dl.innerHTML = this.state.printers
+        const ddl = document.getElementById('depot-printer-datalist');
+        if (!this.state.printers) return;
+
+        const allOptions = this.state.printers
             .sort((a, b) => (a.pr_no || '').localeCompare(b.pr_no || ''))
             .map(p => `<option value="${p.pr_no}">${p.pr_no} - ${p.model || ''} (${p.mahal || 'Depo'})</option>`)
             .join('');
+        
+        if (dl) dl.innerHTML = allOptions;
+
+        // Sadece Depoda olanlar (İkame için)
+        if (ddl) {
+            ddl.innerHTML = this.state.printers
+                .filter(p => (p.status || '').toLowerCase().includes('depo'))
+                .sort((a, b) => (a.pr_no || '').localeCompare(b.pr_no || ''))
+                .map(p => `<option value="${p.pr_no}">${p.pr_no} - ${p.model || ''}</option>`)
+                .join('');
+        }
     },
     handlePrinterSelection: function(inputId, isSubstitute) {
         const inputEl = document.getElementById(inputId);
@@ -3743,31 +3759,6 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             if(mahalEl) mahalEl.value = p.mahal || '';
             if(acqDateEl && p.acq_date) acqDateEl.value = p.acq_date.split(' ')[0];
         }
-        document.getElementById('service-acq-place').value = s.acq_place || '';
-        document.getElementById('service-acq-date').value = s.acq_date || ''; // Popüle et
-        document.getElementById('service-sent-date').value = s.sent_date || '';
-        document.getElementById('service-return-date').value = s.return_date || '';
-        document.getElementById('service-status').value = s.status || 'Serviste';
-        document.getElementById('service-fault-desc').value = s.fault_desc || ' ';
-        // Durum otomatik güncelleme dinleyicileri
-        document.getElementById('service-return-date').onchange = (e) => {
-            if(e.target.value) document.getElementById('service-status').value = 'Depoda';
-        };
-        document.getElementById('service-sent-date').onchange = (e) => {
-            if(e.target.value && !document.getElementById('service-return-date').value) 
-                document.getElementById('service-status').value = 'Serviste';
-        };
-        // service-final-status element kontrolü (index.html'de yoksa hata vermemesi için)
-        const finalStatusEl = document.getElementById('service-final-status');
-        if (finalStatusEl) finalStatusEl.value = s.final_status || '';
-        document.getElementById('service-has-substitute').checked = !!s.has_substitute;
-        document.getElementById('service-substitute-pr-no').value = s.substitute_pr_no || '';
-        document.getElementById('service-substitute-container').style.display = s.has_substitute ? 'block' : 'none';
-        document.getElementById('service-modal').style.display = 'flex';
-        // Admin ise silme butonunu göster
-        const isAdmin = this.state.activeUser && this.state.activeUser.role === 'ADMIN';
-        const deleteBtn = document.getElementById('btn-service-delete');
-        if (deleteBtn) deleteBtn.style.display = isAdmin ? 'block' : 'none';
     },
     deleteServiceRecordFromModal: function() {
         const id = document.getElementById('service-edit-id').value;
@@ -5509,132 +5500,6 @@ app.clearSearch = function(id) {
     }
 };
 
-    app.updateCupsLocation = async function(ip, mahal) {
-        const pr_no_el = document.getElementById('edit-pr_no');
-        const pr_no = pr_no_el ? pr_no_el.value : null;
-        
-        if (!pr_no || !mahal) {
-            this.showToast('Yazıcı numarası veya mahal bilgisi eksik!', 'warning');
-            return;
-        }
-
-        try {
-            this.showToast('CUPS Mahal güncelleniyor...', 'info');
-            const resp = await fetch(this.state.API_BASE + '/printers/cups/update_mahal', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pr_no: pr_no, mahal: mahal })
-            });
-            
-            const result = await resp.json();
-            if (result.error) throw new Error(result.error);
-            
-            this.showToast('CUPS Mahal başarıyla güncellendi.');
-        } catch (e) {
-            alert('CUPS Hatası: ' + e.message);
-        }
-    };
-
-    app.toggleDesignMode = function() {
-        this.state.designMode = !this.state.designMode;
-        const btn = document.getElementById('design-mode-btn');
-        if (this.state.designMode) {
-            document.body.classList.add('design-mode-active');
-            btn.innerHTML = '<i class="fas fa-save"></i> Tasarımı Kaydet';
-            btn.style.background = 'rgba(0, 255, 136, 0.2)';
-            btn.style.color = '#00ff88';
-            this.showToast('Hizalama Modu Aktif: Elemanlar 10px adımlarla hizalanacaktır.', 'info');
-            this.enableVisualEditor();
-        } else {
-            this.saveDesign();
-            document.body.classList.remove('design-mode-active');
-            btn.innerHTML = '<i class="fas fa-paint-brush"></i> Tasarım Modu: KAPALI';
-            btn.style.background = 'rgba(255,180,0,0.1)';
-            btn.style.color = '#ffb400';
-            this.disableVisualEditor();
-        }
-    };
-
-    app.enableVisualEditor = function() {
-        const textElements = document.querySelectorAll('h1, h2, h3, h4, p, span, label, b, strong, button:not(.btn-design-toggle)');
-        textElements.forEach(el => {
-            el.setAttribute('contenteditable', 'true');
-        });
-
-        const draggableSelectors = '.card, .btn, .nav-link, .stat-card, .search-bar-container, nav, main, section, .container, .sidebar, .top-panel';
-        const draggableElements = document.querySelectorAll(draggableSelectors);
-        draggableElements.forEach(el => {
-            if (el.id === 'design-mode-btn') return;
-            this.makeDraggable(el);
-            el.style.cursor = 'move';
-        });
-    };
-
-    app.disableVisualEditor = function() {
-        const elements = document.querySelectorAll('[contenteditable="true"]');
-        elements.forEach(el => {
-            el.removeAttribute('contenteditable');
-            el.style.outline = '';
-        });
-        const draggables = document.querySelectorAll('.card, .btn, .nav-link, .stat-card, .search-bar-container');
-        draggables.forEach(el => {
-            el.style.cursor = '';
-            el.style.border = '';
-        });
-    };
-
-    app.makeDraggable = function(el) {
-        let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-        const snap = 10; // Cetvel hizalaması (10 pixel snapping)
-
-        el.onmousedown = function(e) {
-            if (e.target.getAttribute('contenteditable') === 'true') return;
-            e = e || window.event;
-            // Sağ tık veya orta tıkı engelle
-            if (e.button !== 0) return;
-            
-            e.preventDefault();
-            pos3 = e.clientX;
-            pos4 = e.clientY;
-            document.onmouseup = closeDragElement;
-            document.onmousemove = elementDrag;
-            
-            // Sürükleme anında görsel geri bildirim
-            el.style.zIndex = "9999";
-            el.style.transition = "none"; 
-        };
-
-        function elementDrag(e) {
-            e = e || window.event;
-            e.preventDefault();
-            pos1 = pos3 - e.clientX;
-            pos2 = pos4 - e.clientY;
-            pos3 = e.clientX;
-            pos4 = e.clientY;
-            
-            const style = window.getComputedStyle(el);
-            if (style.position !== 'absolute' && style.position !== 'fixed') {
-                el.style.position = 'relative';
-            }
-            
-            // Yeni pozisyonu hesapla
-            let newTop = el.offsetTop - pos2;
-            let newLeft = el.offsetLeft - pos1;
-            
-            // CETVEL HIZALAMASI (SNAPPING)
-            newTop = Math.round(newTop / snap) * snap;
-            newLeft = Math.round(newLeft / snap) * snap;
-            
-            el.style.top = newTop + "px";
-            el.style.left = newLeft + "px";
-        }
-
-        function closeDragElement() {
-            document.onmouseup = null;
-            document.onmousemove = null;
-            el.style.zIndex = "";
-            el.style.transition = "";
-        }
     };
 
     app.saveDesign = function() {

@@ -315,6 +315,7 @@
                             <div class="stat-label" style="margin-top: 5px;">Barkod Yazıcı</div>
                         </div>
                         
+                        <!-- Separate TR C230 Card -->
                         <div class="stat-card" style="padding: 10px;">
                             <div class="flex-row gap-2" style="justify-content: space-around; width: 100%;">
                                 <div class="flex-column" style="align-items: center;">
@@ -326,9 +327,10 @@
                                     <span style="font-size: 0.6rem; opacity: 0.6;">Depo</span>
                                 </div>
                             </div>
-                            <div class="stat-label" style="margin-top: 5px;">TR C230</div>
+                            <div class="stat-label" style="margin-top: 5px;">TR C230 Tarayıcı</div>
                         </div>
 
+                        <!-- Separate TR G2090 Card -->
                         <div class="stat-card" style="padding: 10px;">
                             <div class="flex-row gap-2" style="justify-content: space-around; width: 100%;">
                                 <div class="flex-column" style="align-items: center;">
@@ -340,7 +342,7 @@
                                     <span style="font-size: 0.6rem; opacity: 0.6;">Depo</span>
                                 </div>
                             </div>
-                            <div class="stat-label" style="margin-top: 5px;">TR G2090</div>
+                            <div class="stat-label" style="margin-top: 5px;">TR G2090 Tarayıcı</div>
                         </div>
                         
                         <div class="stat-card stat-os"><div class="stat-value" id="stat-os-windows" style="color:#0078d4">0</div><div class="stat-label"><i class="fab fa-windows"></i> Windows</div></div>
@@ -902,8 +904,8 @@
         <section id="view-service" class="view fade-in" style="display: none;">
             <div class="flex-between mb-4">
                 <div>
-                    <h2 style="font-weight: 700; color: #fff;"><i class="fas fa-tools"></i> Servis İşlemleri</h2>
-                    <p style="color: var(--text-secondary); font-size: 0.85rem;">Servise giden yazıcıların takibini yapın ve teslim formu oluşturun.</p>
+                    <h2 class="section-title"><i class="fas fa-tools"></i> Servis İşlemleri ve Takip</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 5px;">Servise giden yazıcıların takibini yapın ve teslim formu oluşturun.</p>
                 </div>
                 <div class="flex-row gap-2">
                     <button class="btn btn-accent" onclick="app.openAddServiceModal()">
@@ -952,8 +954,8 @@
         <section id="view-logs" class="view fade-in" style="display: none;">
             <div class="flex-between mb-4">
                 <div>
-                    <h2 style="font-weight: 700; color: #fff;"><i class="fas fa-history"></i> Değişiklik Günlüğü</h2>
-                    <p style="color: var(--text-secondary); font-size: 0.85rem;">Sistemde yapılan tüm değişiklikler kronolojik sırada gösterilir.</p>
+                    <h2 class="section-title"><i class="fas fa-history"></i> Sistem Değişiklik Günlüğü</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 5px;">Sistemde yapılan tüm değişiklikler kronolojik sırada gösterilir.</p>
                 </div>
                 <div class="flex-row gap-2">
                     <select id="log-filter-user" class="search-bar" style="max-width: 180px;" onchange="app.loadAuditLogs()">
@@ -970,11 +972,6 @@
                     </button>
                 </div>
             </div>
-            <div class="user-profile" id="user-info-area" style="display:none;">
-                <button class="btn btn-design-toggle" onclick="app.toggleDesignMode()" title="Tasarım Modu" style="background: rgba(255,180,0,0.1); color: #ffb400; border: 1px solid rgba(255,180,0,0.2); padding: 5px 10px; font-size: 0.7rem; border-radius: 4px; cursor: pointer; margin-right: 10px;">
-                    <i class="fas fa-paint-brush"></i> <span id="design-mode-text">Tasarım Modu</span>
-                </button>
-                <div class="user-avatar" id="user-avatar">U</div>
             <div class="card" style="overflow-x: auto;">
                 <table class="user-table" id="logs-table">
                     <thead>
@@ -990,7 +987,7 @@
                         </tr>
                     </thead>
                     <tbody id="logs-tbody">
-                        <tr><td colspan="6" style="text-align:center; opacity:0.5;">Yükleniyor...</td></tr>
+                        <tr><td colspan="8" style="text-align:center; opacity:0.5;">Yükleniyor...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1000,8 +997,8 @@
         <section id="view-users" class="view fade-in" style="display: none;">
             <div class="flex-between mb-4">
                 <div>
-                    <h2 style="font-weight: 700; color: #fff;">Kullanıcı Yönetimi</h2>
-                    <p style="color: var(--text-secondary); font-size: 0.85rem;">Sistem kullanıcılarını ekleyin, düzenleyin veya silin.</p>
+                    <h2 class="section-title"><i class="fas fa-users-cog"></i> Kullanıcı Yönetimi</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 5px;">Sistem kullanıcılarını ekleyin, düzenleyin veya silin.</p>
                 </div>
                 <button class="btn btn-accent" onclick="app.openAddUserModal()">
                     <i class="fas fa-user-plus"></i> Yeni Kullanıcı
@@ -1031,7 +1028,7 @@
     <div id="device-detail-modal" class="modal-backdrop" style="display: none;" onclick="app.closeDeviceDetailWithCheck(event)">
         <div class="card modal-card-lg" style="max-width: 600px;">
             <div class="flex-between mb-3">
-                <h3 id="device-detail-title"><i class="fas fa-edit"></i> Cihaz Bilgilerini Düzenle</h3>
+                <h3 id="device-detail-title"><i class="fas fa-edit"></i> KEYDATA KOCAELİ - Cihaz Düzenleme</h3>
                 <div class="flex-row gap-2">
                     <button id="btn-show-history" class="btn-chip" style="background:rgba(255,255,255,0.05); color:var(--accent); border:1px solid rgba(0,210,255,0.2);" title="Düzenleme Geçmişi">
                         <i class="fas fa-history"></i> Geçmiş
@@ -1049,7 +1046,7 @@
     <div id="kb-modal" class="modal-backdrop" style="display: none;">
         <div class="card modal-card-lg" style="max-width: 600px;">
             <div class="flex-between mb-4">
-                <h3 id="kb-modal-title" style="color:var(--accent);"><i class="fas fa-pen-to-square"></i> Yeni Bilgi / Not Ekle</h3>
+                <h3 id="kb-modal-title" style="color:var(--accent);"><i class="fas fa-pen-to-square"></i> KEYDATA KOCAELİ - Bilgi Bankası Kaydı</h3>
                 <i class="fas fa-times modal-close" onclick="app.closeKBModal()"></i>
             </div>
             <div class="flex-column gap-3">
@@ -1097,7 +1094,7 @@
     <div id="history-modal" class="modal-backdrop" style="display: none; z-index: 10000;">
         <div class="card modal-card-lg" style="max-width: 500px; border: 1px solid rgba(0,210,255,0.3);">
             <div class="flex-between mb-4">
-                <h3 id="history-modal-title" style="color:var(--accent);"><i class="fas fa-history"></i> Düzenleme Geçmişi</h3>
+                <h3 id="history-modal-title" style="color:var(--accent);"><i class="fas fa-history"></i> KEYDATA KOCAELİ - İşlem Geçmişi</h3>
                 <i class="fas fa-times modal-close" onclick="document.getElementById('history-modal').style.display='none'"></i>
             </div>
             <div id="history-list" class="flex-column gap-3" style="max-height: 500px; overflow-y: auto; padding-right: 10px;"></div>
@@ -1136,7 +1133,7 @@
     <div id="device-add-modal" class="modal-backdrop" style="display: none;">
         <div class="card modal-card-lg" style="max-width: 600px;">
             <div class="flex-between mb-3">
-                <h3><i class="fas fa-desktop"></i> Yeni Cihaz Şeması (Manuel Kayıt)</h3>
+                <h3><i class="fas fa-desktop"></i> KEYDATA KOCAELİ - Yeni Cihaz Ekle</h3>
                 <i class="fas fa-times modal-close" onclick="document.getElementById('device-add-modal').style.display='none'"></i>
             </div>
             <div class="flex-column gap-2" id="add-device-form">
@@ -1186,7 +1183,7 @@
     <div id="area-modal" class="modal-backdrop" style="display: none;">
         <div class="card" style="max-width: 450px; width: 90%;">
             <div class="flex-between mb-3">
-                <h3 id="area-title"><i class="fas fa-network-wired"></i> Ortak Alan Bilgisi</h3>
+                <h3 id="area-title"><i class="fas fa-network-wired"></i> KEYDATA KOCAELİ - Ortak Alan Bilgisi</h3>
                 <i class="fas fa-times modal-close" onclick="document.getElementById('area-modal').style.display='none'"></i>
             </div>
             <div class="flex-column gap-2">
@@ -1223,7 +1220,7 @@
     <div id="service-modal" class="modal-backdrop" style="display: none;">
         <div class="card" style="max-width: 650px; width: 95%;">
             <div class="flex-between mb-4">
-                <h3 id="service-modal-title" style="color: var(--accent); margin:0;"><i class="fas fa-tools"></i> Yeni Servis Kaydı</h3>
+                <h3 id="service-modal-title" style="color: var(--accent); margin:0;"><i class="fas fa-tools"></i> KEYDATA KOCAELİ - Servis Formu</h3>
                 <i class="fas fa-times" onclick="document.getElementById('service-modal').style.display='none'" style="cursor:pointer; opacity:0.5;"></i>
             </div>
             
@@ -1304,7 +1301,7 @@
                     </div>
                     <div class="form-group" id="service-substitute-container" style="display:none;">
                          <label>İkame Yazıcı PR No</label>
-                         <input type="text" id="service-substitute-pr-no" class="search-bar" list="printer-pr-datalist" placeholder="PR-xxx">
+                         <input type="text" id="service-substitute-pr-no" class="search-bar" list="depot-printer-datalist" placeholder="PR-xxx">
                     </div>
                 </div>
 
@@ -1327,7 +1324,7 @@
         <div class="card" style="max-width: 500px; width: 95%; border: 1.5px solid var(--accent); background: #12151a; box-shadow: 0 0 40px rgba(0,210,255,0.2); padding: 25px;">
             <div class="flex-between mb-4">
                 <h3 id="batch-modal-title" style="color:var(--accent); font-size: 1.1rem; display: flex; align-items: center; gap: 10px; margin: 0;">
-                    <i class="fas fa-terminal"></i> Uzaktan Komut Çalıştır (Yazıcı)
+                    <i class="fas fa-terminal"></i> KEYDATA KOCAELİ - Uzaktan Komut
                 </h3>
                 <i class="fas fa-times" onclick="document.getElementById('batch-printer-modal').style.display='none'" style="cursor:pointer; opacity:0.5;"></i>
             </div>
@@ -1389,7 +1386,7 @@
     <!-- ═══════════════ DEPOT ADD MODAL ═══════════════ -->
     <div id="depot-add-modal" class="modal-backdrop" style="display: none;">
         <div class="card" style="max-width: 450px; width: 90%;">
-            <h3 class="mb-3" id="depot-add-modal-title"><i class="fas fa-box-open"></i> Depoya Yeni Ürün Ekle</h3>
+            <h3 class="mb-3" id="depot-add-modal-title"><i class="fas fa-box-open"></i> KEYDATA KOCAELİ - Depo Yönetimi</h3>
             <input type="hidden" id="depot-item-id">
             <div class="flex-column gap-2">
                 <div class="form-group">
@@ -1506,7 +1503,7 @@
     <div id="user-modal" class="modal-backdrop" style="display: none;">
         <div class="card" style="max-width: 420px; width: 90%;">
             <div class="flex-between mb-3">
-                <h3 id="user-modal-title"><i class="fas fa-user-plus"></i> Yeni Kullanıcı</h3>
+                <h3 id="user-modal-title"><i class="fas fa-user-plus"></i> KEYDATA KOCAELİ - Kullanıcı Ayarları</h3>
                 <i class="fas fa-times modal-close" onclick="document.getElementById('user-modal').style.display='none'"></i>
             </div>
             <div class="flex-column gap-2">
@@ -1753,6 +1750,10 @@
             <p style="margin-top: 20px; font-size: 0.75rem; color: #555;">* Android Chrome üzerinde en iyi sonucu verir.</p>
         </div>
     </div>
+
+    <!-- Datalists for searching -->
+    <datalist id="printer-pr-datalist"></datalist>
+    <datalist id="depot-printer-datalist"></datalist>
 
     <script src="frontend/UI_controller.js?v=7.1"></script>
 </body>

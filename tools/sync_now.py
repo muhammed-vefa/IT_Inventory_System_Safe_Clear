@@ -1,8 +1,8 @@
 import sys
 import os
 
-# Proje dizinini sys.path'e ekle
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Proje ana dizinini sys.path'e ekle
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from main import sync_excel_to_db

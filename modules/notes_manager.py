@@ -194,66 +194,75 @@ def search_kb():
 def get_kb_file(filename):
     """Yüklenen resimleri veya dosyaları servis eder."""
     return send_from_directory(UPLOAD_DIR, filename)
+def sync_kb_from_excel_internal():
+    """bilgi_bankası.xlsx dosyasındaki verileri knowledge_base tablosuna aktarır."""
+    bilgi_path = os.path.join(os.path.dirname(__file__), "..", "database", "bilgi_bankası.xlsx")
+    if not os.path.exists(bilgi_path):
+        raise FileNotFoundError("bilgi_bankası.xlsx bulunamadı")
+        
+    from core.excel_utils import read_excel_data
+    conn = get_db_connection()
+    count = 0
+    
+    # 1. Kodlar (Sekme 0)
+    kodlar = read_excel_data(bilgi_path, sheet_name=0)
+    if kodlar:
+        for item in kodlar:
+            title = (item.get('KONU BAŞLIĞI') or item.get('KONU BALII') or '-').strip()
+            content = item.get('NOT') or '-'
+            if not title or title == '-': continue
+            
+            exists = conn.execute("SELECT id FROM knowledge_base WHERE title=?", (title,)).fetchone()
+            if exists:
+                conn.execute("UPDATE knowledge_base SET content=?, type='kodlar' WHERE id=?", (content, exists['id']))
+            else:
+                conn.execute("INSERT INTO knowledge_base (type, title, content) VALUES (?,?,?)", ('kodlar', title, content))
+            count += 1
+
+    # 2. Kapanış Açıklamaları (Sekme 1)
+    try:
+        kapanis = read_excel_data(bilgi_path, sheet_name=1)
+        if kapanis:
+            for item in kapanis:
+                title = (item.get('BAŞLIK') or item.get('BALIK') or '-').strip()
+                content = item.get('KAPANIŞ AÇIKLAMASI') or item.get('KAPANI AIKLAMASI') or '-'
+                if not title or title == '-': continue
+                
+                exists = conn.execute("SELECT id FROM knowledge_base WHERE title=?", (title,)).fetchone()
+                if exists:
+                    conn.execute("UPDATE knowledge_base SET content=?, type='kapanis' WHERE id=?", (content, exists['id']))
+                else:
+                    conn.execute("INSERT INTO knowledge_base (type, title, content) VALUES (?,?,?)", ('kapanis', title, content))
+                count += 1
+    except Exception: pass
+
+    # 3. Sorun Giderme (Sekme 2)
+    try:
+        sorun = read_excel_data(bilgi_path, sheet_name=2)
+        if sorun:
+            for item in sorun:
+                title = (item.get('BAŞLIK') or item.get('BALIK') or '-').strip()
+                content = (item.get('İÇERİK') or item.get('ICERIK') or item.get('NOT') or '-').strip()
+                if not title or title == '-': continue
+                
+                exists = conn.execute("SELECT id FROM knowledge_base WHERE title=?", (title,)).fetchone()
+                if exists:
+                    conn.execute("UPDATE knowledge_base SET content=?, type='sorun-giderme' WHERE id=?", (content, exists['id']))
+                else:
+                    conn.execute("INSERT INTO knowledge_base (type, title, content) VALUES (?,?,?)", ('sorun-giderme', title, content))
+                count += 1
+    except Exception: pass
+
+    conn.commit()
+    conn.close()
+    return count
+
 @notes_manager_bp.route('/kb/sync_from_excel', methods=['POST'])
 @require_admin
 def sync_kb_from_excel_route():
     """bilgi_bankası.xlsx dosyasındaki verileri knowledge_base tablosuna aktarır."""
     try:
-        bilgi_path = os.path.join(os.path.dirname(__file__), "..", "database", "bilgi_bankası.xlsx")
-        if not os.path.exists(bilgi_path):
-            return jsonify({"error": "bilgi_bankası.xlsx bulunamadı"}), 404
-            
-        from core.excel_utils import read_excel_data
-        conn = get_db_connection()
-        
-        # 1. Kodlar (Sekme 0)
-        kodlar = read_excel_data(bilgi_path, sheet_name=0)
-        if kodlar:
-            for item in kodlar:
-                title = (item.get('KONU BAŞLIĞI') or item.get('KONU BALII') or '-').strip()
-                content = item.get('NOT') or '-'
-                if not title or title == '-': continue
-                
-                exists = conn.execute("SELECT id FROM knowledge_base WHERE title=?", (title,)).fetchone()
-                if exists:
-                    conn.execute("UPDATE knowledge_base SET content=?, type='kodlar' WHERE id=?", (content, exists['id']))
-                else:
-                    conn.execute("INSERT INTO knowledge_base (type, title, content) VALUES (?,?,?)", ('kodlar', title, content))
-
-        # 2. Kapanış Açıklamaları (Sekme 1)
-        try:
-            kapanis = read_excel_data(bilgi_path, sheet_name=1)
-            if kapanis:
-                for item in kapanis:
-                    title = (item.get('BAŞLIK') or item.get('BALIK') or '-').strip()
-                    content = item.get('KAPANIŞ AÇIKLAMASI') or item.get('KAPANI AIKLAMASI') or '-'
-                    if not title or title == '-': continue
-                    
-                    exists = conn.execute("SELECT id FROM knowledge_base WHERE title=?", (title,)).fetchone()
-                    if exists:
-                        conn.execute("UPDATE knowledge_base SET content=?, type='kapanis' WHERE id=?", (content, exists['id']))
-                    else:
-                        conn.execute("INSERT INTO knowledge_base (type, title, content) VALUES (?,?,?)", ('kapanis', title, content))
-        except Exception: pass
-
-        # 3. Sorun Giderme (Sekme 2)
-        try:
-            sorun = read_excel_data(bilgi_path, sheet_name=2)
-            if sorun:
-                for item in sorun:
-                    title = (item.get('BAŞLIK') or item.get('BALIK') or '-').strip()
-                    content = (item.get('İÇERİK') or item.get('ICERIK') or item.get('NOT') or '-').strip()
-                    if not title or title == '-': continue
-                    
-                    exists = conn.execute("SELECT id FROM knowledge_base WHERE title=?", (title,)).fetchone()
-                    if exists:
-                        conn.execute("UPDATE knowledge_base SET content=?, type='sorun-giderme' WHERE id=?", (content, exists['id']))
-                    else:
-                        conn.execute("INSERT INTO knowledge_base (type, title, content) VALUES (?,?,?)", ('sorun-giderme', title, content))
-        except Exception: pass
-
-        conn.commit()
-        conn.close()
-        return jsonify({"message": "Bilgi bankası Excel ile senkronize edildi."})
+        count = sync_kb_from_excel_internal()
+        return jsonify({"message": f"Bilgi bankası Excel ile senkronize edildi ({count} kayıt)."})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

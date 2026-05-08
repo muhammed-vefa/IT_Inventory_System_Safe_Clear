@@ -14,12 +14,12 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 printer_manager_bp = Blueprint('printer_manager', __name__)
 
-PRINTER_STATUS_PORTAL = "https://10.0.0.99:631/printers/"
+PRINTER_STATUS_PORTAL = "https://10.241.1.21:49631/printers/"
 
 class CUPSHelper:
-    BASE_URL = "https://10.0.0.99:631"
-    AUTH_USER = 'demo_user'
-    AUTH_PASS = 'demo_pass'
+    BASE_URL = "https://10.241.1.21:49631"
+    AUTH_USER = 'root'
+    AUTH_PASS = '1234qqqQ'
 
     @classmethod
     def get_session(cls):
@@ -535,86 +535,89 @@ def update_printer():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@printer_manager_bp.route('/sync_from_excel', methods=['POST'])
-@require_admin
-def sync_printers_from_excel():
-    """Excel'den yazıcıları senkronize eder ve site durumunu Excel'e yazar."""
-    try:
-        import os
-        import openpyxl
-        # main.py ile aynı dizine bak (C:\Users\MUHAMMED-VEFA-IS\Desktop\IT_Inventory_System\)
-        BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        yaz_path = os.path.join(BASE_DIR, "yazıcılar.xlsx")
+def sync_printers_from_excel_internal():
+    """Excel'den yazıcıları/tarayıcıları/barkod okuyucuları senkronize eder."""
+    import openpyxl
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    yaz_path = os.path.join(BASE_DIR, "database", "yazıcılar.xlsx")
+    
+    if not os.path.exists(yaz_path):
+        raise FileNotFoundError("yazıcılar.xlsx bulunamadı")
         
-        if not os.path.exists(yaz_path):
-            return jsonify({"error": "yazıcılar.xlsx bulunamadı"}), 404
-            
-        conn = get_db_connection()
-        wb = openpyxl.load_workbook(yaz_path, data_only=True)
-        sheet = wb.active
+    conn = get_db_connection()
+    wb = openpyxl.load_workbook(yaz_path, data_only=True)
+    
+    # Tüm sekmeleri gez (Barkod Yazıcı, Barkod Okuyucu, Tarayıcı, Yazıcılar)
+    updated_count = 0
+    for sheet_name in wb.sheetnames:
+        sheet = wb[sheet_name]
         rows = list(sheet.rows)
+        if not rows: continue
+        
         headers = [str(cell.value).strip().upper() if cell.value else f"Col{i}" for i, cell in enumerate(rows[0])]
         
         durum_idx = -1
         for i, h in enumerate(headers):
             if h in ['DURUM', 'STATUS', 'STATE']: durum_idx = i; break
         
-        if durum_idx == -1:
-            durum_idx = len(headers)
-            sheet.cell(row=1, column=durum_idx+1, value='DURUM')
-        
-        updated_count = 0
         for r_idx, row_cells in enumerate(rows[1:], start=2):
             item = {headers[i]: row_cells[i].value for i in range(len(row_cells)) if i < len(headers)}
             
             pr_no = str(item.get('PR NUMARASI') or item.get('PR NO') or 
                         item.get('BY NO') or item.get('BARKOD YAZICI NO') or 
                         item.get('BO NO') or item.get('BARKOD OKUYUCU NO') or 
-                        item.get('TR NO') or item.get('TARAYICI NO') or '').strip()
+                        item.get('TR NO') or item.get('TARAYICI NO') or 
+                        item.get('CİHAZ NO') or item.get('CIHAZ NO') or '').strip()
             seri = str(item.get('SERİ NUMARASI') or item.get('SERI NO') or '').strip()
             mac = str(item.get('MAC ADRESS') or item.get('MAC ADRES') or '').strip()
-            
-            # Ana Yazıcılar (PR-) için Seri ve MAC zorunlu
-            # Diğerleri (BY, BO, TR) için sadece Seri yeterli
-            is_barcode_or_scanner = any(x in pr_no.upper() for x in ['BY', 'BO', 'TR'])
+            model = str(item.get('MODEL') or item.get('CİHAZ MODELİ') or '').strip()
             
             if not pr_no or not seri:
                 continue
-                
-            if not is_barcode_or_scanner and not mac:
-                # Standart yazıcılarda MAC zorunlu olsun demiştik
-                continue
 
             exists = conn.execute("SELECT id, status, model, seri, mac, ip FROM printers WHERE pr_no=? OR (seri=? AND seri != '')", (pr_no, seri)).fetchone()
-            excel_status = str(row_cells[durum_idx].value or '').strip()
+            excel_status = str(row_cells[durum_idx].value or '').strip() if durum_idx != -1 else 'Kurulu'
             
+            # Excel'den gelen durum bilgisini temizle
+            final_status = 'Kurulu'
+            if excel_status:
+                s_up = excel_status.upper()
+                if s_up in ['KURULU', 'SAHADA', 'OK', 'K', 'S']: final_status = 'Kurulu'
+                elif s_up in ['DEPO', 'DEPODA', 'STOK', 'D']: final_status = 'Depoda'
+                elif s_up in ['ARIZALI', 'A', 'BOZUK']: final_status = 'Arızalı'
+                elif s_up in ['SERVİSTE', 'SERVIS', 'SERVİS']: final_status = 'Serviste'
+                elif s_up in ['KAYIP', 'L', 'M']: final_status = 'Kayıp'
+
             if exists:
-                # Sitedeki yönetim durumunu (Kurulu, Depoda vb.) Excel'e geri yaz
-                cur_status = exists['status'] or 'Kurulu'
-                sheet.cell(row=r_idx, column=durum_idx+1, value=cur_status)
-                
-                # Excel'deki diğer kolonlarla DB'yi güncelle
-                conn.execute('''UPDATE printers SET model=?, seri=?, mac=?, ip=? WHERE id=?''', 
-                             (item.get('MODEL') or exists['model'], 
+                conn.execute('''UPDATE printers SET model=?, seri=?, mac=?, ip=?, status=? WHERE id=?''', 
+                             (model or exists['model'], 
                               seri or exists['seri'], 
                               mac or exists['mac'], 
-                              item.get('IP ADRES') or exists['ip'], 
+                              item.get('IP ADRES') or exists['ip'],
+                              final_status,
                               exists['id']))
             else:
-                final_status = excel_status if excel_status in ['Kurulu', 'Depoda', 'Arızalı', 'Serviste'] else 'Kurulu'
                 conn.execute('''INSERT INTO printers (pr_no, model, seri, mac, ip, status) 
-                              VALUES (?,?,?,?,?,?)''', (
-                    pr_no, item.get('MODEL'), seri, 
+                               VALUES (?,?,?,?,?,?)''', (
+                    pr_no, model, seri, 
                     mac, item.get('IP ADRES'), final_status
                 ))
             updated_count += 1
-        
-        try: wb.save(yaz_path)
-        except: pass
-        
-        conn.commit()
-        conn.close()
-        return jsonify({"message": f"{updated_count} yazıcı senkronize edildi."})
+    
+    try: wb.save(yaz_path)
+    except: pass
+    
+    conn.commit()
+    conn.close()
+    return updated_count
+
+@printer_manager_bp.route('/sync_from_excel', methods=['POST'])
+@require_admin
+def sync_printers_from_excel():
+    """Excel'den yazıcıları senkronize eder."""
+    try:
+        count = sync_printers_from_excel_internal()
+        return jsonify({"message": f"{count} cihaz senkronize edildi."})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

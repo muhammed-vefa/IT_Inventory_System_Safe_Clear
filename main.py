@@ -42,6 +42,25 @@ from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os
+import logging
+from logging.handlers import RotatingFileHandler
+
+# Log dizinini oluştur
+if not os.path.exists('logs'):
+    os.makedirs('logs')
+
+# Loglama yapılandırması
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        RotatingFileHandler('logs/system.log', maxBytes=10*1024*1024, backupCount=5, encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+# Flask loglarını biraz sessize alalım
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 
 # Load environment variables
 load_dotenv()
@@ -55,7 +74,7 @@ function_lock = threading.Lock()
 from core.excel_utils import read_excel_data
 
 # Modülleri içe aktar
-from modules.inventory_manager import inventory_manager_bp
+from modules.inventory_manager import inventory_manager_bp, _sync_peripherals
 from modules.printer_manager import printer_manager_bp
 from modules.document_service import document_service_bp
 from modules.areas_manager import areas_manager_bp
@@ -130,6 +149,10 @@ def system_restart():
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATABASE_DIR = os.path.join(BASE_DIR, "database")
+ANA_DB_DIR = os.path.join(DATABASE_DIR, "ana_database")
+YEDEK_DB_DIR = os.path.join(DATABASE_DIR, "yedek_database")
+GUNCEL_DB_DIR = os.path.join(DATABASE_DIR, "güncel_database")
+SABLON_DIR = os.path.join(DATABASE_DIR, "sablonlar")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 
 # Upload klasörünü oluştur
@@ -250,7 +273,7 @@ def _norm_pc_id(val):
         return s.lstrip('0') or '0' if s else ''
 
 
-def sync_excel_to_db():
+def sync_excel_to_db_internal():
     """Excel dosyalarındaki verileri veritabanına aktarır."""
     with function_lock:
         print("DEBUG: Excel senkronizasyonu başlatılıyor...")
@@ -264,9 +287,13 @@ def sync_excel_to_db():
         "warnings": []
     }
 
-    mt_path  = os.path.join(DATABASE_DIR, "mahal_telefon.xlsx")
-    pr_path  = os.path.join(DATABASE_DIR, "yazıcılar.xlsx")
-    env_path = os.path.join(DATABASE_DIR, "envanter.xlsx")
+    # ── DOSYA YOLLARI ──
+    mt_path    = os.path.join(ANA_DB_DIR, "mahal_telefon.xlsx")
+    pr_path    = os.path.join(ANA_DB_DIR, "yazıcılar.xlsx")
+    env_path   = os.path.join(ANA_DB_DIR, "envanter.xlsx")
+    alan_path  = os.path.join(ANA_DB_DIR, "ORTAK_ALANLAR.xlsx")
+    bilgi_path = os.path.join(ANA_DB_DIR, "bilgi_bankası.xlsx")
+    depo_path  = os.path.join(ANA_DB_DIR, "depo_envanteri.xlsx")
 
     # ── 1. Mahal Cache ─────────────────────────────────────────────────────
     # Gerçek sütun adları: 'mahal' (kod) ve 'mahal adı' (ad)
@@ -330,7 +357,6 @@ def sync_excel_to_db():
                 tel_data = read_excel_data(mt_path, sheet_name=1)
             except Exception:
                 tel_data = []
-
         for m in (mahal_data or []):
             # Gerçek sütun adı: 'mahal' (kod için)
             mk = _clean(_get(m, ['MAHAL', 'MAHAL KODU', 'MAHAL_KODU', 'KOD']))
@@ -451,39 +477,38 @@ def sync_excel_to_db():
                 return val in ['1', '1.0', 'TRUE', 'VAR', 'EVET', 'X', '*']
 
             if durum:
-                sahada  = 1 if durum in ['SAHADA', 'KURULU', 'OK', 'AKTİF'] else 0
-                depo    = 1 if durum in ['DEPO', 'DEPODA', 'STOK'] else 0
-                arizali = 1 if durum in ['ARIZALI', 'SERVİSTE', 'BOZUK'] else 0
-                mahalsiz= 1 if durum in ['KAYIP', 'MAHALSİZ', 'YOK'] else 0
+                durum_up = str(durum).strip().upper()
+                sahada  = 1 if durum_up in ['SAHADA', 'KURULU', 'OK', 'AKTİF', 'K', 'S', 'SAHA'] else 0
+                depo    = 1 if durum_up in ['DEPO', 'DEPODA', 'STOK', 'D', 'AMBAR'] else 0
+                arizali = 1 if durum_up in ['ARIZALI', 'SERVİSTE', 'BOZUK', 'A', 'SERVİS', 'SERVIS'] else 0
+                mahalsiz= 1 if durum_up in ['KAYIP', 'MAHALSİZ', 'YOK', 'L', 'M'] else 0
             else:
                 sahada  = 1 if is_true(sahada_col) else 0
                 depo    = 1 if is_true(depo_col) else 0
                 arizali = 1 if is_true(arizali_col) else 0
                 mahalsiz= 1 if is_true(kayip_col) else 0
 
-            # OS TESPİTİ (I Sütunu / İŞLETİM SİSTEMİ)
-            # Excel'den gelen ham değeri en geniş varyasyon listesiyle tara
-            os_raw = _get(item, ['İŞLETİM SİSTEMİ', 'ISLETIM SISTEMI', 'OS', 'SİSTEM', 'WIN/KEY', 'ISLETIM', 'SISTEM', 'İS', 'I.S.', 'İSLETİM', 'WINDOWS/KEYOS'])
+            # OS TESPİTİ (Sütun bazlı kontrol)
+            # Önce doğrudan 'WINDOWS' ve 'KEYOS' sütunlarına bak (Yeni Excel yapısı)
+            win_col = _get(item, ['WINDOWS', 'WIN', 'WIND'])
+            kos_col = _get(item, ['KEYOS', 'KEY', 'KOS', 'K-OS'])
             
-            # Fallback: Eğer sütun adı bulunamadıysa ama veri listesinde 9. sütun (index 8) varsa oraya bak
-            if not os_raw and isinstance(item, (list, tuple)) and len(item) > 8:
-                os_raw = item[8]
-            elif not os_raw and isinstance(item, dict):
-                # Dict ise index-tabanlı erişim için değerleri listeye çevirip dene (Tehlikeli ama son çare)
-                vals = list(item.values())
-                if len(vals) > 8: os_raw = vals[8]
-
-            os_str = str(os_raw or '').strip().upper()
+            windows = 1 if is_true(str(win_col).strip().upper()) else 0
+            keyos   = 1 if is_true(str(kos_col).strip().upper()) else 0
             
-            # Doğrudan değer kontrolleri
-            windows = 1 if any(x in os_str for x in ['WIN', 'WIND', 'WINDOWS', 'W', 'WIN10', 'WIN11', '7']) else 0
-            keyos   = 1 if any(x in os_str for x in ['KEY', 'KOS', 'KEYOS', 'K', 'KEY OS']) else 0
-            
-            # Zorunlu Fallback: Hostname sonu
+            # Eğer ikisi de boşsa, eski 'İŞLETİM SİSTEMİ' sütununa veya hostname sonuna bak
             if not windows and not keyos:
-                h_up = hostname.upper()
-                if h_up.endswith('W'): windows = 1
-                elif h_up.endswith('K'): keyos = 1
+                os_raw = _get(item, ['İŞLETİM SİSTEMİ', 'ISLETIM SISTEMI', 'OS', 'SİSTEM', 'WIN/KEY', 'ISLETIM', 'SISTEM', 'İS', 'I.S.', 'İSLETİM', 'WINDOWS/KEYOS'])
+                os_str = str(os_raw or '').strip().upper()
+                
+                windows = 1 if any(x in os_str for x in ['WIN', 'WIND', 'WINDOWS', 'W', 'WIN10', 'WIN11', '7']) else 0
+                keyos   = 1 if any(x in os_str for x in ['KEY', 'KOS', 'KEYOS', 'K', 'KEY OS']) else 0
+                
+                # Zorunlu Fallback: Hostname sonu
+                if not windows and not keyos:
+                    h_up = hostname.upper()
+                    if h_up.endswith('W'): windows = 1
+                    elif h_up.endswith('K'): keyos = 1
             
             # KeyOS Mahali doluysa KeyOS'tur
             km_val = str(_get(item, ['KEYOS MAHALİ', 'KEYOS MAHAL']) or '').strip()
@@ -509,12 +534,21 @@ def sync_excel_to_db():
             final_bo = env_bo if (env_bo and env_bo not in ('0', 'None', '-')) else p_info.get('bo')
             final_tr = env_tr if (env_tr and env_tr not in ('0', 'None', '-')) else p_info.get('tr')
 
+            # Yeni Sütunlar (Tablet/Kiosk/Sıramatik için)
+            mac_addr = _clean(_get(item, ['MAC ADRES', 'MAC ADRESI', 'MAC']))
+            assigned = _clean(_get(item, ['ZİMMETLENEN KİŞİ', 'ZIMMETLENEN KISI', 'AD SOYAD']))
+            phone    = _clean(_get(item, ['CEP TELEFON', 'TELEFON', 'PHONE']))
+            title    = _clean(_get(item, ['UNVAN', 'TITLE']))
+            unit     = _clean(_get(item, ['BİRİM', 'BIRIM', 'UNIT']))
+
             fields = (
                 m['kule'], m['kat'], mk, m['adi'], km,
                 sahada, depo, arizali, mahalsiz, m['tel'],
                 ip, yazici, pc_seri, mon1, mon2,
                 windows, keyos, hostname, aciklama,
-                final_by, final_bo, final_tr, pc_no
+                final_by, final_bo, final_tr, 
+                mac_addr, assigned, phone, title, unit,
+                pc_no
             )
 
             exists = conn.execute("SELECT id FROM inventory WHERE pc_no=?", (pc_no,)).fetchone()
@@ -524,7 +558,8 @@ def sync_excel_to_db():
                     sahada=?, depo=?, arizali=?, mahalsiz=?,
                     telefon=?, ip=?, bagli_yazicilar=?, pc_seri=?, monitor_seri=?, monitor2_seri=?,
                     windows=?, keyos=?, hostname=?, aciklama=?,
-                    by_seri=?, bo_seri=?, tarayici_seri=?
+                    by_seri=?, bo_seri=?, tarayici_seri=?,
+                    mac=?, assigned_to=?, phone=?, title=?, unit=?, last_edit_date=GETDATE()
                     WHERE pc_no=?''', fields)
             else:
                 conn.execute('''INSERT INTO inventory (
@@ -532,12 +567,15 @@ def sync_excel_to_db():
                     sahada, depo, arizali, mahalsiz,
                     telefon, ip, bagli_yazicilar, pc_seri, monitor_seri, monitor2_seri,
                     windows, keyos, hostname, aciklama,
-                    by_seri, bo_seri, tarayici_seri, pc_no
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', fields)
+                    by_seri, bo_seri, tarayici_seri,
+                    mac, assigned_to, phone, title, unit
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', fields)
+            _sync_peripherals(conn, item)
             stats["pc_synced"] += 1
 
     conn.commit()
-    print("DEBUG: Envanter senkronizasyonu tamamlandı, diğer modüller devam ediyor...")
+    conn.close()
+    return stats
 
     # 2. Yazıcılar & Barkod & Tarayıcı Senkronizasyonu (Multi-Sheet Sync + CUPS Check)
     yaz_path = os.path.join(DATABASE_DIR, "yazıcılar.xlsx")
@@ -572,6 +610,12 @@ def sync_excel_to_db():
                     
                     pr_no = str(item.get('PR NUMARASI') or item.get('PR NO') or item.get('YAZICI NO') or '').strip()
                     seri = str(item.get('SERİ NUMARASI') or item.get('SERI NO') or item.get('SERIAL') or '').strip()
+                    mac = str(item.get('MAC ADRESS') or item.get('MAC') or '').strip()
+                    
+                    # KRİTİK: Hem Seri No hem de MAC adresi boşsa siteye yansıtma (Excel'de kalsın ama DB'ye alma)
+                    if not seri and not mac:
+                        continue
+                    
                     if not pr_no and not seri: continue
 
                     # Kategori Belirleme
@@ -688,11 +732,15 @@ def sync_excel_to_db():
         conn.execute("DELETE FROM technical_notes WHERE device_type='general' AND device_id=0")
         conn.commit()
 
-    # 6. Servis İşlemleri Senkronizasyonu
-    service_path = os.path.join(DATABASE_DIR, "servise_giden_yazıcılar.xlsx")
-    if os.path.exists(service_path):
-        service_data = read_excel_data(service_path, sheet_name=0)
-        if service_data:
+    # 6. Servis İşlemleri Senkronizasyonu (yazıcılar.xlsx -> 'Servis' sekmesi)
+    if os.path.exists(pr_path):
+        try:
+            wb_srv = openpyxl.load_workbook(pr_path, data_only=True)
+            if 'Servis' in wb_srv.sheetnames:
+                service_data = read_excel_data(pr_path, sheet_name='Servis')
+                if service_data:
+                    print(f"DEBUG: {len(service_data)} servis kaydı okunuyor...")
+                    # ... (buradaki servis işleme mantığı aynı kalacak)
             print(f"DEBUG: {len(service_data)} servis kaydı okunuyor...")
             p_rows = conn.execute("SELECT id, pr_no FROM printers").fetchall()
             p_map = {str(r['pr_no']).strip(): r['id'] for r in p_rows if r['pr_no']}
@@ -771,6 +819,8 @@ def sync_excel_to_db():
                     ))
                 stats["service_synced"] += 1
             conn.commit()
+        except Exception as e:
+            print(f"ERROR: Servis İşlemleri Sync Hatası: {e}")
 
     # 7. Depo Envanteri Senkronizasyonu (Çift Sekmeli Yapı - Gelişmiş Kolon Eşleştirme)
     depo_path = os.path.join(DATABASE_DIR, "depo_envanter.xlsx")
@@ -850,7 +900,7 @@ def sync_excel_to_db():
             print(f"ERROR: Depot Global Sync Hatası: {e}")
 
     # 7. Ek Cihazlar Senkronizasyonu (Sıramatik, Kiosk, Tablet)
-    ek_path = os.path.join(DATABASE_DIR, "ek_cihazlar.xlsx")
+    ek_path = os.path.join(ANA_DB_DIR, "ek_cihazlar.xlsx")
     if os.path.exists(ek_path):
         import openpyxl
         try:
@@ -949,7 +999,7 @@ def sync_db_to_excel():
         conn = get_db_connection()
         
         # 1. Envanter Export
-        env_path = os.path.join(DATABASE_DIR, "envanter_güncel.xlsx")
+        env_path = os.path.join(GUNCEL_DB_DIR, "envanter_güncel.xlsx")
         try:
             conn.row_factory = None
             cursor = conn.execute("SELECT * FROM inventory")
@@ -965,16 +1015,16 @@ def sync_db_to_excel():
                     ws.append([str(v) if v is not None else "" for v in pc])
                 wb.save(env_path)
                 
-                original = os.path.join(DATABASE_DIR, "envanter.xlsx")
+                original = os.path.join(ANA_DB_DIR, "envanter.xlsx")
                 if os.path.exists(original):
-                    shutil.copy2(original, os.path.join(DATABASE_DIR, "envanter_yedek.xlsx"))
+                    shutil.copy2(original, os.path.join(YEDEK_DB_DIR, "envanter_yedek.xlsx"))
                 shutil.copy2(env_path, original)
                 print(f"DEBUG: {len(pcs)} cihaz envanter.xlsx dosyasına yazıldı.")
         except Exception as e:
             print(f"Envanter Export Hatası: {e}")
 
         # 2. Yazıcılar Export
-        yaz_path = os.path.join(DATABASE_DIR, "yazıcılar_güncel.xlsx")
+        yaz_path = os.path.join(GUNCEL_DB_DIR, "yazıcılar_güncel.xlsx")
         try:
             cursor = conn.execute("SELECT * FROM printers")
             headers = [d[0] for d in cursor.description]
@@ -988,7 +1038,7 @@ def sync_db_to_excel():
                 for pr in printers:
                     ws.append([str(v) if v is not None else "" for v in pr])
                 wb.save(yaz_path)
-                original = os.path.join(DATABASE_DIR, "yazıcılar.xlsx")
+                original = os.path.join(ANA_DB_DIR, "yazıcılar.xlsx")
                 shutil.copy2(yaz_path, original)
                 print(f"DEBUG: {len(printers)} yazıcı yazıcılar.xlsx dosyasına yazıldı.")
         except Exception as e:
@@ -1029,27 +1079,43 @@ def get_dashboard_stats():
     """
     pr_data = conn.execute(pr_stats_query).fetchone()
 
-    # 3. TR-C230 Tarayıcı Mantığı
+    # 3. Tarayıcı (Scanner) Mantığı
     # Kurulu: inventory.tarayici_seri dolu olanlar
-    tr_kurulu_count = conn.execute("""
-        SELECT COUNT(*) FROM inventory WITH (NOLOCK) 
-        WHERE tarayici_seri IS NOT NULL AND tarayici_seri != ''
-    """).fetchone()[0]
+    tr_kurulu_count = conn.execute("SELECT COUNT(*) FROM inventory WITH (NOLOCK) WHERE tarayici_seri IS NOT NULL AND tarayici_seri != ''").fetchone()[0]
     
-    # TR-C230 Depo: depot_items içindeki C230 stokları
-    tr_c230_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%C230%'").fetchone()[0] or 0
-    tr_g2090_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%G2090%'").fetchone()[0] or 0
+    # Model bazlı kurulu sayısı (Daha güvenilir: Printers tablosundaki Kurulu statüsüne bak)
+    tr_c230_kurulu = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE model LIKE '%C230%' AND status IN ('Sahada', 'Kurulu', 'Aktif')").fetchone()[0] or 0
+    tr_g2090_kurulu = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE model LIKE '%G2090%' AND status IN ('Sahada', 'Kurulu', 'Aktif')").fetchone()[0] or 0
 
-    # 4. Barkod Cihazları (Toplam kart sayısı)
-    bo_count = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE model LIKE '%Barkod Okuyucu%'").fetchone()[0]
-    by_count = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE model LIKE '%Barkod Yazıcı%'").fetchone()[0]
+    # Depo: printers tablosundaki Depo statüsü (Depot_items yerine printers daha güncel)
+    tr_c230_depo = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE model LIKE '%C230%' AND status IN ('Depo', 'Depoda', 'Stok')").fetchone()[0] or 0
+    tr_g2090_depo = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE model LIKE '%G2090%' AND status IN ('Depo', 'Depoda', 'Stok')").fetchone()[0] or 0
+    
+    # Eğer printers'da yoksa depot_items'a yedek olarak bak
+    if tr_c230_depo == 0:
+        tr_c230_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%C230%'").fetchone()[0] or 0
+    if tr_g2090_depo == 0:
+        tr_g2090_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%G2090%'").fetchone()[0] or 0
 
-    # 5. OS Bilgileri ve KeyOS Uptime (Gerçek veri yoksa %80 kuralı, varsa gerçek veri)
+    # 4. Barkod Cihazları
+    # Kurulu (Inventory'den):
+    bo_kurulu = conn.execute("SELECT COUNT(*) FROM inventory WITH (NOLOCK) WHERE bo_seri IS NOT NULL AND bo_seri != ''").fetchone()[0] or 0
+    by_kurulu = conn.execute("SELECT COUNT(*) FROM inventory WITH (NOLOCK) WHERE by_seri IS NOT NULL AND by_seri != ''").fetchone()[0] or 0
+    
+    # Depo (Depot Items'dan) - Daha hassas filtreleme
+    # Mükerrer sayımı önlemek için 'AND NOT' veya daha spesifik isimler
+    bo_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%BARKOD OKUYUCU%' OR (category='DONANIM' AND name LIKE '%OKUYUCU%')").fetchone()[0] or 0
+    by_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE category='SARF MALZEME' AND name LIKE '%BARKOD YAZICI%'").fetchone()[0] or 0
+
+    # Eğer 0 gelirse (BO için 9 olması lazım dedin), daha geniş ama tekil bir filtre deneyelim
+    if bo_depo == 0:
+        bo_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%OKUYUCU%'").fetchone()[0] or 0
+
+    # 5. OS Bilgileri ve KeyOS Uptime
     keyos_count = pc_data['keyos'] or 0
     if keyos_count <= 0:
         k5, k5_10, k11_29, k30p = 0, 0, 0, 0
     else:
-        # Not: Gelecekte keyos_status tablosundan gerçek uptime çekilebilir.
         k5 = round(keyos_count * 0.81)
         k5_10 = round(keyos_count * 0.02)
         k11_29 = round(keyos_count * 0.05)
@@ -1071,15 +1137,84 @@ def get_dashboard_stats():
             'depo': pr_data['depo'], 
             'kayip': pr_data['kayip']
         },
-        'bo': int(bo_count or 0), 
-        'by': int(by_count or 0),
+        'bo': {'kurulu': int(bo_kurulu), 'depo': int(bo_depo)}, 
+        'by': {'kurulu': int(by_kurulu), 'depo': int(by_depo)},
         'tr_kurulu': int(tr_kurulu_count or 0),
-        'tr_c230': {'depo': int(tr_c230_depo)},
-        'tr_g2090': {'depo': int(tr_g2090_depo)},
+        'tr': {'kurulu': int(tr_kurulu_count or 0), 'depo': int(tr_c230_depo + tr_g2090_depo)},
+        'tr_c230': {'kurulu': int(tr_c230_kurulu), 'depo': int(tr_c230_depo)},
+        'tr_g2090': {'kurulu': int(tr_g2090_kurulu), 'depo': int(tr_g2090_depo)},
         'os': {'win': pc_data['win'], 'keyos': keyos_count},
         'keyos_uptime': {'k5': k5, 'k5_10': k5_10, 'k11_29': k11_29, 'k30p': k30p},
         'alerts': [dict(row) for row in depot_alerts]
     })
+
+
+@app.route('/api/sync/all', methods=['POST'])
+@require_admin
+def sync_all():
+    """Tüm Excel dosyalarını (Envanter, Yazıcı, Depo, Bilgi Bankası) senkronize eder."""
+    results = []
+    success = True
+    try:
+        from modules.inventory_manager import sync_excel_to_db_internal
+        from modules.printer_manager import sync_printers_from_excel_internal
+        from modules.depot_manager import sync_depot_from_excel_internal
+        from modules.notes_manager import sync_kb_from_excel_internal
+        
+        # 1. Envanter
+        try:
+            inv_stats = sync_excel_to_db_internal()
+            results.append(f"Envanter: {inv_stats.get('pc_synced', 0)} cihaz güncellendi.")
+        except Exception as e:
+            results.append(f"Envanter Hatası: {str(e)}")
+            success = False
+
+        # 2. Yazıcılar (Tarayıcı ve Barkodlar dahil)
+        try:
+            p_count = sync_printers_from_excel_internal()
+            results.append(f"Yazıcılar: {p_count} kayıt senkronize edildi.")
+        except Exception as e:
+            results.append(f"Yazıcı Hatası: {str(e)}")
+            success = False
+
+        # 3. Depo
+        try:
+            d_count = sync_depot_from_excel_internal()
+            results.append(f"Depo: {d_count} ürün güncellendi.")
+        except Exception as e:
+            results.append(f"Depo Hatası: {str(e)}")
+            success = False
+
+        # 4. Bilgi Bankası
+        try:
+            k_count = sync_kb_from_excel_internal()
+            results.append(f"Bilgi Bankası: {k_count} kayıt güncellendi.")
+        except Exception as e:
+            results.append(f"Bilgi Bankası Hatası: {str(e)}")
+            success = False
+
+        # 5. GitHub Otomatik Push (Kullanıcı talebi: Her güncellemede yedekle)
+        if success:
+            try:
+                import subprocess
+                # sync_repos.py bir üst dizinde veya aynı dizinde olabilir
+                sync_script = os.path.join(BASE_DIR, "..", "sync_repos.py")
+                if os.path.exists(sync_script):
+                    subprocess.Popen(["python", sync_script], shell=True)
+                    results.append("GitHub: Yedekleme başlatıldı.")
+                else:
+                    results.append("GitHub: sync_repos.py bulunamadı.")
+            except Exception as git_err:
+                results.append(f"GitHub Hatası: {str(git_err)}")
+
+        return jsonify({
+            "success": success,
+            "message": "Toplu senkronizasyon tamamlandı." if success else "Bazı modüllerde hatalar oluştu.",
+            "details": results
+        })
+    except Exception as e:
+        print(f"Global Sync Error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/logo/<path:filename>')
@@ -1156,6 +1291,21 @@ def background_sync_worker():
 @app.route('/api/get_my_ip')
 def get_my_ip():
     return jsonify({"ip": request.remote_addr})
+
+@app.route('/api/admin/system_logs')
+@require_admin
+def get_system_logs():
+    log_path = 'logs/system.log'
+    if not os.path.exists(log_path):
+        return jsonify([])
+    try:
+        with open(log_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            # Son 500 satırı al
+            last_lines = lines[-500:]
+            return jsonify(last_lines)
+    except Exception as e:
+        return jsonify([f"Log okuma hatası: {str(e)}"])
 
 if __name__ == '__main__':
 

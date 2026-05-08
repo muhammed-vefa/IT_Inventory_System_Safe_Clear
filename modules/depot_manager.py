@@ -243,18 +243,17 @@ def _clean_int(val, default=0):
         return int(float(str(val).replace(',', '.')))
     except: return default
 
-@depot_manager_bp.route('/sync_from_excel', methods=['POST'])
-@require_editor
-def sync_from_excel():
+def sync_depot_from_excel_internal():
     import os
     from core.excel_utils import read_excel_data
     try:
         # Excel dosyasını bul
-        excel_path = os.path.join('database', 'depo_envanter.xlsx')
+        ANA_DB_DIR = os.path.join(os.getcwd(), 'database', 'ana_database')
+        excel_path = os.path.join(ANA_DB_DIR, 'depo_envanter.xlsx')
         if not os.path.exists(excel_path):
-            excel_path = os.path.join('database', 'depo_envanteri.xlsx')
+            excel_path = os.path.join(ANA_DB_DIR, 'depo_envanteri.xlsx')
         if not os.path.exists(excel_path):
-            return jsonify({"error": "Excel dosyası bulunamadı (depo_envanter.xlsx veya depo_envanteri.xlsx)."}), 404
+            return jsonify({"error": "Excel dosyası bulunamadı (ana_database/depo_envanter.xlsx)."}), 404
 
         conn = get_db_connection()
         wb = openpyxl.load_workbook(excel_path, data_only=True)
@@ -332,6 +331,7 @@ def sync_from_excel():
                     continue
 
         # UPSERT: Mevcut varsa güncelle, yoksa ekle (manuel eklemeler korunur)
+        count = 0
         for key, d in dedup_map.items():
             exists = conn.execute(
                 "SELECT id FROM depot_items WHERE name=? AND category=?",
@@ -344,26 +344,32 @@ def sync_from_excel():
                     (d['current'], d['critical'], d['saha'], d['arizali'], d['kayip'],
                      d['unit'], d['description'], exists['id'])
                 )
-                updated_count += 1
             else:
                 conn.execute(
-                    """INSERT INTO depot_items
-                       (category, name, current_stock, critical_stock, unit, description,
-                        saha_stock, arizali_stock, kayip_stock)
+                    """INSERT INTO depot_items (category, name, current_stock, critical_stock, unit, description, 
+                                              saha_stock, arizali_stock, kayip_stock)
                        VALUES (?,?,?,?,?,?,?,?,?)""",
-                    (d['category'], d['name'], d['current'], d['critical'],
-                     d['unit'], d['description'], d['saha'], d['arizali'], d['kayip'])
+                    (d['category'], d['name'], d['current'], d['critical'], d['unit'], d['description'],
+                     d['saha'], d['arizali'], d['kayip'])
                 )
-                added_count += 1
+            count += 1
 
         conn.commit()
         conn.close()
-        print(f"DEBUG: Depot sync: {added_count} eklendi, {updated_count} güncellendi.")
-        return jsonify({"message": f"Depo aktarıldı: {added_count} yeni ürün eklendi, {updated_count} mevcut ürün güncellendi."})
+        return count
     except Exception as e:
-        print(f"Depot sync error: {e}")
-        return jsonify({"error": str(e)}), 500
+        print(f"Depot sync internal error: {e}")
+        raise e
 
+@depot_manager_bp.route('/sync_from_excel', methods=['POST'])
+@require_admin
+def sync_from_excel():
+    """Excel'den depo verilerini senkronize eder."""
+    try:
+        count = sync_depot_from_excel_internal()
+        return jsonify({"message": f"Depo senkronize edildi ({count} kayıt)."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @depot_manager_bp.route('/delete/<int:item_id>', methods=['DELETE'])

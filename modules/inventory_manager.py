@@ -56,14 +56,14 @@ def update_inventory():
         conn.execute('''UPDATE inventory SET 
             kule=?, kat=?, mahal_kodu=?, mahal_adi=?, telefon=?, ip=?, 
             aciklama=?, sahada=?, depo=?, arizali=?, mahalsiz=?, windows=?, keyos=?,
-            pc_seri=?, monitor_seri=?, monitor_model=?, monitor2_seri=?, monitor2_model=?, bagli_yazicilar=?, 
+            pc_seri=?, mac=?, monitor_seri=?, monitor_model=?, monitor2_seri=?, monitor2_model=?, bagli_yazicilar=?, 
             by_seri=?, bo_seri=?, tarayici_seri=?, assigned_to=?, phone=?, title=?, unit=?
             WHERE id=?''', (
             data.get('kule'), data.get('kat'), data.get('mahal_kodu'), data.get('mahal_adi'),
             data.get('telefon'), data.get('ip'), data.get('aciklama'), 
             data.get('sahada'), data.get('depo'), data.get('arizali'), data.get('mahalsiz'),
             data.get('windows'), data.get('keyos'),
-            data.get('pc_seri'), data.get('monitor_seri'), data.get('monitor_model'),
+            data.get('pc_seri'), data.get('mac'), data.get('monitor_seri'), data.get('monitor_model'),
             data.get('monitor2_seri'), data.get('monitor2_model'),
             data.get('bagli_yazicilar'), data.get('by_seri'), data.get('bo_seri'), 
             data.get('tarayici_seri'), data.get('assigned_to'), data.get('phone'),
@@ -107,7 +107,7 @@ def update_inventory():
                 print(f"KeyOS Sync Error in update_inventory: {e}")
 
         # 3. Değişiklikleri logla
-        tracked_fields = ['kule', 'kat', 'mahal_kodu', 'mahal_adi', 'telefon', 'ip', 
+        tracked_fields = ['kule', 'kat', 'mahal_kodu', 'mahal_adi', 'telefon', 'ip', 'mac',
                          'aciklama', 'sahada', 'depo', 'arizali', 'mahalsiz', 'windows', 'keyos',
                          'pc_seri', 'monitor_seri', 'monitor_model', 'monitor2_seri', 'monitor2_model',
                          'bagli_yazicilar', 'by_seri', 'bo_seri', 'tarayici_seri', 'assigned_to', 'phone', 'title', 'unit']
@@ -179,26 +179,27 @@ def _sync_peripherals(conn, record):
     
     for p in peripherals:
         seri = record.get(p['seri_field'], '')
-        if not seri or seri.strip() == '':
+        if not seri or seri.strip() == '' or seri == '---':
             continue
         
+        seri = seri.strip()
         # Bu seri numarası ile printers tablosunda kayıt var mı kontrol et
         existing = conn.execute(
-            "SELECT id FROM printers WHERE seri = ?", (seri,)
+            "SELECT id, model FROM printers WHERE seri = ?", (seri,)
         ).fetchone()
         
         if existing:
-            # Varsa mahal bilgisini güncelle
+            # Varsa mahal ve durumu güncelle (Kullanıcı talebi: Kurulu olarak işaretle)
             conn.execute(
-                "UPDATE printers SET mahal=? WHERE id=?",
+                "UPDATE printers SET mahal=?, status='Kurulu' WHERE id=?",
                 (mahal, existing['id'])
             )
         else:
             # Yoksa yeni kayıt ekle
             pr_no = f"{p['pr_prefix']}-{pc_no}" if pc_no else f"{p['pr_prefix']}-{seri[:6]}"
             conn.execute(
-                "INSERT INTO printers (pr_no, model, seri, mac, ip, mahal) VALUES (?,?,?,?,?,?)",
-                (pr_no, p['model'], seri, '', '', mahal)
+                "INSERT INTO printers (pr_no, model, seri, mac, ip, mahal, status) VALUES (?,?,?,?,?,?,?)",
+                (pr_no, p['model'], seri, '', '', mahal, 'Kurulu')
             )
 
 
@@ -207,7 +208,7 @@ def _backup_to_excel(conn):
     try:
         all_items = conn.execute("SELECT * FROM inventory").fetchall()
         headers = ['PC', 'KULE', 'KAT', 'MAHAL KODU', 'MAHAL ADI', 'KEYOS MAHALİ', 'SAHADA', 'DEPO', 
-                   'ARIZALI', 'MAHALSİZ', 'TELEFON', 'İP', 'BAĞLI OLAN YAZICILAR', 'PC SERİ NO', 
+                   'ARIZALI', 'MAHALSİZ', 'TELEFON', 'İP', 'MAC ADRES', 'BAĞLI OLAN YAZICILAR', 'PC SERİ NO', 
                    'MONİTÖR SERİ NO', 'MONİTÖR MODEL', '2. MONİTÖR SERİ NO', '2. MONİTÖR MODEL',
                    'WINDOWS', 'KEYOS', 'RDP', 
                    '6900 PR-NO', '5200 PR-NO', '8690 PR-NO', 'BARKOD YAZICI SERİ NO', 
@@ -219,7 +220,7 @@ def _backup_to_excel(conn):
                 'PC': row['pc_no'], 'KULE': row['kule'], 'KAT': row['kat'], 'MAHAL KODU': row['mahal_kodu'],
                 'MAHAL ADI': row['mahal_adi'], 'KEYOS MAHALİ': row['keyos_mahal'], 'SAHADA': row['sahada'],
                 'DEPO': row['depo'], 'ARIZALI': row['arizali'], 'MAHALSİZ': row['mahalsiz'],
-                'TELEFON': row['telefon'], 'İP': row['ip'], 'BAĞLI OLAN YAZICILAR': row['bagli_yazicilar'],
+                'TELEFON': row['telefon'], 'İP': row['ip'], 'MAC ADRES': row['mac'], 'BAĞLI OLAN YAZICILAR': row['bagli_yazicilar'],
                 'PC SERİ NO': row['pc_seri'], 'MONİTÖR SERİ NO': row['monitor_seri'], 
                 'MONİTÖR MODEL': row['monitor_model'],
                 '2. MONİTÖR SERİ NO': row['monitor2_seri'],
@@ -244,11 +245,11 @@ def add_inventory():
     try:
         conn = get_db_connection()
         conn.execute('''INSERT INTO inventory (
-            pc_no, ip, kule, mahal_kodu, mahal_adi, pc_seri, windows, keyos, sahada, device_type,
+            pc_no, ip, kule, mahal_kodu, mahal_adi, pc_seri, mac, windows, keyos, sahada, device_type,
             assigned_to, phone, title, unit
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
             data.get('pc_no'), data.get('ip'), data.get('kule'), data.get('mahal_kodu'),
-            data.get('mahal_adi'), data.get('pc_seri'), data.get('windows'), data.get('keyos'),
+            data.get('mahal_adi'), data.get('pc_seri'), data.get('mac'), data.get('windows'), data.get('keyos'),
             data.get('sahada'), data.get('device_type'), data.get('assigned_to'),
             data.get('phone'), data.get('title'), data.get('unit')
         ))

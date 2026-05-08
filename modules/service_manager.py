@@ -88,9 +88,16 @@ def add_service_record():
             else:
                 print(f"DEBUG: CUPS Skip (Not a PR or wrong status): {pr_no_upper} / {main_status}")
 
-        # İkame yazıcı varsa durumunu 'Kurulu' yap
+        # İkame yazıcı varsa durumunu 'Kurulu' yap ve mahalini orijinal yazıcının mahali yap
         if data.get('substitute_pr_no'):
-            conn.execute("UPDATE printers SET status='Kurulu' WHERE pr_no=?", (data.get('substitute_pr_no'),))
+            original_mahal = data.get('mahal', '')
+            conn.execute("UPDATE printers SET status='Kurulu', mahal=? WHERE pr_no=?", (original_mahal, data.get('substitute_pr_no'),))
+            # CUPS'ta da mahal güncelle
+            sub_pr_no = str(data.get('substitute_pr_no')).strip().upper()
+            if sub_pr_no.startswith('PR-'):
+                try:
+                    CUPSHelper.update_location(sub_pr_no, original_mahal)
+                except: pass
 
         conn.execute('''INSERT INTO printer_service (
             printer_id, pr_no, seri, mac, mahal, model, acq_date, acq_place, sent_date, return_date,

@@ -18,57 +18,64 @@ from core.auth import require_auth, require_admin
 # Disable SSL warnings for local CUPS server
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-CUPS_BASE_URL = "https://10.0.0.99:631/printers/"
+CUPS_BASE_URL = "https://10.241.1.21:49631/printers/"
 
 def print_file_to_cups(printer_id, file_path):
-    """Belirtilen PDF dosyasını curl kullanarak sahte CUPS sunucusuna gönderir (DEMO)."""
+    """Belirtilen PDF dosyasını curl kullanarak CUPS sunucusuna (auth ile) gönderir."""
     try:
-        # DEMO / SAFE TEMP CLEAR İÇİN SAHTE VERİLER
-        url = f"https://10.0.0.99:631/printers/{printer_id}"
+        # CUPS Web arayüzü dosya gönderme simülasyonu
+        url = f"https://10.241.1.21:49631/printers/{printer_id}"
         
+        # printer_manager'daki CUPSHelper mantığını burada da kullanıyoruz
         import subprocess
         import re
         
-        # 1. SID Al (DUMMY)
-        cookie_file = "cups_print_cookies_demo.txt"
+        # 1. SID Al
+        cookie_file = "cups_print_cookies.txt"
         sid_cmd = [
             'curl.exe', '-k', '-L', '-s',
-            '--anyauth', '--user', "demo_user:demo_pass",
+            '--anyauth', '--user', "root:1234qqqQ",
             '-c', cookie_file,
-            f"https://10.0.0.99:631/admin/"
+            f"https://10.241.1.21:49631/admin/"
         ]
-        # Demo ortamda bu hata vereceği için try-except içinde sessizce logluyoruz
-        try:
-            sid_output = subprocess.run(sid_cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=5).stdout
-            match = re.search(r'name=["\']org\.cups\.sid["\'][^>]*value=["\']?([a-f0-9]+)["\']?', sid_output, re.I)
-            sid = match.group(1) if match else "dummy_sid_12345"
-        except:
-            sid = "dummy_sid_12345"
+        sid_output = subprocess.run(sid_cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore').stdout
+        match = re.search(r'name=["\']org\.cups\.sid["\'][^>]*value=["\']?([a-f0-9]+)["\']?', sid_output, re.I)
+        sid = match.group(1) if match else None
         
-        # 2. Dosyayı Yazdır (Multipart POST) - DEMO SIMULATION
-        # Gerçekte göndermeye çalışıp başarısız olacaktır ama kod yapısını göstermek için tutuyoruz.
+        if not sid:
+            return False, "CUPS SID alınamadı. (Giriş sorunu)"
+
+        # 2. Dosyayı Yazdır (Multipart POST)
         print_cmd = [
             'curl.exe', '-k', '-L', '-s',
-            '--anyauth', '--user', "demo_user:demo_pass",
+            '--anyauth', '--user', "root:1234qqqQ",
             '-b', cookie_file,
+            '-H', f'Referer: {url}',
             '-F', f'org.cups.sid={sid}',
             '-F', 'OP=print-job',
+            '-F', f'printer_name={printer_id}',
             '-F', f'file=@{file_path}',
-            '-F', 'job-name=IT_Inventory_Demo_Print',
+            '-F', 'title=IT_Inventory_Print',
             url
         ]
         
-        # Demo ortamda gerçek bir çıktı beklenmediği için başarılı simülasyonu yapıyoruz
-        return True, "Yazdırma ilemi sıraya alındı (DEMO MODU)."
+        res = subprocess.run(print_cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
         
+        if "Print file sent" in res.stdout or res.returncode == 0:
+            return True, "Yazdırma işlemi başarıyla CUPS kuyruğuna gönderildi."
+        else:
+            return False, f"CUPS Hatası: {res.stdout[:100]}"
+            
     except Exception as e:
-        return False, f"Bağlantı Hatası (DEMO): {str(e)}"
+        return False, f"Sistem Hatası: {str(e)}"
 
 document_service_bp = Blueprint('document_service', __name__)
 
 # Yapılandırma
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DATABASE_DIR = os.path.join(BASE_DIR, "database")
+ANA_DB_DIR = os.path.join(DATABASE_DIR, "ana_database")
+SABLON_DIR = os.path.join(DATABASE_DIR, "sablonlar")
 ARCHIVE_DIR = os.path.join(BASE_DIR, "Arşiv")
 TEMP_DIR = os.path.join(BASE_DIR, "temp")
 
@@ -76,12 +83,12 @@ TEMP_DIR = os.path.join(BASE_DIR, "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 TEMPLATES = {
-    "ZIMMET": os.path.join(DATABASE_DIR, "zimmet.xlsx"),
-    "HT": os.path.join(DATABASE_DIR, "hasar_tespit.xlsx"),
-    "IZIN": os.path.join(DATABASE_DIR, "İzin İstek Formu.xlsx"),
-    "SLA": os.path.join(DATABASE_DIR, "SLA Sehven Tutanak.docx"),
-    "BC55": os.path.join(DATABASE_DIR, "MANUEL BARKOD 55-45.docx"),
-    "BC100": os.path.join(DATABASE_DIR, "MANUEL BARKOD 100-100.docx")
+    "ZIMMET": os.path.join(SABLON_DIR, "zimmet.xlsx"),
+    "HT": os.path.join(SABLON_DIR, "hasar_tespit.xlsx"),
+    "IZIN": os.path.join(SABLON_DIR, "İzin İstek Formu.xlsx"),
+    "SLA": os.path.join(SABLON_DIR, "SLA Sehven Tutanak.docx"),
+    "BC55": os.path.join(SABLON_DIR, "MANUEL BARKOD 55-45.docx"),
+    "BC100": os.path.join(SABLON_DIR, "MANUEL BARKOD 100-100.docx")
 }
 
 class TutanakPDF(FPDF):
@@ -603,7 +610,7 @@ def generate_tutanak():
         
         # Eğer kullanıcı özellikle EXCEL istiyorsa ve tip SLA ise şablonu zimmet.xlsx olarak değiştir
         if t_type == "SLA" and req_format == 'excel':
-            template_path = os.path.join(DATABASE_DIR, "zimmet.xlsx")
+            template_path = os.path.join(SABLON_DIR, "zimmet.xlsx")
 
         if template_path and os.path.exists(template_path):
             ext = os.path.splitext(template_path)[1].lower()
