@@ -14,12 +14,12 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 printer_manager_bp = Blueprint('printer_manager', __name__)
 
-PRINTER_STATUS_PORTAL = "https://10.241.1.21:49631/printers/"
+PRINTER_STATUS_PORTAL = "https://10.0.0.99:631/printers/"
 
 class CUPSHelper:
-    BASE_URL = "https://10.241.1.21:49631"
-    AUTH_USER = 'root'
-    AUTH_PASS = '1234qqqQ'
+    BASE_URL = "https://10.0.0.99:631"
+    AUTH_USER = 'demo_user'
+    AUTH_PASS = 'demo_pass'
 
     @classmethod
     def get_session(cls):

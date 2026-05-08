@@ -141,6 +141,7 @@
             background: rgba(0,210,255,0.08) !important;
         }
     </style>
+    <style id="custom-design-styles"></style>
 </head>
 <body class="login-required">
     <!-- LOGIN OVERLAY -->
@@ -196,6 +197,9 @@
                 </div>
 
                 <div class="user-profile" style="display: flex; align-items: center; gap: 12px;">
+                    <button id="design-mode-btn" class="btn" onclick="app.toggleDesignMode()" style="background: rgba(255,180,0,0.1); color: #ffb400; border: 1px solid rgba(255,180,0,0.2); padding: 5px 10px; font-size: 0.7rem; border-radius: 4px; cursor: pointer; display: none;">
+                        <i class="fas fa-paint-brush"></i> Tasarım Modu: KAPALI
+                    </button>
                     <span id="active-user-name" style="font-size: 0.8rem; color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 5px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">Giriş Yapılmadı</span>
                     
                     <div class="custom-dropdown" id="profile-dropdown">
@@ -203,12 +207,9 @@
                         <div class="dropdown-menu right">
                             <a href="#" id="menu-users" onclick="app.navigateTo('users')" style="display:none;"><i class="fas fa-users-gear"></i> Kullanıcı Yönetimi</a>
                             <a href="#" onclick="app.openProfileSettingsModal()"><i class="fas fa-user-cog"></i> Hesap Ayarlarım</a>
-                            <a href="#" id="menu-sync" onclick="app.syncDatabase()"><i class="fas fa-file-excel"></i> Envanter Excel Sync</a>
-                            <a href="#" id="menu-printer-sync" onclick="app.syncPrintersFromExcel()"><i class="fas fa-file-excel"></i> Yazıcı Excel Sync</a>
-                            <a href="#" id="menu-depot-sync" onclick="app.syncDepotsFromExcel()"><i class="fas fa-file-excel"></i> Depo Excel Sync</a>
-                            <a href="#" id="menu-kb-sync" onclick="app.syncKBFromExcel()"><i class="fas fa-file-excel"></i> Bilgi Bankası Excel Sync</a>
-
+                            <a href="#" id="menu-all-sync" onclick="app.syncAllDatabases()" style="color: #00ff88; font-weight: bold;"><i class="fas fa-sync-alt"></i> Tüm Verileri Senkronize Et</a>
                             <a href="#" id="menu-keyos-sync" onclick="app.manualKeyOSSync()" style="display:none; color:var(--accent);"><i class="fas fa-rotate"></i> KeyOS MGT Senkronizasyon</a>
+                            <a href="#" id="menu-system-logs" onclick="app.navigateTo('system-logs')" style="color:var(--accent);"><i class="fas fa-terminal"></i> Sistem Logları (Hatalar)</a>
                             <a href="#" id="menu-history" onclick="app.navigateTo('logs')"><i class="fas fa-history"></i> İşlem Geçmişi (Günlük)</a>
                             <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 5px 0;">
                             <a href="#" onclick="app.handleLogout()" style="color: #ff4b2b;"><i class="fas fa-right-from-bracket"></i> Çıkış Yap</a>
@@ -222,7 +223,7 @@
     <main class="container">
         <!-- ═══════════════ DASHBOARD VIEW ═══════════════ -->
         <section id="view-dashboard" class="view fade-in">
-            <h2 class="section-title mb-4">Hastane Genel IT Varlık Analizi</h2>
+            <h2 class="section-title mb-4"><i class="fas fa-chart-line"></i> Hastane Genel IT Varlık Analizi</h2>
             <div class="grid dashboard-main-grid" style="grid-template-columns: 2fr 1fr; gap: 1rem; align-items: start;">
                  <div class="card" style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding: 1.2rem;">
                     <div style="display:flex; flex-direction:row; gap:15px; width:100%; justify-content:space-around; flex-wrap:wrap; margin-bottom: 2px;">
@@ -286,14 +287,61 @@
                         <div class="stat-card"><div class="stat-value" id="stat-pr-depo">0</div><div class="stat-label">Yazıcı (Depo)</div></div>
                         <div class="stat-card"><div class="stat-value" id="stat-pr-kayip" style="color:#ffb400">0</div><div class="stat-label">Yazıcı (Kayıp)</div></div>
 
-                        <div class="stat-card"><div class="stat-value" id="stat-bo-toplam">0</div><div class="stat-label">Bakod Okuyucu</div></div>
-                        <div class="stat-card"><div class="stat-value" id="stat-by-toplam">0</div><div class="stat-label">Barkod Yazıcı</div></div>
-                        
-                        <div class="stat-card"><div class="stat-value" id="stat-tr-c230-sahada">0</div><div class="stat-label">TR C230 (Kurulu)</div></div>
-                        <div class="stat-card"><div class="stat-value" id="stat-tr-c230-depo" style="color:var(--accent)">0</div><div class="stat-label">TR C230 (Depo)</div></div>
+                        <div class="stat-card" style="padding: 10px;">
+                            <div class="flex-row gap-2" style="justify-content: space-around; width: 100%;">
+                                <div class="flex-column" style="align-items: center;">
+                                    <span class="stat-value" id="stat-bo-kurulu" style="font-size: 1.2rem;">0</span>
+                                    <span style="font-size: 0.6rem; opacity: 0.6;">Kurulu</span>
+                                </div>
+                                <div class="flex-column" style="align-items: center; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 10px;">
+                                    <span class="stat-value" id="stat-bo-depo" style="font-size: 1.2rem; color: var(--accent);">0</span>
+                                    <span style="font-size: 0.6rem; opacity: 0.6;">Depo</span>
+                                </div>
+                            </div>
+                            <div class="stat-label" style="margin-top: 5px;">Barkod Okuyucu</div>
+                        </div>
 
-                        <div class="stat-card"><div class="stat-value" id="stat-tr-g2090-sahada">0</div><div class="stat-label">TR G2090 (Kurulu)</div></div>
-                        <div class="stat-card"><div class="stat-value" id="stat-tr-g2090-depo" style="color:var(--accent)">0</div><div class="stat-label">TR G2090 (Depo)</div></div>
+                        <div class="stat-card" style="padding: 10px;">
+                            <div class="flex-row gap-2" style="justify-content: space-around; width: 100%;">
+                                <div class="flex-column" style="align-items: center;">
+                                    <span class="stat-value" id="stat-by-kurulu" style="font-size: 1.2rem;">0</span>
+                                    <span style="font-size: 0.6rem; opacity: 0.6;">Kurulu</span>
+                                </div>
+                                <div class="flex-column" style="align-items: center; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 10px;">
+                                    <span class="stat-value" id="stat-by-depo" style="font-size: 1.2rem; color: var(--accent);">0</span>
+                                    <span style="font-size: 0.6rem; opacity: 0.6;">Depo</span>
+                                </div>
+                            </div>
+                            <div class="stat-label" style="margin-top: 5px;">Barkod Yazıcı</div>
+                        </div>
+                        
+                        <div class="stat-card" style="padding: 10px;">
+                            <div class="flex-row gap-2" style="justify-content: space-around; width: 100%;">
+                                <div class="flex-column" style="align-items: center;">
+                                    <span class="stat-value" id="stat-tr-c230-sahada" style="font-size: 1.2rem;">0</span>
+                                    <span style="font-size: 0.6rem; opacity: 0.6;">Kurulu</span>
+                                </div>
+                                <div class="flex-column" style="align-items: center; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 10px;">
+                                    <span class="stat-value" id="stat-tr-c230-depo" style="font-size: 1.2rem; color: var(--accent);">0</span>
+                                    <span style="font-size: 0.6rem; opacity: 0.6;">Depo</span>
+                                </div>
+                            </div>
+                            <div class="stat-label" style="margin-top: 5px;">TR C230</div>
+                        </div>
+
+                        <div class="stat-card" style="padding: 10px;">
+                            <div class="flex-row gap-2" style="justify-content: space-around; width: 100%;">
+                                <div class="flex-column" style="align-items: center;">
+                                    <span class="stat-value" id="stat-tr-g2090-sahada" style="font-size: 1.2rem;">0</span>
+                                    <span style="font-size: 0.6rem; opacity: 0.6;">Kurulu</span>
+                                </div>
+                                <div class="flex-column" style="align-items: center; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 10px;">
+                                    <span class="stat-value" id="stat-tr-g2090-depo" style="font-size: 1.2rem; color: var(--accent);">0</span>
+                                    <span style="font-size: 0.6rem; opacity: 0.6;">Depo</span>
+                                </div>
+                            </div>
+                            <div class="stat-label" style="margin-top: 5px;">TR G2090</div>
+                        </div>
                         
                         <div class="stat-card stat-os"><div class="stat-value" id="stat-os-windows" style="color:#0078d4">0</div><div class="stat-label"><i class="fab fa-windows"></i> Windows</div></div>
                         <div class="stat-card stat-os"><div class="stat-value" id="stat-os-keyos" style="color:#ff4b2b">0</div><div class="stat-label"><i class="fas fa-shield-halved"></i> Keyos</div></div>
@@ -316,7 +364,7 @@
         <!-- ═══════════════ INVENTORY VIEW ═══════════════ -->
         <section id="view-inventory" class="view fade-in" style="display: none;">
             <div class="mb-4">
-                <h2 style="font-weight: 700; color: #fff;">Cihaz Envanteri</h2>
+                <h2 class="section-title"><i class="fas fa-boxes-stacked"></i> Cihaz Envanteri</h2>
             </div>
             <div class="flex-between mb-2">
                 <div class="filter-chips" id="device-type-filters" style="margin-bottom: 0;">
@@ -374,7 +422,7 @@
         <!-- ═══════════════ GENERAL NOTES / BİLGİ BANKASI VIEW ═══════════════ -->
         <section id="view-general-notes" class="view container fade-in" style="display: none;">
             <div class="mb-4">
-                <h2 style="font-weight: 700; color: #fff;">Genel Bilgi Bankası</h2>
+                <h2 class="section-title"><i class="fas fa-book-medical"></i> Bilgi Bankası & Teknik Notlar</h2>
             </div>
 
             <!-- TAB SEÇİMİ VE AKSİYONLAR -->
@@ -420,8 +468,8 @@
         <section id="view-areas" class="view fade-in" style="display: none;">
             <div class="flex-between mb-4" style="align-items: center;">
                 <div>
-                    <h2 class="section-title" style="margin-bottom: 0;">Ortak Alanlar & Erişim Bilgileri</h2>
-                    <p style="color: var(--text-secondary); font-size: 0.85rem;">Birimler için tanımlanmış ağ sürücüleri ve bağlantı komutları.</p>
+                    <h2 class="section-title"><i class="fas fa-hospital-user"></i> Ortak Alan Ekipman Yönetimi</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 5px;">Birimler için tanımlanmış ağ sürücüleri ve bağlantı komutları.</p>
                 </div>
                 <div class="flex-row gap-2" style="align-items: center;">
                 <div class="search-wrapper" style="max-width: 300px;">
@@ -438,7 +486,7 @@
 
         <section id="view-printers" class="view fade-in" style="display: none;">
             <div class="mb-4">
-                <h2 style="font-weight: 700; color: #fff;"><i class="fas fa-print"></i> Cihaz / Yazıcı Yönetimi</h2>
+                <h2 class="section-title"><i class="fas fa-print"></i> Yazıcı ve Fotokopi Yönetimi</h2>
             </div>
             <div class="flex-between mb-4" style="align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div class="filter-chips" id="printer-filters" style="margin-bottom: 0;">
@@ -467,7 +515,7 @@
         <!-- ═══════════════ DEPOT VIEW ═══════════════ -->
         <section id="view-depot" class="view fade-in" style="display: none;">
             <div class="mb-4">
-                <h2 style="font-weight: 700; color: #fff;">Depo & Sarf Malzeme Yönetimi</h2>
+                <h2 class="section-title"><i class="fas fa-warehouse"></i> Depo Stok ve Envanter Yönetimi</h2>
             </div>
             <div class="flex-between mb-4" style="align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div class="filter-chips" id="depot-filters" style="margin-bottom: 0;">
@@ -500,7 +548,7 @@
 
         <!-- ═══════════════ DOCS VIEW (MODERN BUTTON GRID) ═══════════════ -->
         <section id="view-docs" class="view fade-in" style="display: none;">
-            <h2 class="section-title mb-4">Dijital Tutanak ve Form Yönetimi</h2>
+            <h2 class="section-title mb-4"><i class="fas fa-file-signature"></i> Dijital Tutanak ve Form Yönetimi</h2>
             <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.9rem;">Düzenlemek istediğiniz tutanak veya form tipini seçin.</p>
             
             <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
@@ -557,6 +605,18 @@
                         <p>Büyük boy etiket (100x100 mm).</p>
                     </div>
                 </div>
+        </section>
+
+        <!-- ═══════════════ SYSTEM LOGS VIEW ═══════════════ -->
+        <section id="view-system-logs" class="view fade-in" style="display: none;">
+            <div class="flex-between mb-4">
+                <h2 style="font-weight: 700; color: #fff;"><i class="fas fa-terminal"></i> Sistem Kayıtları (Log)</h2>
+                <button class="btn btn-secondary" onclick="app.loadSystemLogs()">
+                    <i class="fas fa-rotate"></i> Yenile
+                </button>
+            </div>
+            <div class="card" style="background: #000; border: 1px solid #333; padding: 20px; font-family: 'Consolas', monospace; font-size: 0.85rem; color: #00ff00; height: 70vh; overflow-y: auto; line-height: 1.5;" id="system-logs-container">
+                Yükleniyor...
             </div>
         </section>
 
@@ -644,9 +704,13 @@
                          <input type="text" id="zimmet-teslim-alan" class="search-bar" placeholder="Teslim Alan">
                          <input type="text" id="zimmet-teslim-eden" class="search-bar" placeholder="Teslim Eden">
                     </div>
+                    <div class="flex-column gap-2 mt-2" style="background: rgba(0,210,255,0.05); padding: 10px; border-radius: 8px; border: 1px solid rgba(0,210,255,0.1);">
+                        <label style="font-size: 0.7rem; color: var(--accent); font-weight: 700;">ÇIKTI ALINACAK YAZICI (A4)</label>
+                        <select id="zimmet-printer-select" class="search-bar printer-selector-global"></select>
+                    </div>
                     <div class="flex-row gap-2 mt-2">
                         <button class="btn btn-secondary" style="flex:1;" onclick="app.generateZimmetPDF('pdf')">SİSTEMDEN YAZDIR</button>
-                        <button class="btn btn-accent" style="flex:1; font-weight: 800;" onclick="app.generateZimmetPDF('pdf', true)"><i class="fas fa-print"></i> YAZICIYA GÖNDER (A4)</button>
+                        <button class="btn btn-accent" style="flex:1; font-weight: 800;" onclick="app.generateZimmetPDF('pdf', true)"><i class="fas fa-print"></i> YAZICIYA GÖNDER</button>
                     </div>
                 </div>
             </div>
@@ -707,8 +771,10 @@
                         <input type="text" id="izin-bolum-muduru" class="search-bar" placeholder="Bölüm Müdürü" value="MURAT COŞKUN" required>
                         <input type="text" id="izin-ik" class="search-bar" placeholder="İnsan Kaynakları" value="PINAR ŞENDOĞAN" required>
                     </div>
-                    <div class="mt-3">
-                        <button type="button" class="btn btn-accent" style="width: 100%; font-weight: 800; letter-spacing: 1px;" onclick="app.generateIzinFormu('pdf')">DOĞRUDAN YAZDIR</button>
+                    <div class="mt-3 flex-column gap-2" style="background: rgba(0,210,255,0.05); padding: 10px; border-radius: 8px; border: 1px solid rgba(0,210,255,0.1);">
+                        <label style="font-size: 0.7rem; color: var(--accent); font-weight: 700;">ÇIKTI ALINACAK YAZICI (A4)</label>
+                        <select id="izin-printer-select" class="search-bar printer-selector-global"></select>
+                        <button type="button" class="btn btn-accent" style="width: 100%; font-weight: 800; letter-spacing: 1px;" onclick="app.generateIzinFormu('pdf', true)">DOĞRUDAN YAZDIR</button>
                     </div>
                 </form>
             </div>
@@ -728,9 +794,13 @@
                         <input type="text" id="sla-personel" class="search-bar" placeholder="Personel Ad Soyad" required>
                         <input type="text" id="sla-onaylayan" class="search-bar" placeholder="Onaylayan (Birim Sorumlusu)" required>
                     </div>
+                    <div class="flex-column gap-2 mt-3" style="background: rgba(0,210,255,0.05); padding: 10px; border-radius: 8px; border: 1px solid rgba(0,210,255,0.1);">
+                        <label style="font-size: 0.7rem; color: var(--accent); font-weight: 700;">ÇIKTI ALINACAK YAZICI (A4)</label>
+                        <select id="sla-printer-select" class="search-bar printer-selector-global"></select>
+                    </div>
                     <div class="flex-row gap-2 mt-3">
                         <button class="btn btn-secondary" style="flex:1;" onclick="app.generateSLAPDF('excel')">SİSTEMDEN YAZDIR</button>
-                        <button class="btn btn-accent" style="flex:1; font-weight: 800;" onclick="app.generateSLAPDF('pdf', true)"><i class="fas fa-print"></i> YAZICIYA GÖNDER (A4)</button>
+                        <button class="btn btn-accent" style="flex:1; font-weight: 800;" onclick="app.generateSLAPDF('pdf', true)"><i class="fas fa-print"></i> YAZICIYA GÖNDER</button>
                     </div>
                 </div>
             </div>
@@ -755,7 +825,11 @@
                          </select>
                          <input type="number" id="bc55-count" class="search-bar" style="width: 80px;" placeholder="Adet" value="1">
                     </div>
-                    <button type="button" class="btn btn-accent" style="width:100%; margin-top:10px; font-weight: 800;" onclick="app.printBarcode('55x45')">DOĞRUDAN YAZDIR</button>
+                    <div class="flex-column gap-2 mt-2" style="background: rgba(0,210,255,0.05); padding: 10px; border-radius: 8px; border: 1px solid rgba(0,210,255,0.1);">
+                        <label style="font-size: 0.7rem; color: var(--accent); font-weight: 700;">BARKOD YAZICI SEÇİMİ</label>
+                        <select id="bc55-printer-select" class="search-bar printer-selector-global"></select>
+                        <button type="button" class="btn btn-accent" style="width:100%; font-weight: 800;" onclick="app.printBarcode('55x45', true)">DOĞRUDAN YAZDIR</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -779,7 +853,11 @@
                          </select>
                          <input type="number" id="bc100-count" class="search-bar" style="width: 80px;" placeholder="Adet" value="1">
                     </div>
-                    <button type="button" class="btn btn-accent" style="width:100%; margin-top:10px; font-weight: 800;" onclick="app.printBarcode('100x100')">DOĞRUDAN YAZDIR</button>
+                    <div class="flex-column gap-2 mt-2" style="background: rgba(0,210,255,0.05); padding: 10px; border-radius: 8px; border: 1px solid rgba(0,210,255,0.1);">
+                        <label style="font-size: 0.7rem; color: var(--accent); font-weight: 700;">BARKOD YAZICI SEÇİMİ</label>
+                        <select id="bc100-printer-select" class="search-bar printer-selector-global"></select>
+                        <button type="button" class="btn btn-accent" style="width:100%; font-weight: 800;" onclick="app.printBarcode('100x100', true)">DOĞRUDAN YAZDIR</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -800,9 +878,13 @@
                         <label style="font-size:0.8rem; flex:1;">Adet:</label>
                         <input type="number" id="bc-manual-count" class="search-bar" value="1" style="flex:1;">
                     </div>
+                    <div class="flex-column gap-2 mt-3" style="background: rgba(0,210,255,0.05); padding: 10px; border-radius: 8px; border: 1px solid rgba(0,210,255,0.1);">
+                        <label style="font-size: 0.7rem; color: var(--accent); font-weight: 700;">YAZICI SEÇİMİ</label>
+                        <select id="bc-manual-printer-select" class="search-bar printer-selector-global"></select>
+                    </div>
                     <div class="flex-row gap-2 mt-3">
                         <button class="btn btn-secondary" style="flex:1;" onclick="app.generateBarcodePDF('manual')"><i class="fas fa-file-pdf"></i> PDF</button>
-                        <button class="btn btn-accent" style="flex:2;" onclick="app.printBarcode('manual')"><i class="fas fa-print"></i> DOĞRUDAN YAZDIR</button>
+                        <button class="btn btn-accent" style="flex:2;" onclick="app.printBarcode('manual', true)"><i class="fas fa-print"></i> DOĞRUDAN YAZDIR</button>
                     </div>
                 </div>
             </div>
@@ -888,6 +970,11 @@
                     </button>
                 </div>
             </div>
+            <div class="user-profile" id="user-info-area" style="display:none;">
+                <button class="btn btn-design-toggle" onclick="app.toggleDesignMode()" title="Tasarım Modu" style="background: rgba(255,180,0,0.1); color: #ffb400; border: 1px solid rgba(255,180,0,0.2); padding: 5px 10px; font-size: 0.7rem; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+                    <i class="fas fa-paint-brush"></i> <span id="design-mode-text">Tasarım Modu</span>
+                </button>
+                <div class="user-avatar" id="user-avatar">U</div>
             <div class="card" style="overflow-x: auto;">
                 <table class="user-table" id="logs-table">
                     <thead>
@@ -1064,10 +1151,13 @@
                     <input list="mahal-datalist" type="text" id="add-mahal-kodu" class="search-bar" placeholder="Mahal Kodu" onchange="app.handleMahalSelection(this.value)">
                 </div>
                 <input list="mahal-datalist" type="text" id="add-mahal-adi" class="search-bar" placeholder="Mahal / Birim Adı" onchange="app.handleMahalSelection(this.value)">
-                <input type="text" id="add-seri" class="search-bar" placeholder="PC Seri Numarası">
+                <div class="flex-row gap-2">
+                    <input type="text" id="add-seri" class="search-bar" placeholder="PC Seri Numarası" style="flex:1;">
+                    <input type="text" id="add-mac" class="search-bar" placeholder="MAC Adresi" style="flex:1;">
+                </div>
                 
-                <!-- Tablet Spesifik Alanlar (Gizli başlar) -->
-                <div id="add-tablet-fields" style="display:none;" class="flex-column gap-2">
+                <!-- Ek Cihaz Bilgileri -->
+                <div id="add-extra-fields" class="flex-column gap-2" style="background: rgba(255,255,255,0.02); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
                     <div class="flex-row gap-2">
                         <input type="text" id="add-assigned_to" class="search-bar" placeholder="Zimmetlenen Kişi">
                         <input type="text" id="add-phone" class="search-bar" placeholder="Cep Telefon">

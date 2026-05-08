@@ -18,26 +18,51 @@ from core.auth import require_auth, require_admin
 # Disable SSL warnings for local CUPS server
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-CUPS_BASE_URL = "https://10.241.1.21:49631/printers/"
+CUPS_BASE_URL = "https://10.0.0.99:631/printers/"
 
 def print_file_to_cups(printer_id, file_path):
-    """Belirtilen PDF dosyasını doğrudan CUPS sunucusuna gönderir."""
+    """Belirtilen PDF dosyasını curl kullanarak sahte CUPS sunucusuna gönderir (DEMO)."""
     try:
-        url = f"{CUPS_BASE_URL}{printer_id}"
-        with open(file_path, 'rb') as f:
-            pdf_data = f.read()
-            
-        # CUPS genelde basit bir POST isteğiyle PDF kabul eder
-        # Bazı durumlarda IPP kütüphanesi gerekebilir ama raw post genelde yeterlidir.
-        headers = {'Content-Type': 'application/pdf'}
-        response = requests.post(url, data=pdf_data, headers=headers, verify=False, timeout=10)
+        # DEMO / SAFE TEMP CLEAR İÇİN SAHTE VERİLER
+        url = f"https://10.0.0.99:631/printers/{printer_id}"
         
-        if response.status_code in [200, 201, 202]:
-            return True, "Yazdırma işlemi başarıyla gönderildi."
-        else:
-            return False, f"CUPS Hatası: {response.status_code} - {response.text[:100]}"
+        import subprocess
+        import re
+        
+        # 1. SID Al (DUMMY)
+        cookie_file = "cups_print_cookies_demo.txt"
+        sid_cmd = [
+            'curl.exe', '-k', '-L', '-s',
+            '--anyauth', '--user', "demo_user:demo_pass",
+            '-c', cookie_file,
+            f"https://10.0.0.99:631/admin/"
+        ]
+        # Demo ortamda bu hata vereceği için try-except içinde sessizce logluyoruz
+        try:
+            sid_output = subprocess.run(sid_cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=5).stdout
+            match = re.search(r'name=["\']org\.cups\.sid["\'][^>]*value=["\']?([a-f0-9]+)["\']?', sid_output, re.I)
+            sid = match.group(1) if match else "dummy_sid_12345"
+        except:
+            sid = "dummy_sid_12345"
+        
+        # 2. Dosyayı Yazdır (Multipart POST) - DEMO SIMULATION
+        # Gerçekte göndermeye çalışıp başarısız olacaktır ama kod yapısını göstermek için tutuyoruz.
+        print_cmd = [
+            'curl.exe', '-k', '-L', '-s',
+            '--anyauth', '--user', "demo_user:demo_pass",
+            '-b', cookie_file,
+            '-F', f'org.cups.sid={sid}',
+            '-F', 'OP=print-job',
+            '-F', f'file=@{file_path}',
+            '-F', 'job-name=IT_Inventory_Demo_Print',
+            url
+        ]
+        
+        # Demo ortamda gerçek bir çıktı beklenmediği için başarılı simülasyonu yapıyoruz
+        return True, "Yazdırma ilemi sıraya alındı (DEMO MODU)."
+        
     except Exception as e:
-        return False, f"Bağlantı Hatası: {str(e)}"
+        return False, f"Bağlantı Hatası (DEMO): {str(e)}"
 
 document_service_bp = Blueprint('document_service', __name__)
 
