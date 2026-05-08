@@ -2934,7 +2934,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                 <button class="btn btn-secondary" style="flex: 1;" onclick="app.closeDeviceDetail()">İptal</button>
                 <button class="btn btn-accent" style="flex: 1;" onclick="app.saveEdit()">Güncelle</button>
                 <!-- Barkod butonu kullanıcı talebiyle kaldırıldı -->
-                <button class="btn btn-secondary" onclick="app.updateCupsLocation('${item.ip}', '${item.mahal}')" style="border-color: #ff4b2b; color: #ff4b2b; background: rgba(255,75,43,0.05); font-size: 0.75rem; white-space: nowrap; padding: 0 10px;">
+                <button class="btn btn-secondary" onclick="app.updateCupsLocation('${item.pr_no}', '${item.mahal}')" style="border-color: #ff4b2b; color: #ff4b2b; background: rgba(255,75,43,0.05); font-size: 0.75rem; white-space: nowrap; padding: 0 10px;">
                     <i class="fas fa-location-dot"></i> CUPS Mahal Güncelle
                 </button>
             </div>`;
@@ -3728,22 +3728,22 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         const modal = document.getElementById('service-modal');
         if (modal) modal.style.display = 'flex';
     },
-    updateCupsLocation: async function(ip, mahal) {
-        if (!ip) return alert('IP adresi bulunamadı!');
-        if (!confirm(`${ip} IP'li yazıcının CUPS üzerindeki mahal bilgisini [${mahal}] olarak güncellemek istiyor musunuz?`)) return;
+    updateCupsLocation: async function(pr_no, mahal) {
+        if (!pr_no) return alert('Yazıcı numarası (PR NO) bulunamadı!');
+        if (!confirm(`${pr_no} numaralı yazıcının CUPS üzerindeki mahal bilgisini [${mahal}] olarak güncellemek istiyor musunuz?`)) return;
         
         try {
             this.showToast('CUPS güncelleniyor, lütfen bekleyin...', 'info');
-            const resp = await fetch(this.state.API_BASE + '/printers/update_cups_location', {
+            const resp = await fetch(this.state.API_BASE + '/printers/cups/update_mahal', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip: ip, location: mahal })
+                body: JSON.stringify({ pr_no: pr_no, mahal: mahal })
             });
             const result = await resp.json();
             if (result.success) {
-                this.showToast('CUPS Mahal baarıyla güncellendi.');
+                this.showToast('CUPS Mahal başarıyla güncellendi.');
             } else {
-                throw new Error(result.error || 'Bilinmeyen bir hata olutu.');
+                throw new Error(result.error || 'Bilinmeyen bir hata oluştu.');
             }
         } catch (e) {
             alert('CUPS Hatası: ' + e.message);
