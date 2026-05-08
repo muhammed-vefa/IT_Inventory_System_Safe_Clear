@@ -111,10 +111,24 @@ def get_keyos_session(username, password):
             _active_sessions[username] = {'session': session, 'last_activity': time.time()}
             return session
         else:
-            print(f"KeyOS Login failed for {username}. Status: {login_resp.status_code}")
-            print(f"Final URL: {login_resp.url}")
+            reason = "Bilinmeyen hata"
             if login_failed:
-                print("Reason: Still on login page or 'kullanıcı adı/şifre' text found in response.")
+                reason = "Kullanıcı adı veya şifre hatalı (Giriş sayfası tekrar yüklendi)"
+            elif login_resp.status_code != 200:
+                reason = f"HTTP Hatası: {login_resp.status_code}"
+            
+            print(f"DEBUG: KeyOS Login failed for {username}. Reason: {reason}")
+            # Hata bilgisini logs/keyos_error.log dosyasına yaz (Son yanıtın bir kısmını kaydet)
+            try:
+                with open('logs/keyos_error.log', 'w', encoding='utf-8') as f:
+                    f.write(f"Time: {time.ctime()}\n")
+                    f.write(f"User: {username}\n")
+                    f.write(f"Status: {login_resp.status_code}\n")
+                    f.write(f"URL: {login_resp.url}\n")
+                    f.write(f"Reason: {reason}\n")
+                    f.write("-" * 20 + " RESPONSE START " + "-" * 20 + "\n")
+                    f.write(login_resp.text[:2000]) # İlk 2000 karakter
+            except: pass
     except Exception as e:
         print(f"KeyOS Session Error: {str(e)}")
     
