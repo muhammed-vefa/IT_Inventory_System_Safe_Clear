@@ -1125,18 +1125,21 @@ var appData = {
         try {
             const resp = await fetch(this.state.API_BASE + '/printers/get_all');
             const data = await resp.json();
+            if (!Array.isArray(data)) throw new Error(data.error || "Hatalı veri formatı");
             this.state.printers = data;
-            const isAdmin = ['ADMIN', 'EDITOR'].includes(this.state.activeUser.role);
-            this.state.printers = data;
-            this.applyPrinterFilters(); // Filtreleri uygula ve render et
-        } catch (e) { console.error("Yazıcılar yüklenemedi:", e); }
+            this.applyPrinterFilters(); 
+        } catch (e) { 
+            console.error("Yazıcılar yüklenemedi:", e); 
+            if (e.message.includes("Oturum")) this.showLoginOverlay();
+        }
     },
     applyPrinterFilters: function() {
         const container = document.getElementById('printers-grid');
         if (!container || !this.state.printers) return;
         const ptype = this.state.printerType || 'ALL';
-        const query = (document.getElementById('printer-search').value || "").toUpperCase();
-        const isAdmin = ['ADMIN', 'EDITOR'].includes(this.state.activeUser.role);
+        const query = (document.getElementById('printer-search')?.value || "").toUpperCase();
+        const role = (this.state.activeUser && this.state.activeUser.role) ? this.state.activeUser.role : 'GUEST';
+        const isAdmin = ['ADMIN', 'EDITOR'].includes(role);
         let filtered = this.state.printers.filter(p => {
             // 1. Kategori Filtresi
             if (ptype !== 'ALL') {
@@ -5514,11 +5517,7 @@ for (var key in appData) {
 }
 
 app.init = function() {
-    this.loadInventory();
-    this.renderPrinters();
-    this.loadDepot();
-    this.loadDashboardStats();
-    this.checkAuth();
+    this.checkLoginStatus(); 
     
     window.onpopstate = () => {
         const view = new URLSearchParams(window.location.search).get('view') || 'dashboard';
