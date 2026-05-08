@@ -5280,8 +5280,11 @@ timeout /t 2 >nul
         };
         
         const queryParams = directPrint ? `?direct_print=true&printer_id=${printerId}` : '';
-        this.sendPDFRequest(payload, 'Barkod', false, queryParams);
-    },
+        if (directPrint) {
+            this.sendPDFRequest(payload, 'Barkod', false, queryParams);
+            return;
+        }
+
         // Dinamik font boyutu (55x45 için 6 satır kuralı)
         let fontSizeMain = size === '100x100' ? '32pt' : '18pt';
         let fontSizeSub = size === '100x100' ? '16pt' : '10pt';
@@ -5500,34 +5503,24 @@ app.clearSearch = function(id) {
     }
 };
 
-    };
+for (var key in appData) {
+    if (appData.hasOwnProperty(key)) {
+        app[key] = appData[key];
+    }
+}
 
-    app.saveDesign = function() {
-        let css = '/* CUSTOM DESIGN OVERRIDES */\n';
-        const draggables = document.querySelectorAll('.card, .btn, .nav-link, .stat-card, .search-bar-container');
-        draggables.forEach(el => {
-            if (el.style.top || el.style.left) {
-                const id = el.id || ('el-' + Math.random().toString(36).substr(2, 9));
-                if (!el.id) el.id = id;
-                css += `#${id} { position: ${el.style.position || 'relative'}; top: ${el.style.top}; left: ${el.style.left}; }\n`;
-            }
-        });
-        
-        localStorage.setItem('custom_design_css', css);
-        const styleEl = document.getElementById('custom-design-styles');
-        if (styleEl) styleEl.innerHTML = css;
-        
-        const copy = confirm("Tasarım kaydedildi. Bu tasarımı kalıcı yapmak için CSS kodunu kopyalamak ister misiniz?");
-        if (copy) {
-            const textarea = document.createElement('textarea');
-            textarea.value = css;
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-            this.showToast('CSS kodu panoya kopyalandı!', 'success');
-        }
+app.init = function() {
+    this.loadInventory();
+    this.loadPrinters();
+    this.loadDepot();
+    this.loadDashboardStats();
+    this.checkAuth();
+    
+    window.onpopstate = () => {
+        const view = new URLSearchParams(window.location.search).get('view') || 'dashboard';
+        this.navigateTo(view, false);
     };
+};
 
 app.init();
 window.app = app;
