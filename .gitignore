@@ -1,51 +1,36 @@
-# ══════════════════════════════════════════════════════
-# IT Inventory System — .gitignore
-# ══════════════════════════════════════════════════════
-
-# ────── HASSAS VERİLER (KRİTİK) ──────
-.env
-.env.*
-*.env
-database/*.xlsx
-database/*.db
-database/*.xls
-database/sql_ayarlari.json
-*.log
-logs/
-
-# ────── Python ──────
+# Python artifacts
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-*.egg-info/
-dist/
+*$py.class
+*.so
+.Python
+env/
 build/
-venv/
-.venv/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# ────── Geçici Dosyalar ──────
-temp_*.xlsx
-temp_*.pdf
-tmp_logo_*
-*.tmp
-*.log
+# Database & Sensitive Data
+database/*.xlsx
+database/*.db
+.env
+uploads/
+temp/
+safe_temp/
 
-# ────── IDE ──────
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# ────── OS ──────
-Thumbs.db
-Desktop.ini
-.DS_Store
-
-# ────── Yüklenen Dosyalar (isteğe bağlı) ──────
-uploads/notes/*
-!uploads/notes/.gitkeep
-
-# ────── Arşiv (büyük dosyalar) ──────
-Arşiv/
-Arsiv

@@ -10,11 +10,19 @@ def get_areas():
     """Tüm ortak ağ alanlarını getirir."""
     try:
         items = query_db("SELECT * FROM shared_areas")
-        return jsonify([dict(row) for row in items])
+        result = []
+        for row in items:
+            d = dict(row)
+            # Şifreyi maskele — düzenleme formunda ayrıca çekilir
+            if d.get('password'):
+                d['password'] = '••••••'
+            result.append(d)
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @areas_manager_bp.route('/search', methods=['GET'])
+@require_auth
 def search_areas():
     q = request.args.get('q', '')
     try:

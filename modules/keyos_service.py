@@ -13,23 +13,66 @@ LOGIN_URL = f"{BASE_URL}/login"
 COMPUTERS_URL = f"{BASE_URL}/computers"
 UPDATE_URL = f"{BASE_URL}/updateComputer"
 
+import time
+
+# Global Session Cache
+_active_sessions = {} # {username: {'session': session, 'last_activity': timestamp}}
+
+def is_session_valid(session):
+    """Oturumun hala geçerli olup olmadığını basit bir istek ile kontrol eder."""
+    try:
+        # Ana sayfayı veya basit bir sayfayı çekerek kontrol et
+        resp = session.get(BASE_URL + "/", timeout=5, verify=False, allow_redirects=False)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
 def get_keyos_session(username, password):
-    """KeyOS sistemine giriş yapıp bir session döndürür."""
+    """KeyOS sistemine giriş yapıp bir session döndürür. Varsa önbellekteki oturumu kullanır."""
+    global _active_sessions
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     
     if not username or username == 'dashboard_placeholder': 
         return None
 
+    # 1. Önbellekte geçerli bir oturum var mı kontrol et
+    now = time.time()
+    if username in _active_sessions:
+        cached = _active_sessions[username]
+        # Eğer son işlem 10 dakikadan yeniyse, oturumu doğrula ve kullan
+        if now - cached['last_activity'] < 600: 
+            if is_session_valid(cached['session']):
+                cached['last_activity'] = now # Aktivite zamanını güncelle
+                return cached['session']
+
+    # 2. Yeni oturum oluştur ve giriş yap
     session = requests.Session()
+    
+    # Retry strategy for network resiliency
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+    retry_strategy = Retry(
+        total=3,
+        status_forcelist=[429, 500, 502, 503, 504],
+        backoff_factor=1,
+        raise_on_status=False
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+
     session.headers.update({
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     })
     
     try:
-        # 1. Giriş sayfasını aç
-        resp = session.get(LOGIN_URL, timeout=15, verify=False)
-        
+        # Giriş sayfasını aç
+        try:
+            resp = session.get(LOGIN_URL, timeout=45, verify=False)
+        except requests.exceptions.RequestException as e:
+            print(f"KeyOS Connection Error (GET Login): {str(e)}")
+            return None
         soup = BeautifulSoup(resp.text, 'html.parser')
         csrf_token = ""
         token_meta = soup.find('meta', {'name': 'csrf-token'})
@@ -37,28 +80,44 @@ def get_keyos_session(username, password):
         token_input = soup.find('input', {'name': '_token'})
         if token_input: csrf_token = token_input.get('value', '')
         
-        # 2. Login form'u POST et
+        # Login form'unu bul ve action'ı al
+        form = soup.find('form')
+        login_post_url = LOGIN_URL # Default
+        if form and form.get('action'):
+            action = form.get('action')
+            if action.startswith('http'): login_post_url = action
+            else: login_post_url = BASE_URL + (action if action.startswith('/') else '/' + action)
+            
+        # Login form'u POST et
         data = { "userName": username, "password": password }
         if csrf_token: data["_token"] = csrf_token
         
-        login_post_url = BASE_URL + "/"
-        login_resp = session.post(login_post_url, data=data, timeout=15, verify=False, allow_redirects=True)
+        try:
+            login_resp = session.post(login_post_url, data=data, timeout=45, verify=False, allow_redirects=True)
+        except requests.exceptions.RequestException as e:
+            print(f"KeyOS Connection Error (POST Login): {str(e)}")
+            return None
         
         final_url = login_resp.url.lower()
         response_text = login_resp.text.lower()
         
-        # Login başarı kontrolü
         login_failed = (
             '/login' in final_url or
             ('kullanıcı adı' in response_text and 'şifre' in response_text)
         )
         
         if login_resp.status_code in [200, 302] and not login_failed:
+            # Oturumu önbelleğe al
+            _active_sessions[username] = {'session': session, 'last_activity': time.time()}
             return session
         else:
             print(f"KeyOS Login failed for {username}. Status: {login_resp.status_code}")
+            print(f"Final URL: {login_resp.url}")
+            if login_failed:
+                print("Reason: Still on login page or 'kullanıcı adı/şifre' text found in response.")
     except Exception as e:
-        pass # Sessiz hata
+        print(f"KeyOS Session Error: {str(e)}")
+    
     return None
 
 @keyos_service_bp.route('/check/<serial>', methods=['GET'])
@@ -68,7 +127,7 @@ def check_device(serial):
     """Seri no ile KeyOS'tan cihaz bilgilerini çeker."""
     session = get_keyos_session(os.getenv('KEYOS_USER'), os.getenv('KEYOS_PASS'))
     if not session:
-        return jsonify({"error": "KeyOS sistemine giriş yapılamadı."}), 401
+        return jsonify({"error": "KeyOS sistemine giriş yapılamadı."}), 503
     
     try:
         # Search for device
@@ -133,9 +192,17 @@ def update_device():
     if not all([serial, admin_user, admin_pass]):
         return jsonify({"error": "Seri no, kullanıcı adı ve şifre zorunludur."}), 400
         
+    success, result = update_device_internal(serial, new_hostname, new_place_id, admin_user, admin_pass)
+    if success:
+        return jsonify({"success": True, "message": result})
+    else:
+        return jsonify({"error": result}), 500
+
+def update_device_internal(serial, new_hostname, new_place_id, admin_user, admin_pass):
+    """KeyOS üzerindeki cihaz bilgilerini günceller (Internal use)."""
     session = get_keyos_session(admin_user, admin_pass)
     if not session:
-        return jsonify({"error": "Yetkili girişi başarısız (KeyOS)."}), 401
+        return False, "Yetkili girişi başarısız (KeyOS)."
         
     try:
         # 1. Find internal ID for the device
@@ -145,44 +212,37 @@ def update_device():
         # Look for update link
         edit_link = soup.find('a', href=re.compile(r'updateComputer\?ID='))
         if not edit_link:
-            return jsonify({"error": "Düzenleme bağlantısı bulunamadı. Yetkiniz olmayabilir."}), 403
+            return False, "Düzenleme bağlantısı bulunamadı. Yetkiniz olmayabilir."
             
         id_match = re.search(r'ID=(\d+)', edit_link['href'])
         if not id_match:
-            return jsonify({"error": "Cihaz ID'si ayrıştırılamadı."}), 500
+            return False, "Cihaz ID'si ayrıştırılamadı."
             
         device_id = id_match.group(1)
         
         # 2. Submit update
-        # We might need to get the edit page first for more fields or CSRF
-        edit_page = session.get(f"{UPDATE_URL}?ID={device_id}", verify=False, timeout=15)
+        edit_page = session.get(f"{UPDATE_URL}?ID={device_id}", verify=False, timeout=30)
         edit_soup = BeautifulSoup(edit_page.text, 'html.parser')
         
-        # Prepare payload - some fields might be hidden or required
         payload = {
             "ID": device_id,
             "hostname": new_hostname,
             "placeId": new_place_id
         }
         
-        # Extract existing hidden fields if any
         for hidden in edit_soup.find_all('input', type='hidden'):
             if hidden.get('name') and hidden.get('name') not in payload:
                 payload[hidden['name']] = hidden.get('value', '')
         
-        # KeyOS uses placeId as a select. We need the ID, not just the name.
-        # But if the user provides the tire format ID (e.g. 102), we use that.
-        # If they provide the string, we might need to find it in the options.
-        
         post_resp = session.post(UPDATE_URL, data=payload, verify=False, timeout=20)
         
         if post_resp.status_code == 200:
-            return jsonify({"success": True, "message": "KeyOS güncellemesi başarılı."})
+            return True, "KeyOS güncellemesi başarılı."
         else:
-            return jsonify({"error": f"Güncelleme sırasında hata oluştu: {post_resp.status_code}"}), 500
+            return False, f"Güncelleme hatası: {post_resp.status_code}"
             
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return False, str(e)
 
 def get_all_mismatches_internal():
     """Envanterdeki cihazlar ile KeyOS'u karşılaştırır ve listeyi döner."""
@@ -231,6 +291,7 @@ def get_all_mismatches_internal():
         return None, str(e)
 
 @keyos_service_bp.route('/check_all_mismatches', methods=['GET'])
+@require_admin
 def check_all_mismatches():
     """Envanterdeki cihazlar ile KeyOS'u karşılaştırır."""
     mismatches, error = get_all_mismatches_internal()

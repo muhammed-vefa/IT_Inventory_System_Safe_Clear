@@ -8,11 +8,30 @@ user_manager_bp = Blueprint('user_manager', __name__)
 
 
 @user_manager_bp.route('/get_all', methods=['GET'])
+@require_auth
 def get_users():
     """Tüm kullanıcıları getirir (şifre hariç)."""
     try:
-        users = query_db("SELECT id, username, display_name, role, permissions, created_at, last_login, session_timeout FROM users")
-        return jsonify([dict(row) for row in users])
+        users = query_db("SELECT id, username, display_name, role, permissions, created_at, last_login, last_activity, session_timeout FROM users")
+        result = []
+        for row in users:
+            d = dict(row)
+            # Tarihleri ISO formatına (Z ile) çevir ki browser UTC olduğunu anlasın
+            for key in ['created_at', 'last_login', 'last_activity']:
+                val = d.get(key)
+                if val:
+                    try:
+                        if isinstance(val, (datetime.datetime, datetime.date)):
+                            d[key] = val.isoformat() + "Z"
+                        else:
+                            # String ise (bazen pyodbc öyle döner), T harfi ve Z ekle
+                            s_val = str(val).replace(" ", "T")
+                            if "Z" not in s_val:
+                                d[key] = s_val + "Z"
+                    except Exception:
+                        pass
+            result.append(d)
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -39,8 +58,9 @@ def login():
             return jsonify({"error": "Şifre yanlış"}), 401
         
         # Son giriş zamanını güncelle
+        from main import get_now
         conn = get_db_connection()
-        conn.execute("UPDATE users SET last_login = ? WHERE id = ?", (datetime.datetime.now(), user_data['id']))
+        conn.execute("UPDATE users SET last_login = ?, last_activity = ? WHERE id = ?", (get_now(), get_now(), user_data['id']))
         conn.commit()
         conn.close()
         
@@ -58,10 +78,10 @@ def login():
                 "permissions": user_data.get('permissions'),
                 "bim_user": user_data.get('bim_user', ''),
                 "bim_pass": user_data.get('bim_pass', ''),
+                "has_bim_pass": bool(user_data.get('bim_pass')),
                 "keyos_user": user_data.get('keyos_user', ''),
                 "keyos_pass": user_data.get('keyos_pass', ''),
-                "magicinfo_user": user_data.get('magicinfo_user', ''),
-                "magicinfo_pass": user_data.get('magicinfo_pass', ''),
+                "has_keyos_pass": bool(user_data.get('keyos_pass')),
                 "session_timeout": user_data.get('session_timeout', 30)
             }
         })
@@ -91,13 +111,14 @@ def add_user():
         conn = get_db_connection()
         conn.execute(
             "INSERT INTO users (username, password_hash, display_name, role, permissions) VALUES (?,?,?,?,?)",
-            (username, hash_password(password), display_name, role, data.get('permissions'))
+            (username, hash_password(password), display_name, role, data.get('permissions', '[]'))
         )
         conn.commit()
         conn.close()
-        return jsonify({"message": "Kullanıcı eklendi"})
+        return jsonify({"success": True, "message": "Kullanıcı başarıyla eklendi"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"Add User Error: {e}")
+        return jsonify({"error": f"Kullanıcı eklenemedi: {str(e)}"}), 500
 
 
 @user_manager_bp.route('/update/<int:user_id>', methods=['PUT'])
@@ -156,9 +177,9 @@ def delete_user(user_id):
 def update_profile():
     """Kullanıcının kendi KeyOS ve BIM bilgilerini güncellemesini sağlar."""
     data = request.json
-    user_id = data.get('id')
+    user_id = request.current_user.get('user_id')
     if not user_id:
-        return jsonify({"error": "Kullanıcı ID bulunamadı"}), 400
+        return jsonify({"error": "Geçersiz oturum"}), 401
         
     try:
         conn = get_db_connection()
@@ -167,8 +188,6 @@ def update_profile():
         keyos_pass = data.get('keyos_pass')
         bim_user = data.get('bim_user')
         bim_pass = data.get('bim_pass')
-        magicinfo_user = data.get('magicinfo_user')
-        magicinfo_pass = data.get('magicinfo_pass')
         session_timeout = data.get('session_timeout')
         
         query = "UPDATE users SET "
@@ -187,12 +206,6 @@ def update_profile():
         if bim_pass:
             updates.append("bim_pass = ?")
             params.append(bim_pass)
-        if magicinfo_user is not None:
-            updates.append("magicinfo_user = ?")
-            params.append(magicinfo_user)
-        if magicinfo_pass:
-            updates.append("magicinfo_pass = ?")
-            params.append(magicinfo_pass)
         if session_timeout is not None:
             updates.append("session_timeout = ?")
             params.append(session_timeout)
@@ -206,6 +219,40 @@ def update_profile():
         conn.execute(query, params)
         conn.commit()
         conn.close()
-        return jsonify({"message": "Profil başarıyla güncellendi."})
+        return jsonify({"success": True, "message": "Profil başarıyla güncellendi."})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@user_manager_bp.route('/change_password', methods=['POST'])
+@require_auth
+def change_password():
+    """Kullanıcının kendi şifresini değiştirmesini sağlar."""
+    data = request.json
+    user_id = request.current_user.get('user_id')
+    old_password = data.get('old_password')
+    new_password = data.get('new_password')
+    
+    if not user_id:
+        return jsonify({"error": "Geçersiz oturum"}), 401
+    if not old_password or not new_password:
+        return jsonify({"error": "Eski şifre ve yeni şifre zorunludur"}), 400
+        
+    try:
+        user = query_db("SELECT * FROM users WHERE id=?", (user_id,), one=True)
+        if not user:
+            return jsonify({"error": "Kullanıcı bulunamadı"}), 404
+            
+        user_data = dict(user)
+        # Auth.py'den verify_password'ü kullandık
+        if not verify_password(old_password, user_data['password_hash']):
+            return jsonify({"error": "Mevcut şifreniz hatalı!"}), 400
+            
+        conn = get_db_connection()
+        conn.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_password(new_password), user_id))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Şifreniz başarıyla değiştirildi."})
+    except Exception as e:
+        return jsonify({"error": f"Sistem hatası: {str(e)}"}), 500

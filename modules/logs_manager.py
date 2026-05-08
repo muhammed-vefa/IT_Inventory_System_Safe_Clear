@@ -13,7 +13,7 @@ def get_mac_address(ip):
         try:
             import uuid
             return ':'.join(['{:02x}'.format((uuid.getnode() >> i) & 0xff) for i in range(0,8*6,8)][::-1]).upper()
-        except:
+        except Exception:
             return None
             
     try:
@@ -22,7 +22,7 @@ def get_mac_address(ip):
         subprocess.run(['ping', param, '1', '-w', '200', ip], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
         # Windows için arp -a [ip] komutu
-        output = subprocess.check_output(["arp", "-a", ip], shell=True, stderr=subprocess.DEVNULL).decode('cp854', errors='ignore')
+        output = subprocess.check_output(["arp", "-a", ip], stderr=subprocess.DEVNULL).decode('cp854', errors='ignore')
         
         # Regex ile MAC adresini bul
         match = re.search(r'([0-9a-fA-F]{2}[:-]){5}([0-9a-fA-F]{2})', output)
@@ -63,7 +63,8 @@ def get_logs():
             d = dict(r)
             # datetime serialization
             if d.get('created_at'):
-                d['created_at'] = str(d['created_at'])
+                # UTC olduğunu belirtmek için Z ekle
+                d['created_at'] = d['created_at'].isoformat() + "Z" if hasattr(d['created_at'], 'isoformat') else str(d['created_at']).replace(" ", "T") + "Z"
             result.append(d)
 
         return jsonify(result)
@@ -86,7 +87,8 @@ def get_record_history(table_name, record_id):
         for r in rows:
             d = dict(r)
             if d.get('created_at'):
-                d['created_at'] = str(d['created_at'])
+                # UTC olduğunu belirtmek için Z ekle
+                d['created_at'] = d['created_at'].isoformat() + "Z" if hasattr(d['created_at'], 'isoformat') else str(d['created_at']).replace(" ", "T") + "Z"
             result.append(d)
 
         return jsonify(result)

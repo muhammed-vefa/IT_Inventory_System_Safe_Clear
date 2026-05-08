@@ -1,32 +1,17 @@
 import pyodbc
-import json
 import os
 import re
 from werkzeug.security import generate_password_hash, check_password_hash
 
-CONFIG_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'database', 'sql_ayarlari.json'))
-
-def get_sql_config():
-    with open(CONFIG_PATH, 'r') as f:
-        return json.load(f)
-
 def _get_raw_connection():
     """Ham pyodbc bağlantısı döndürür."""
-    # 1. Öncelik: .env dosyasındaki değerler
     server = os.getenv('DB_SERVER')
     database = os.getenv('DB_NAME')
     uid = os.getenv('DB_USER')
     pwd = os.getenv('DB_PASS')
 
-    # 2. Öncelik: Eğer .env yoksa JSON dosyasından oku (Geriye dönük uyumluluk)
     if not all([server, database]):
-        try:
-            config = get_sql_config()
-            server = server or config.get('server')
-            database = database or config.get('database')
-            uid = uid or config.get('username')
-            pwd = pwd or config.get('password')
-        except: pass
+        raise ConnectionError("DB_SERVER ve DB_NAME .env dosyasında tanımlı olmalı!")
     
     # Mevcut ODBC Sürücüsünü bul
     import pyodbc as _pyodbc
@@ -44,7 +29,6 @@ def _get_raw_connection():
         f"DATABASE={database};"
         f"UID={uid};"
         f"PWD={pwd};"
-        f"TrustServerCertificate=yes;"
     )
     try:
         conn = pyodbc.connect(conn_str)
@@ -56,7 +40,6 @@ def _get_raw_connection():
             f"SERVER={server};"
             f"DATABASE={database};"
             f"Trusted_Connection=yes;"
-            f"TrustServerCertificate=yes;"
         )
         conn = pyodbc.connect(conn_str_win)
         return conn
@@ -79,7 +62,7 @@ class DictRow:
         return key in self._dict
 
     def __iter__(self):
-        return iter(self._columns)
+        return iter(self._values)
 
     def __len__(self):
         return len(self._values)
@@ -144,6 +127,7 @@ class ConnectionWrapper:
     conn.execute() doğrudan çalışır, sonuçlar dict-benzeri Row döner."""
     def __init__(self, raw_conn):
         self._conn = raw_conn
+        self.row_factory = None
 
     def cursor(self):
         return CursorWrapper(self._conn.cursor())
@@ -162,6 +146,9 @@ class ConnectionWrapper:
                 def __init__(self, cursor, columns):
                     self._cursor = cursor
                     self._columns = columns
+                @property
+                def description(self):
+                    return self._cursor.description
                 def fetchone(self):
                     row = self._cursor.fetchone()
                     if row is None:
@@ -170,6 +157,8 @@ class ConnectionWrapper:
                 def fetchall(self):
                     rows = self._cursor.fetchall()
                     return [DictRow(self._columns, row) for row in rows]
+                def __iter__(self):
+                    return iter(self.fetchall())
             
             return ResultProxy(cur, columns)
         return cur
@@ -327,7 +316,7 @@ def init_db():
             bim_pass NVARCHAR(MAX),
             keyos_user NVARCHAR(MAX),
             keyos_pass NVARCHAR(MAX),
-            created_at DATETIME DEFAULT GETDATE()
+            created_at DATETIME DEFAULT GETUTCDATE()
         )
     """)
     
@@ -336,21 +325,11 @@ def init_db():
     add_column_if_not_exists('users', 'bim_pass', "NVARCHAR(MAX)")
     add_column_if_not_exists('users', 'keyos_user', "NVARCHAR(MAX)")
     add_column_if_not_exists('users', 'keyos_pass', "NVARCHAR(MAX)")
-    add_column_if_not_exists('users', 'magicinfo_user', "NVARCHAR(MAX)")
-    add_column_if_not_exists('users', 'magicinfo_pass', "NVARCHAR(MAX)")
     add_column_if_not_exists('users', 'last_login', "DATETIME")
+    add_column_if_not_exists('users', 'last_activity', "DATETIME")
     add_column_if_not_exists('users', 'session_timeout', "INT DEFAULT 30")
 
-    create_table_if_not_exists('magicinfo_devices', """
-        CREATE TABLE magicinfo_devices (
-            id INT IDENTITY(1,1) PRIMARY KEY,
-            name NVARCHAR(MAX),
-            mac NVARCHAR(MAX),
-            ip NVARCHAR(MAX),
-            location NVARCHAR(MAX),
-            server NVARCHAR(MAX)
-        )
-    """)
+
 
     create_table_if_not_exists('printers', """
         CREATE TABLE printers (
@@ -363,9 +342,11 @@ def init_db():
             toner NVARCHAR(MAX),
             status NVARCHAR(MAX) DEFAULT 'Kurulu',
             live_status NVARCHAR(MAX),
-            mahal NVARCHAR(MAX)
+            mahal NVARCHAR(MAX),
+            cups_location NVARCHAR(MAX)
         )
     """)
+    add_column_if_not_exists('printers', 'cups_location', 'NVARCHAR(MAX)')
 
     create_table_if_not_exists('shared_areas', """
         CREATE TABLE shared_areas (
@@ -386,7 +367,7 @@ def init_db():
             content NVARCHAR(MAX),
             user_id NVARCHAR(MAX),
             user_name NVARCHAR(MAX),
-            created_at DATETIME DEFAULT GETDATE()
+            created_at DATETIME DEFAULT GETUTCDATE()
         )
     """)
 
@@ -399,7 +380,7 @@ def init_db():
             image_path NVARCHAR(MAX),
             user_id NVARCHAR(MAX),
             user_name NVARCHAR(MAX),
-            created_at DATETIME DEFAULT GETDATE()
+            created_at DATETIME DEFAULT GETUTCDATE()
         )
     """)
 
@@ -430,7 +411,7 @@ def init_db():
             device_type NVARCHAR(50),
             user_name NVARCHAR(MAX),
             note NVARCHAR(MAX),
-            created_at DATETIME DEFAULT GETDATE()
+            created_at DATETIME DEFAULT GETUTCDATE()
         )
     """)
 
@@ -448,10 +429,10 @@ def init_db():
         )
     """)
 
-    # Varsayılan Admin Kullanıcısı
+    # Varsayılan Admin Kullanıcısı (İlk kurulumda oluşturulur)
     exists = cur.execute("SELECT id FROM users WHERE username='vefa'").fetchone()
     if not exists:
-        admin_pass = hash_password('123')
+        admin_pass = hash_password(os.getenv('ADMIN_PASS', 'Ksh_Admin_2025!'))
         cur.execute("INSERT INTO users (username, password_hash, display_name, role) VALUES (?,?,?,?)",
                   ('vefa', admin_pass, 'M. Vefa', 'ADMIN'))
 
@@ -503,47 +484,19 @@ def init_db():
         )
     """)
 
-    # Inventory tablosuna sayım sütunları ekle
-    try:
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('inventory') AND name = 'last_counted_at') ALTER TABLE inventory ADD last_counted_at DATETIME NULL")
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('inventory') AND name = 'counted_by') ALTER TABLE inventory ADD counted_by NVARCHAR(MAX) NULL")
-    except: pass
-
-    # Audit log geliştirmeleri
-    try:
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('audit_logs') AND name = 'client_ip') ALTER TABLE audit_logs ADD client_ip NVARCHAR(50)")
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('audit_logs') AND name = 'client_mac') ALTER TABLE audit_logs ADD client_mac NVARCHAR(50)")
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('printer_service') AND name = 'acq_place') ALTER TABLE printer_service ADD acq_place NVARCHAR(MAX)")
-        # Depot items extra fields for asset management
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('depot_items') AND name = 'saha_stock') ALTER TABLE depot_items ADD saha_stock INT DEFAULT 0")
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('depot_items') AND name = 'arizali_stock') ALTER TABLE depot_items ADD arizali_stock INT DEFAULT 0")
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('depot_items') AND name = 'kayip_stock') ALTER TABLE depot_items ADD kayip_stock INT DEFAULT 0")
-        
-        # Knowledge Base migration
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('knowledge_base') AND name = 'user_id') ALTER TABLE knowledge_base ADD user_id NVARCHAR(MAX)")
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('knowledge_base') AND name = 'user_name') ALTER TABLE knowledge_base ADD user_name NVARCHAR(MAX)")
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('knowledge_base') AND name = 'requires_user') ALTER TABLE knowledge_base ADD requires_user INT DEFAULT 0")
-        
-        # User permissions migration
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('users') AND name = 'permissions') ALTER TABLE users ADD permissions NVARCHAR(MAX)")
-        
-        # Printer live status migration
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('printers') AND name = 'live_status') ALTER TABLE printers ADD live_status NVARCHAR(MAX)")
-        
-        # Printer service migration
-        cur.execute("IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('printer_service') AND name = 'acq_place') ALTER TABLE printer_service ADD acq_place NVARCHAR(MAX)")
-    except: pass
-
-
-    # Varsayılan kullanıcıları kontrol et ve ekle
-    cur.execute("SELECT COUNT(*) FROM users")
-    if cur.fetchone()[0] == 0:
-        cur.execute("INSERT INTO users (username, password_hash, display_name, role) VALUES (?,?,?,?)",
-            ('vefa', hash_password('123'), 'M. Vefa', 'ADMIN'))
-        cur.execute("INSERT INTO users (username, password_hash, display_name, role) VALUES (?,?,?,?)",
-            ('admin', hash_password('123'), 'Sistem Admin', 'ADMIN'))
-        cur.execute("INSERT INTO users (username, password_hash, display_name, role) VALUES (?,?,?,?)",
-            ('destek', hash_password('123'), 'Saha Destek', 'EDITOR'))
+    # Ek migration'lar (Audit log, KB, Depot, Printer)
+    add_column_if_not_exists('audit_logs', 'client_ip', 'NVARCHAR(50)')
+    add_column_if_not_exists('audit_logs', 'client_mac', 'NVARCHAR(50)')
+    add_column_if_not_exists('depot_items', 'saha_stock', 'INT DEFAULT 0')
+    add_column_if_not_exists('depot_items', 'arizali_stock', 'INT DEFAULT 0')
+    add_column_if_not_exists('depot_items', 'kayip_stock', 'INT DEFAULT 0')
+    add_column_if_not_exists('knowledge_base', 'user_id', 'NVARCHAR(MAX)')
+    add_column_if_not_exists('knowledge_base', 'user_name', 'NVARCHAR(MAX)')
+    add_column_if_not_exists('knowledge_base', 'requires_user', 'INT DEFAULT 0')
+    add_column_if_not_exists('knowledge_base', 'target_id', 'INT')
+    add_column_if_not_exists('users', 'permissions', 'NVARCHAR(MAX)')
+    add_column_if_not_exists('printers', 'live_status', 'NVARCHAR(MAX)')
+    add_column_if_not_exists('printer_service', 'acq_place', 'NVARCHAR(MAX)')
     
     raw_conn.commit()
     raw_conn.close()

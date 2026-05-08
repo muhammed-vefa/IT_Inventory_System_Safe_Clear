@@ -5,6 +5,7 @@ import os
 import datetime
 import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side
+from modules.printer_manager import CUPSHelper
 
 service_manager_bp = Blueprint('service_manager', __name__)
 
@@ -65,6 +66,28 @@ def add_service_record():
             conn.commit()
             print(f"DEBUG: Printer {pr_no} status updated to {main_status} via pr_no")
 
+        # CUPS Koruması: Servise giden yazıcıyı CUPS'ta durdur
+        if pr_no:
+            pr_no_upper = str(pr_no).strip().upper()
+            if pr_no_upper.startswith('PR-') and main_status in ['Arızalı', 'Serviste']:
+                try:
+                    print(f"DEBUG: Triggering CUPS Auto-Pause for {pr_no_upper}")
+                    CUPSHelper.set_status(pr_no_upper, 'pause-printer')
+                    CUPSHelper.set_status(pr_no_upper, 'reject-jobs')
+                    
+                    # İKAME VERİLDİ İSE: Mahal Bilgisini DEPO yap (Veritabanı + CUPS)
+                    if data.get('has_substitute'):
+                        print(f"DEBUG: Substitute detected, moving {pr_no_upper} to DEPO in DB and CUPS")
+                        conn.execute("UPDATE printers SET mahal='DEPO' WHERE pr_no=?", (pr_no_upper,))
+                        conn.commit()
+                        CUPSHelper.update_location(pr_no_upper, 'DEPO')
+                        
+                    print(f"DEBUG: CUPS auto-paused and location updated for {pr_no_upper}")
+                except Exception as e:
+                    print(f"DEBUG: CUPS auto-orchestration error for {pr_no_upper}: {e}")
+            else:
+                print(f"DEBUG: CUPS Skip (Not a PR or wrong status): {pr_no_upper} / {main_status}")
+
         # İkame yazıcı varsa durumunu 'Kurulu' yap
         if data.get('substitute_pr_no'):
             conn.execute("UPDATE printers SET status='Kurulu' WHERE pr_no=?", (data.get('substitute_pr_no'),))
@@ -118,6 +141,36 @@ def update_service_record(id):
 
         if p_id:
             conn.execute("UPDATE printers SET status=? WHERE id=?", (printer_status, p_id))
+            
+            # CUPS Koruması: Servise giden yazıcıyı CUPS'ta durdur (Güncelleme anında)
+            if record and record['pr_no']:
+                pr_no_upper = str(record['pr_no']).strip().upper()
+                if pr_no_upper.startswith('PR-') and printer_status in ['Arızalı', 'Serviste']:
+                    try:
+                        print(f"DEBUG: Triggering CUPS Auto-Pause on Update for {pr_no_upper}")
+                        CUPSHelper.set_status(pr_no_upper, 'pause-printer')
+                        CUPSHelper.set_status(pr_no_upper, 'reject-jobs')
+                        
+                        # İKAME VERİLDİ İSE: Mahal Bilgisini DEPO yap (Veritabanı + CUPS)
+                        if data.get('has_substitute'):
+                            print(f"DEBUG: Substitute detected on update, moving {pr_no_upper} to DEPO in DB and CUPS")
+                            conn.execute("UPDATE printers SET mahal='DEPO' WHERE pr_no=?", (pr_no_upper,))
+                            conn.commit()
+                            CUPSHelper.update_location(pr_no_upper, 'DEPO')
+                            
+                        print(f"DEBUG: CUPS auto-paused and location updated for {pr_no_upper} on update")
+                    except Exception as e:
+                        print(f"DEBUG: CUPS auto-orchestration error for {pr_no_upper}: {e}")
+                
+                # CUPS Serbest Bırakma: Depoya gelen yazıcıyı CUPS'ta aktif et
+                if pr_no_upper.startswith('PR-') and printer_status == 'Depoda':
+                    try:
+                        print(f"DEBUG: Triggering CUPS Auto-Resume on Update for {pr_no_upper}")
+                        CUPSHelper.set_status(pr_no_upper, 'resume-printer')
+                        CUPSHelper.set_status(pr_no_upper, 'accept-jobs')
+                        print(f"DEBUG: CUPS auto-resumed {pr_no_upper} on update")
+                    except Exception as e:
+                        print(f"DEBUG: CUPS auto-resume error for {pr_no_upper}: {e}")
 
         conn.execute('''UPDATE printer_service SET 
             sent_date=?, return_date=?, status=?, final_status=?, has_substitute=?, substitute_pr_no=?, 

@@ -68,7 +68,6 @@ from modules.service_manager import service_manager_bp
 from modules.bim_service import bim_service_bp
 from modules.keyos_service import keyos_service_bp
 from modules.google_sync_service import create_sample_config
-from modules.magicinfo_manager import magicinfo_manager_bp
 
 from core.extensions import limiter
 
@@ -98,6 +97,8 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=1800
 )
 
+from core.auth import require_admin, require_auth
+
 # Modül Kayıtları
 app.register_blueprint(inventory_manager_bp, url_prefix='/api/inventory')
 app.register_blueprint(printer_manager_bp, url_prefix='/api/printers')
@@ -111,7 +112,21 @@ app.register_blueprint(mahal_manager_bp, url_prefix='/api/mahal')
 app.register_blueprint(service_manager_bp, url_prefix='/api/service')
 app.register_blueprint(bim_service_bp, url_prefix='/api/bim')
 app.register_blueprint(keyos_service_bp, url_prefix='/api/keyos')
-app.register_blueprint(magicinfo_manager_bp, url_prefix='/api/magicinfo')
+
+@app.route('/api/admin/system-restart', methods=['POST'])
+@require_admin
+def system_restart():
+    """Uygulamayı kapatır, NSSM servisi otomatik olarak tekrar başlatır."""
+    def kill_process():
+        time.sleep(1)
+        print("\n[BILGI] Sistem ADMIN tarafindan uzaktan yeniden baslatiliyor...")
+        os._exit(0)
+    
+    threading.Thread(target=kill_process).start()
+    return jsonify({
+        "status": "success", 
+        "message": "Sistem yeniden baslatiliyor... Lutfen 10 saniye sonra sayfayi yenileyin."
+    })
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATABASE_DIR = os.path.join(BASE_DIR, "database")
@@ -131,21 +146,52 @@ def cleanup_temp_files():
                 # 1 saatten eski dosyaları sil veya hepsini sil (startup olduğu için hepsi güvenli)
                 os.remove(file_path)
             except Exception as e:
-                pass
+                print(f"Geçici dosya silme hatası ({f}): {e}")
 
 cleanup_temp_files()
 
 
 @app.route('/uploads/<path:filename>')
+@require_auth
 def serve_upload(filename):
     """Yüklenen dosyaları sunucudan güvenli şekilde servis eder."""
     # Güvenlik Kontrolü: Kritik dosya uzantılarını engelle
-    forbidden = ('.db', '.py', '.env', '.xlsx', '.log', '.sql')
-    if any(filename.lower().endswith(ext) for ext in forbidden):
+    forbidden = ('.db', '.py', '.env', '.xlsx', '.log', '.sql', '.exe', '.bat', '.ps1', '.sh', '.json', '.yaml', '.yml', '.ini')
+    if any(filename.lower().endswith(ext) for ext in forbidden) or '..' in filename:
         return jsonify({"error": "Yetkisiz dosya erişimi!"}), 403
         
     return send_from_directory(UPLOAD_DIR, filename)
 
+
+def get_now():
+    """UTC zamanını döndürür (Frontend yerel saate çevirecek)."""
+    return datetime.datetime.now(datetime.timezone.utc)
+
+_last_activity_cache = {} # user_id -> last_db_update_time (timestamp)
+
+@app.before_request
+def update_last_activity():
+    """Kullanıcının son aktivite zamanını dakikada bir günceller."""
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        from core.auth import decode_token
+        try:
+            token = auth_header.split(' ')[1]
+            payload = decode_token(token)
+            if payload and 'user_id' in payload:
+                uid = payload['user_id']
+                now_ts = time.time()
+                
+                # Sadece 60 saniyede bir DB'yi güncelle (Yükü azaltmak için)
+                last_upd = _last_activity_cache.get(uid, 0)
+                if now_ts - last_upd > 60:
+                    conn = get_db_connection()
+                    conn.execute("UPDATE users SET last_activity = ? WHERE id = ?", (get_now(), uid))
+                    conn.commit()
+                    conn.close()
+                    _last_activity_cache[uid] = now_ts
+        except Exception as e:
+            print(f"User activity update error: {e}")
 
 @app.route('/')
 def index():
@@ -155,15 +201,13 @@ def index():
 
 @app.route('/style.css')
 def serve_css():
-    """CSS dosyasını servis eder."""
-    return send_from_directory(BASE_DIR, 'style.css')
-
+    """CSS dosyasını ana dizinden servis eder."""
+    return send_from_directory(BASE_DIR, 'style.css', mimetype='text/css')
 
 @app.route('/frontend/<path:filename>')
 def serve_frontend(filename):
     """Frontend (JS vb.) dosyalarını servis eder."""
     return send_from_directory(os.path.join(BASE_DIR, 'frontend'), filename)
-
 
 @app.route('/manifest.json')
 def serve_manifest():
@@ -202,7 +246,7 @@ def _norm_pc_id(val):
     try:
         # Sayısal ise başındaki sıfırları atar
         return str(int(float(s)))
-    except:
+    except (ValueError, TypeError):
         return s.lstrip('0') or '0' if s else ''
 
 
@@ -212,7 +256,6 @@ def sync_excel_to_db():
         print("DEBUG: Excel senkronizasyonu başlatılıyor...")
         init_db()
         conn = get_db_connection()
-        # Senkronizasyon baslatiliyor
 
     stats = {
         "pc_read": 0, "pc_synced": 0,
@@ -418,12 +461,34 @@ def sync_excel_to_db():
                 arizali = 1 if is_true(arizali_col) else 0
                 mahalsiz= 1 if is_true(kayip_col) else 0
 
-            os_str  = _clean(_get(item, ['İŞLETİM SİSTEMİ', 'ISLETIM SISTEMI', 'OS', 'SİSTEM', 'WIN/KEY']))
-            windows = 1 if 'WIN' in os_str else 0
-            keyos   = 1 if 'KEY' in os_str else 0
+            # OS TESPİTİ (I Sütunu / İŞLETİM SİSTEMİ)
+            # Excel'den gelen ham değeri en geniş varyasyon listesiyle tara
+            os_raw = _get(item, ['İŞLETİM SİSTEMİ', 'ISLETIM SISTEMI', 'OS', 'SİSTEM', 'WIN/KEY', 'ISLETIM', 'SISTEM', 'İS', 'I.S.', 'İSLETİM', 'WINDOWS/KEYOS'])
+            
+            # Fallback: Eğer sütun adı bulunamadıysa ama veri listesinde 9. sütun (index 8) varsa oraya bak
+            if not os_raw and isinstance(item, (list, tuple)) and len(item) > 8:
+                os_raw = item[8]
+            elif not os_raw and isinstance(item, dict):
+                # Dict ise index-tabanlı erişim için değerleri listeye çevirip dene (Tehlikeli ama son çare)
+                vals = list(item.values())
+                if len(vals) > 8: os_raw = vals[8]
+
+            os_str = str(os_raw or '').strip().upper()
+            
+            # Doğrudan değer kontrolleri
+            windows = 1 if any(x in os_str for x in ['WIN', 'WIND', 'WINDOWS', 'W', 'WIN10', 'WIN11', '7']) else 0
+            keyos   = 1 if any(x in os_str for x in ['KEY', 'KOS', 'KEYOS', 'K', 'KEY OS']) else 0
+            
+            # Zorunlu Fallback: Hostname sonu
             if not windows and not keyos:
-                if 'W' in hostname: windows = 1
-                elif 'K' in hostname: keyos = 1
+                h_up = hostname.upper()
+                if h_up.endswith('W'): windows = 1
+                elif h_up.endswith('K'): keyos = 1
+            
+            # KeyOS Mahali doluysa KeyOS'tur
+            km_val = str(_get(item, ['KEYOS MAHALİ', 'KEYOS MAHAL']) or '').strip()
+            if not windows and not keyos and km_val and km_val not in ('0', 'None', '-'):
+                keyos = 1
 
             norm_pc_no = _norm_pc_id(pc_no)
             p_info = peripheral_cache.get(norm_pc_no, {})
@@ -479,8 +544,8 @@ def sync_excel_to_db():
     if os.path.exists(yaz_path):
         import openpyxl
         try:
-            from modules.printer_manager import get_cups_printers
-            cups_list = get_cups_printers() # CUPS'taki yazıcı PR listesi
+            # cups_list = get_cups_printers() # Açılışta CUPS kontrolünü iptal ettik (Hız için)
+            cups_list = []
             
             wb = openpyxl.load_workbook(yaz_path, data_only=True)
             added_count = 0
@@ -508,12 +573,6 @@ def sync_excel_to_db():
                     pr_no = str(item.get('PR NUMARASI') or item.get('PR NO') or item.get('YAZICI NO') or '').strip()
                     seri = str(item.get('SERİ NUMARASI') or item.get('SERI NO') or item.get('SERIAL') or '').strip()
                     if not pr_no and not seri: continue
-
-                    # CUPS Kontrolü: PR ile başlıyorsa ve CUPS'ta yoksa atla
-                    if pr_no.startswith('PR-') and cups_list:
-                        if pr_no not in cups_list:
-                            sheet.cell(row=r_idx, column=durum_idx+1, value='CUPS_YOK')
-                            continue
 
                     # Kategori Belirleme
                     s_up = sheet_name.upper()
@@ -543,7 +602,7 @@ def sync_excel_to_db():
                     stats["printer_synced"] += 1
             
             try: wb.save(yaz_path)
-            except: print("WARNING: yazıcılar.xlsx o an açık olduğu için durumlar Excel'e yazılamadı.")
+            except Exception: print("WARNING: yazıcılar.xlsx o an açık olduğu için durumlar Excel'e yazılamadı.")
             conn.commit()
             print(f"DEBUG: {added_count} yazıcı/donanım eşitlendi.")
         except Exception as e:
@@ -600,7 +659,7 @@ def sync_excel_to_db():
                     else:
                         conn.execute("INSERT INTO knowledge_base (type, title, content) VALUES (?,?,?)",
                                     ('kapanis', title, content))
-        except: pass
+        except Exception as e: print(f"KB kapanış sync hatası: {e}")
 
         # Sekme 2: Sorun Giderme Notları
         try:
@@ -616,7 +675,7 @@ def sync_excel_to_db():
                     else:
                         conn.execute("INSERT INTO knowledge_base (type, title, content) VALUES (?,?,?)",
                                     ('sorun-giderme', title, content))
-        except: pass
+        except Exception as e: print(f"KB sorun-giderme sync hatası: {e}")
 
         conn.commit()
 
@@ -745,7 +804,7 @@ def sync_excel_to_db():
                         try:
                             if val is None or str(val).strip() == "": return default
                             return int(float(str(val).replace(',', '.')))
-                        except: return default
+                        except (ValueError, TypeError): return default
 
                     name = str(get_val(['ÜRÜN ADI', 'URUN ADI', 'AD', 'NAME', 'URUN']) or '').strip()
                     if not name or name in ('0', '-', 'None'): continue
@@ -753,11 +812,11 @@ def sync_excel_to_db():
                     raw_category = str(get_val(['TÜRÜ', 'TURU', 'KATEGORİ', 'KATEGORI', 'TUR', 'TÜR', 'CATEGORY']) or sheet.title).strip()
                     # Kategori Normalizasyonu (Frontend filtreleriyle eşleşmesi için)
                     cat_n = norm(raw_category)
-                    if 'SARF' in cat_n: category = 'Sarf Malzeme'
-                    elif 'GIDA' in cat_n: category = 'Gıda'
-                    elif 'YEDEK' in cat_n: category = 'Yedek Parça'
-                    elif 'CEVRE' in cat_n: category = 'Çevre Birimi'
-                    elif 'KABLO' in cat_n: category = 'Kablo'
+                    if 'SARF' in cat_n: category = 'SARF MALZEME'
+                    elif 'GIDA' in cat_n or 'OFIS' in cat_n: category = 'OFİS / GIDA'
+                    elif 'DONANIM' in cat_n or 'YEDEK' in cat_n: category = 'DONANIM'
+                    elif 'AG' in cat_n or 'ALTYAPI' in cat_n or 'NETWORK' in cat_n: category = 'AĞ VE ALTYAPI'
+                    elif 'AKSESUAR' in cat_n or 'CEVRE' in cat_n or 'KABLO' in cat_n: category = 'AKSESUAR'
                     else: category = raw_category
 
                     current = get_val(['KALAN', 'MEVCUT STOK', 'MEVCUT', 'STOK', 'STOCK', 'DEPODA', 'DEPO', 'KALAN ADET'])
@@ -939,6 +998,7 @@ def sync_db_to_excel():
 
 
 @app.route('/api/dashboard/stats', methods=['GET'])
+@require_auth
 def get_dashboard_stats():
     """Dashboard için tüm istatistiklerin toplandığı ana endpoint. Veri tutarlılığı için kart bazlı hesaplama yapar."""
     conn = get_db_connection()
@@ -1029,6 +1089,7 @@ def serve_logo(filename):
 
 
 @app.route('/api/downloads/list')
+@require_auth
 def list_downloads():
     """bat_uygulama klasöründeki dosyaları listeler."""
     try:
@@ -1040,6 +1101,7 @@ def list_downloads():
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/downloads/get/<path:filename>')
+@require_auth
 def get_download(filename):
     """bat_uygulama klasöründen dosya indirir."""
     return send_from_directory(os.path.join(BASE_DIR, 'bat_uygulama'), filename, as_attachment=True)
@@ -1051,6 +1113,7 @@ def test_ping():
 
 
 @app.route('/api/sync', methods=['POST'])
+@require_admin
 def manual_sync():
     try:
         sync_excel_to_db()
@@ -1079,12 +1142,23 @@ def background_sync_worker():
                 else:
                     print(f"KeyOS Kontrol Hatası: {error}")
                 
+                # CUPS Location Sync
+                from modules.printer_manager import CUPSHelper
+                print("CUPS Location Sync baslatiliyor...")
+                CUPSHelper.update_db_cups_locations()
+                
                 time.sleep(65) # Bir dakika bekle ki aynı dakika içinde tekrar tetiklenmesin
             except Exception as e:
                 print("Scheduled Sync/KeyOS error:", e)
         time.sleep(30) # 30 saniyede bir kontrol et
 
+
+@app.route('/api/get_my_ip')
+def get_my_ip():
+    return jsonify({"ip": request.remote_addr})
+
 if __name__ == '__main__':
+
     init_db()
     create_sample_config()
     

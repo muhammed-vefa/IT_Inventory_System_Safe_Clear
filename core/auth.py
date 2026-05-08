@@ -8,7 +8,11 @@ import datetime
 from functools import wraps
 from flask import request, jsonify
 
-JWT_SECRET = os.getenv("JWT_SECRET", os.getenv("SECRET_KEY", "FALLBACK_DEGISTIR"))
+JWT_SECRET = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY")
+if not JWT_SECRET:
+    import secrets
+    JWT_SECRET = secrets.token_hex(32)
+    print("UYARI: JWT_SECRET veya SECRET_KEY .env'de tanımlı değil. Geçici bir anahtar üretildi.")
 TOKEN_EXPIRY_HOURS = 8
 
 def create_token(user_data):
@@ -18,8 +22,8 @@ def create_token(user_data):
         'username': user_data['username'],
         'display_name': user_data.get('display_name', ''),
         'role': user_data.get('role', 'VIEWER'),
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=TOKEN_EXPIRY_HOURS),
-        'iat': datetime.datetime.utcnow()
+        'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=TOKEN_EXPIRY_HOURS),
+        'iat': datetime.datetime.now(datetime.timezone.utc)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm='HS256')
 

@@ -23,7 +23,10 @@ var appData = {
         users: [],
         invCategory: 'PC',
         invBlock: 'ALL',
-        depot_activeFilter: 'ALL'
+        invKat: 'ALL',
+        depot_activeFilter: 'ALL',
+        selectedBatchIds: new Set(),
+        deferredPrompt: null
     },
     state_service: {
         raw: [],
@@ -89,6 +92,7 @@ var appData = {
             this.setupBatchEventListeners();
             this.setupLoginListeners();
             this.setupSessionTimeout();
+            this.setupPwaPrompt();
             // Dashboard refresh
             this.startDashboardRefresh();
         } catch (e) {
@@ -121,6 +125,32 @@ var appData = {
         const trigger = (e) => { if (e.key === 'Enter' || e.keyCode === 13) self.handleLoginButtonClick(); };
         if(u) u.addEventListener('keydown', trigger);
         if(p) p.addEventListener('keydown', trigger);
+    },
+    setupPwaPrompt: function() {
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            this.state.deferredPrompt = e;
+            const isAndroid = /Android/i.test(navigator.userAgent);
+            if (isAndroid) {
+                const prompt = document.getElementById('pwa-install-prompt');
+                if (prompt) prompt.style.display = 'flex';
+            }
+        });
+        window.addEventListener('appinstalled', () => {
+            this.state.deferredPrompt = null;
+            const prompt = document.getElementById('pwa-install-prompt');
+            if (prompt) prompt.style.display = 'none';
+        });
+    },
+    triggerPwaInstall: async function() {
+        const promptEvent = this.state.deferredPrompt;
+        if (!promptEvent) return;
+        promptEvent.prompt();
+        const { outcome } = await promptEvent.userChoice;
+        console.log(`PWA User Response: ${outcome}`);
+        this.state.deferredPrompt = null;
+        const prompt = document.getElementById('pwa-install-prompt');
+        if (prompt) prompt.style.display = 'none';
     },
     checkLoginStatus: function() {
         var savedUser = localStorage.getItem('it_user_data');
@@ -594,11 +624,7 @@ var appData = {
             l.classList.toggle('active', l.dataset.view === view);
         });
         const role = (this.state.activeUser && this.state.activeUser.role) ? this.state.activeUser.role : 'GUEST';
-        // MagicInfo UI Restrictions
-        const miWindows = document.querySelectorAll('.magicinfo-window, #magicinfo-side-panel');
-        miWindows.forEach(win => {
-            win.style.display = (view === 'magicinfo') ? 'block' : 'none';
-        });
+
         // Depot UI Restrictions
         if (view === 'depot') {
             const btnAdd = document.getElementById('btn-depot-add');
@@ -614,7 +640,7 @@ var appData = {
         if (view === 'logs' && (this.state.auditLogs || []).length === 0) this.loadAuditLogs();
         if (view === 'service' && (this.state.serviceRecords || []).length === 0) this.loadServiceRecords();
         if (view === 'depot' && (this.state.depot || []).length === 0) this.loadDepot();
-        if (view === 'magicinfo' && (this.state.magicinfo || []).length === 0) this.loadMagicInfo();
+
         if (view === 'general-notes') this.loadGeneralNotes();
     },
     refreshActiveView: async function() {
@@ -663,7 +689,10 @@ var appData = {
             this.updatePeripheralDatalists();
             this.filterInventory();
             this.renderStatsFromLocal();
-        } catch (e) { console.error("Envanter yüklenemedi:", e); }
+        } catch (e) { 
+            console.error("Envanter yüklenemedi:", e); 
+            this.showToast('Envanter yüklenemedi! Veritabanı bağlantısını kontrol edin.', 'error');
+        }
     },
     updatePeripheralDatalists: function() {
         const byDl = document.getElementById('by-seri-datalist');
@@ -704,9 +733,13 @@ var appData = {
             else if(s(i.depo) || (i.status === "DEPODA")) { durumText = "DEPO"; durumClass = "depoda"; }
             else if(s(i.arizali) || (i.status === "ARIZALI")) { durumText = "ARIZALI"; durumClass = "arizali"; }
             else if(s(i.mahalsiz) || (i.status === "KAYIP")) { durumText = "KAYIP"; durumClass = "arizali"; }
-            let osBadge = "";
-            if(s(i.windows)) osBadge = '<span style="background:#0078d4; color:white; font-size:0.65rem; font-weight:800; padding:2px 8px; border-radius:4px; margin-right:4px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">WIN</span>';
-            if(s(i.keyos)) osBadge = '<span style="background:#ff4b2b; color:white; font-size:0.65rem; font-weight:800; padding:2px 8px; border-radius:4px; margin-right:4px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">KEYOS</span>';
+            const winVal = String(i.windows || "").toUpperCase();
+            const keyVal = String(i.keyos || "").toUpperCase();
+            const isWin = i.windows == 1 || i.windows == "1" || winVal.includes("WIN") || winVal.includes("W");
+            const isKey = i.keyos == 1 || i.keyos == "1" || keyVal.includes("KEY") || keyVal.includes("KOS");
+            let osBadge = '';
+            if(isWin) osBadge = '<span style="background:#0078d4; color:white; font-size:0.65rem; font-weight:800; padding:2px 8px; border-radius:4px; margin-right:4px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">WINDOWS</span>';
+            else if(isKey) osBadge = '<span style="background:#ff4b2b; color:white; font-size:0.65rem; font-weight:800; padding:2px 8px; border-radius:4px; margin-right:4px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">KEYOS</span>';
             const noteInfo = nc[String(i.id)];
             let noteBubble = '';
             if (noteInfo && noteInfo.count > 0) {
@@ -727,15 +760,17 @@ var appData = {
             let countBadge = countedAt ? `<div style="font-size:0.6rem; color:#00ff88; margin-top:4px;"><i class="fas fa-check-circle"></i> Sayıldı: ${new Date(countedAt).toLocaleDateString('tr-TR')}</div>` : "";
             return `
             <div class="card card-compact ${this.state.countMode && countedAt ? 'counted-card' : ''}" 
-                 onclick="${this.state.countMode ? `app.markCounted(${i.id})` : `app.openDeviceDetail(${i.id}, 'pc')`}"
-                 style="cursor:pointer">
-                <div class="flex-between mb-1">
-                    <span style="color:var(--accent); font-size:1.1rem; font-weight:800">${pcLabel}</span>
-                    <div class="flex-row gap-2" style="align-items:center;">
-                        ${descBubble} ${noteBubble} ${osBadge}
-                        ${isPC ? `<i class="fas fa-shield-halved" style="cursor:pointer; font-size:0.9rem; color:#ff4b2b; opacity:0.6;" title="KeyOS'tan Sorgula" onclick="event.stopPropagation(); app.fetchKeyOSData('${i.pc_seri}')"></i>` : ''}
-                        <i class="fas fa-clock-rotate-left history-icon-btn" onclick="app.openHistoryPopup(${i.id}, 'pc', event)"></i>
-                        <span class="status-badge status-${durumClass}">${durumText}</span>
+                 onclick="app.openDeviceDetail(${i.id}, 'pc')"
+                 style="cursor:pointer; border: 1px solid rgba(255,255,255,0.05); background: linear-gradient(145deg, rgba(20,30,40,0.4) 0%, rgba(10,15,20,0.6) 100%); transition: all 0.3s ease;">
+                <div class="flex-between mb-1" style="align-items: center;">
+                    <div class="flex-row gap-2" style="align-items: center;">
+                        <span style="color:var(--accent); font-size:1.1rem; font-weight:800">${pcLabel}</span>
+                        <span class="status-badge status-${durumClass}" style="position: static; font-size: 0.65rem; padding: 2px 8px;">${durumText}</span>
+                        ${osBadge} ${descBubble}
+                    </div>
+                    <div class="flex-row" style="align-items:center; gap: 12px; margin-left: auto;">
+                        ${noteBubble} 
+                        <i class="fas fa-clock-rotate-left history-icon-btn" onclick="event.stopPropagation(); app.openHistoryPopup(${i.id}, 'pc', event)"></i>
                     </div>
                 </div>
                 <div class="flex-between" style="font-size:0.75rem; color:var(--text-secondary); line-height:1.2; margin-top: 5px; margin-bottom: 2px;">
@@ -746,7 +781,16 @@ var appData = {
                 <div class="card-info" style="border-top:1px solid rgba(255,255,255,0.05); padding-top:8px; display:grid; grid-template-columns:1fr 1fr; gap:5px;">
                     <div class="info-item"><span>IP</span><div class="flex-row gap-1" style="align-items:center;">${i.ip || '-'}${i.ip ? ` <i class="fas fa-power-off" style="cursor:pointer; color:#ff4b2b; font-size:0.8rem; margin-left:5px;" title="Yeniden Balat" onclick="event.stopPropagation(); app.rebootDevice('${i.ip}')"></i>` : ''}</div></div>
                     <div class="info-item"><span>SERİ NO</span>${i.pc_seri || '-'}</div>
-                    ${i.bagli_yazicilar ? `<div class="info-item" style="grid-column: 1 / -1; border-top: 1px dashed rgba(255,255,255,0.05); padding-top: 5px;"><span>YAZICILAR</span>${i.bagli_yazicilar}</div>` : ''}
+                    ${this.state.countMode && (i.monitor_seri || i.monitor2_seri) ? `
+                        <div class="info-item" style="grid-column: 1 / -1; border-top: 1px dashed rgba(255,255,255,0.05); padding-top: 5px; font-size:0.7rem; color:var(--accent);">
+                            <i class="fas fa-desktop"></i> MON1: ${i.monitor_seri || '-'} (${i.monitor_model || '-'})
+                        </div>
+                        ${i.monitor2_seri ? `
+                        <div class="info-item" style="grid-column: 1 / -1; font-size:0.7rem; color:var(--accent);">
+                            <i class="fas fa-desktop"></i> MON2: ${i.monitor2_seri || '-'} (${i.monitor2_model || '-'})
+                        </div>` : ''}
+                    ` : ''}
+                    ${(i.bagli_yazicilar && document.getElementById('main-search')?.value.trim() !== "") ? `<div class="info-item" style="grid-column: 1 / -1; border-top: 1px dashed rgba(255,255,255,0.05); padding-top: 5px;"><span>YAZICILAR</span>${i.bagli_yazicilar}</div>` : ''}
                 </div>
                 ${(i.by_seri || i.bo_seri || i.tarayici_seri) ? `
                 <div style="font-size:0.65rem; color:var(--accent); margin-top:8px; border-top:1px dashed rgba(0,210,255,0.1); padding-top:5px;">
@@ -931,6 +975,14 @@ var appData = {
             }
             // Search
             if (query) {
+                const osStr = String(i.windows || "").toUpperCase();
+                const isWin = i.windows == 1 || i.windows == '1' || i.windows == true || osStr.includes("WIN");
+                const isKeyos = i.keyos == 1 || i.keyos == '1' || i.keyos == true;
+
+                // ÖZEL OS FİLTRELEME (WIN / KEYOS)
+                if (query === 'WIN' || query === 'WINDOWS') return isWin;
+                if (query === 'KEYOS') return isKeyos;
+
                 // Kullanıcı boluk veya "-" ile ayırarak birden fazla kriter girebilir (OR mantıı)
                 // ANCAK "PR-092" gibi yazıcı kodlarını bölmemeliyiz.
                 const searchTerms = query.split(/\s+/).flatMap(t => {
@@ -959,11 +1011,18 @@ var appData = {
                         } 
                         else if (isNumeric) {
                             // 4. Sadece sayı ise: PC NUMARASI veya ID araması (Tam eleme)
+                            // "1358" aratınca PC-1358 gelsin ama PC-1360 gelmesin.
                             const pNo = String(i.pc_no || '').replace(/^0+/, '') || '0';
                             const termClean = term.replace(/^0+/, '') || '0';
-                            return pNo === termClean || String(i.id) === term;
+                            const idMatch = String(i.id) === term;
+                            const pcNoMatch = pNo === termClean;
+                            return pcNoMatch || idMatch;
                         } 
-                        else {
+                        else if (/^\d+-\d+-\d+$/.test(term)) {
+                            // 5. Tireli yapı (Örn: 10-178-1358): Mahal veya Özel Kod araması
+                            const fullContent = `${i.mahal_kodu} ${i.mahal_adi} ${i.hostname} ${i.pc_seri}`.toUpperCase();
+                            return fullContent.includes(termUP);
+                        }                        else {
                             // 5. Dier her ey: SERİ NUMARALARI, HOSTNAME ve GENEL (DM4, VJM vb.)
                             const content = `${i.pc_seri} ${i.monitor_seri} ${i.monitor2_seri} ${i.by_seri} ${i.bo_seri} ${i.tarayici_seri} ${i.hostname} ${i.card_name || ''} ${i.mahal_adi}`.toUpperCase();
                             return content.includes(termUP);
@@ -1056,11 +1115,18 @@ var appData = {
             const isInstalled = p.mahal && p.mahal.trim() !== "";
             let durumText = "DEPODA";
             let durumClass = "depo";
-            if (status.includes('SERVİSTE') || status.includes('SERVIS')) {
+
+            if (status.includes('DEPODA') || status.includes('DEPO')) {
+                durumText = "DEPODA";
+                durumClass = "depo";
+            } else if (status.includes('SERVİSTE') || status.includes('SERVIS')) {
                 durumText = "SERVİSTE";
                 durumClass = "servis";
             } else if (status.includes('ARIZALI')) {
                 durumText = "ARIZALI";
+                durumClass = "arizali";
+            } else if (status.includes('KAYIP')) {
+                durumText = "KAYIP";
                 durumClass = "arizali";
             } else if (status.includes('KURULU') || isInstalled) {
                 durumText = "KURULU";
@@ -1074,17 +1140,14 @@ var appData = {
                     <div class="flex-row gap-2" style="align-items:center;">
                         <span class="status-badge status-${durumClass}" style="font-size:0.65rem; padding:2px 8px;">${durumText}</span>
                         <i class="fas fa-list-check" style="cursor:pointer; font-size:0.9rem; opacity:0.6; color:var(--accent);" title="Servis Geçmişi" onclick="event.stopPropagation(); app.openPrinterServiceHistoryModal(${p.id}, '${p.pr_no}')"></i>
-                        <i class="fas fa-globe" style="cursor:pointer; font-size:0.9rem; opacity:0.6; color:var(--accent);" title="Arayüz" onclick="event.stopPropagation(); window.open('http://${p.ip}', '_blank')"></i>
+                        <i class="fas fa-globe" style="cursor:pointer; font-size:0.9rem; opacity:0.6; color:var(--accent);" title="Arayüz" onclick="event.stopPropagation(); app.openPrinterInterface('${p.ip}', '${p.pr_no}')"></i>
                         ${isAdmin ? `<i class="fas fa-tools" style="cursor:pointer; font-size:0.8rem; opacity:0.7; color:var(--accent);" title="Servis" onclick="event.stopPropagation(); app.openAddServiceModal(${p.id})"></i>` : ''}
                     </div>
                 </div>
 
                 ${isAdmin ? `
                 <div class="flex-row mb-2" style="justify-content: flex-end; padding-right: 5px; align-items: center; gap: 6px;">
-                    <!-- Sorgulama -->
-                    <div class="icon-circle-bg" style="background: #00d2ff; color: #000;" onclick="event.stopPropagation(); app.checkPrinterStatus('${p.ip}', ${p.id})" title="Durum Sorgula">
-                        <i class="fas fa-satellite-dish"></i>
-                    </div>
+
                     
                     <!-- Tekli Ekle -->
                     <div class="icon-circle-bg" style="background: rgba(0, 255, 136, 0.2); color: #00ff88; border: 1px solid #00ff88;" onclick="event.stopPropagation(); app.runPrinterAction(${p.id}, 'add')" title="Tekli Ekle">
@@ -1105,15 +1168,14 @@ var appData = {
                     <div class="icon-circle-bg" style="background: #ff4b2b; color: #fff; box-shadow: 0 0 15px rgba(255,75,43,0.3);" onclick="event.stopPropagation(); app.openBatchModal('remove', ${p.id})" title="Toplu Kaldır (--)">
                         <i class="fas fa-layer-group"></i>
                     </div>
-                </div>
-                ` : ''}
+                </div>` : ''}
 
                 <div class="flex-column">
                     <div style="font-size: 0.7rem; color: var(--accent); font-weight: 700; text-transform: uppercase; margin-bottom: 2px;">${p.mahal || 'Mahal Bilgisi Yok'}</div>
                     <div style="font-size: 1.1rem; font-weight: 600; color:#fff; margin-bottom: 5px;">${p.model || 'LaserJet'}</div>
                     <div class="text-secondary" style="font-size: 0.8rem; opacity: 0.8;">IP: ${p.ip || '-'}</div>
                     <div class="text-secondary" style="font-size: 0.7rem; opacity:0.6;">MAC: ${p.mac || '-'} | Seri: ${p.seri || '-'}</div>
-                    <div id="printer-status-${p.id}" class="printer-inline-status" style="display:none; margin-top:8px; padding:8px 10px; background:rgba(0,0,0,0.3); border-radius:6px; border:1px solid rgba(0,210,255,0.1); font-size:0.75rem;"></div>
+
                 </div>
             </div>`;
         }).join('');
@@ -1150,6 +1212,12 @@ var appData = {
             if(cmdInput) cmdInput.value = cmd;
             if(targetInput) targetInput.value = printer.id;
         }
+
+        // BİM Bilgilerini Doldur (Otomatik Doldurma)
+        const bimUserField = document.getElementById('batch-bim-user');
+        const bimPassField = document.getElementById('batch-bim-pass');
+        if (bimUserField && this.state.activeUser.bim_user) bimUserField.value = this.state.activeUser.bim_user;
+        if (bimPassField && this.state.activeUser.bim_pass) bimPassField.value = this.state.activeUser.bim_pass;
 
         // Listeyi Sıfırla ve Doldur
         this.renderBatchSelectionList();
@@ -1201,7 +1269,7 @@ var appData = {
                 const isPC = (type === 'PC' || type === '' || type === 'BİLGİSAYAR');
                 if (!isPC) return false;
                 
-                const searchStr = `${item.pc_no} ${item.hostname} ${item.ip} ${item.mahal_kodu}`.toUpperCase();
+                const searchStr = `${item.pc_no} ${item.hostname} ${item.ip} ${item.mahal_kodu} ${item.bagli_yazicilar || ''}`.toUpperCase();
                 return !query || searchStr.includes(query);
             })
             .sort((a, b) => {
@@ -1222,28 +1290,32 @@ var appData = {
                 let pcLabel = item.pc_no || '---';
                 if (pcLabel !== '---' && !isNaN(pcLabel)) pcLabel = `PC-${pcLabel.toString().padStart(3, '0')}`;
                 
-                // Mahal Kodu
+                // Mahal Kodu + Yazıcı
                 const mahalKod = item.mahal_kodu || item.mahal || '-';
+                const yazicilar = item.bagli_yazicilar || '';
                 
                 return {
                     id: item.id,
-                    label: `<div class="flex-column" style="gap:1px;">
+                    label: `<div class="flex-column" style="gap:2px;">
                                 <span style="color:#fff; font-weight:700; font-size:0.85rem;">${pcLabel}</span>
                                 <div class="flex-row gap-2" style="align-items:center;">
                                     <span style="color:var(--accent); font-size:0.75rem; font-family:monospace;">${item.ip || 'IP Yok'}</span>
                                     <span style="font-size:0.7rem; opacity:0.6; color:#00ff88;">[${mahalKod}]</span>
                                 </div>
+                                ${yazicilar ? `<div style="font-size:0.65rem; opacity:0.7; color:#ffb400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px;" title="${yazicilar}"><i class="fas fa-print" style="margin-right:3px;"></i>${yazicilar}</div>` : ''}
                             </div>`,
                     ip: item.ip
                 };
             });
 
-        listContainer.innerHTML = options.map(opt => `
+        listContainer.innerHTML = options.map(opt => {
+            const isChecked = this.state.selectedBatchIds?.has(String(opt.id)) ? 'checked' : '';
+            return `
             <div class="flex-row gap-3 dropdown-item" style="border-bottom: 1px solid rgba(255,255,255,0.05); align-items: center; cursor:pointer;" onclick="const chk=document.getElementById('chk-${opt.id}'); chk.checked=!chk.checked; app.updateBatchCounter(); event.stopPropagation();">
-                <input type="checkbox" id="chk-${opt.id}" class="batch-chk" data-type="pc" data-val="${opt.id}" onchange="app.updateBatchCounter()" onclick="event.stopPropagation()" style="width:16px; height:16px; accent-color:var(--accent);">
+                <input type="checkbox" id="chk-${opt.id}" class="batch-chk" data-type="pc" data-val="${opt.id}" onchange="app.updateBatchCounter()" onclick="event.stopPropagation()" style="width:16px; height:16px; accent-color:var(--accent);" ${isChecked}>
                 <label for="chk-${opt.id}" style="cursor: pointer; flex: 1; padding: 4px 0;">${opt.label}</label>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
         
         if (options.length === 0) {
             listContainer.innerHTML = '<p style="padding:15px; color:#888; font-size:0.8rem; text-align:center;">Aranan kriterde Bilgisayar bulunamadı.</p>';
@@ -1251,6 +1323,7 @@ var appData = {
     },
 
     filterBatchSelection: function() {
+        this.updateBatchCounter(); // Mevcut seçimleri Set'e kaydet
         const val = document.getElementById('batch-selection-search').value;
         this.renderBatchSelectionList(val);
         document.getElementById('batch-selection-container').style.display = 'block';
@@ -1273,24 +1346,34 @@ var appData = {
     },
 
     updateBatchCounter: function() {
-        const selected = Array.from(document.querySelectorAll('.batch-chk:checked'));
+        if (!this.state.selectedBatchIds) this.state.selectedBatchIds = new Set();
+        const chks = Array.from(document.querySelectorAll('.batch-chk:checked'));
+        
+        // Mevcut görünür seçili olanları ekle
+        chks.forEach(c => this.state.selectedBatchIds.add(String(c.dataset.val)));
+        // Mevcut görünür olup seçili OLMAYANLARI Set'ten çıkar (Kullanıcı manuel kaldırmış olabilir)
+        Array.from(document.querySelectorAll('.batch-chk:not(:checked)')).forEach(c => this.state.selectedBatchIds.delete(String(c.dataset.val)));
+
+        const selectedIds = Array.from(this.state.selectedBatchIds);
         const btn = document.getElementById('btn-batch-execute');
         const ipDisplay = document.getElementById('batch-target-ips-display');
         
-        // IP Adreslerini Textarea'ya yaz (Detaylı Bilgiyle)
         if(ipDisplay) {
-            const displayLines = selected.map(chk => {
-                const item = this.state.inventory.find(i => i.id == chk.dataset.val);
+            const displayLines = selectedIds.map(sid => {
+                const item = (this.state.inventory || []).find(i => i.id == sid);
                 if (!item) return '';
                 let pcLabel = item.pc_no || '---';
                 if (pcLabel !== '---' && !isNaN(pcLabel)) pcLabel = `PC-${pcLabel.toString().padStart(3, '0')}`;
-                return `${item.ip || 'IP Yok'} (${pcLabel} / ${item.mahal_kodu || '-'})`;
+                const yazici = item.bagli_yazicilar ? ` | 🖨️${item.bagli_yazicilar}` : '';
+                return `${item.ip || 'IP Yok'} (${pcLabel} / ${item.mahal_kodu || '-'}${yazici})`;
             }).filter(Boolean);
             ipDisplay.value = displayLines.join('\n');
+            ipDisplay.scrollTop = ipDisplay.scrollHeight;
         }
 
-        if(btn) {
-            btn.innerHTML = `<i class="fas fa-play"></i> ÇALIŞTIR (${selected.length} CİHAZ)`;
+        if (btn) {
+            btn.innerHTML = `<i class="fas fa-play"></i> ÇALIŞTIR (${selectedIds.length} CİHAZ)`;
+            btn.disabled = selectedIds.length === 0;
         }
     },
 
@@ -1384,182 +1467,7 @@ var appData = {
         });
         this.applyPrinterFilters();
     },
-    // 
-    //  MAGICINFO
-    // 
-    loadMagicInfo: async function() {
-        const container = document.getElementById('magicinfo-grid');
-        if (container) container.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:50px; color:#fff; opacity:0.6;"><i class="fas fa-spinner fa-spin fa-2x mb-3"></i><br>Cihaz listesi yükleniyor...</div>';
-        try {
-            const response = await fetch(this.state.API_BASE + '/magicinfo/get_all');
-            const data = await response.json();
-            if (response.ok) {
-                this.state.magicinfo = Array.isArray(data) ? data : [];
-                this.state.magicinfoServerFilter = 'ALL';
-                this.state.magicinfoBlockFilter = 'ALL';
-                this.renderMagicInfo();
-                if (this.state.magicinfo.length === 0) {
-                    if (container) container.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:50px; color:#fff; opacity:0.6;"><i class="fas fa-exclamation-triangle fa-2x mb-3"></i><br>Hiç cihaz bulunamadı. magicinfo.xls dosyasını kontrol edin.</div>';
-                }
-            } else {
-                throw new Error(data.error || 'Sunucu hatası');
-            }
-        } catch (e) {
-            console.error("MagicInfo verileri yüklenemedi:", e);
-            if (container) container.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:50px; color:#ff4b2b;"><i class="fas fa-times-circle fa-2x mb-3"></i><br>Hata: ${e.message}</div>`;
-        }
-    },
-    renderMagicInfo: function() {
-        const container = document.getElementById('magicinfo-grid');
-        if (!container) return;
-        let data = this.state.magicinfo || [];
-        const query = (document.getElementById('magicinfo-search')?.value || "").toUpperCase();
-        const serverFilter = this.state.magicinfoServerFilter || 'ALL';
-        const showScreenshot = document.getElementById('magicinfo-screenshot-toggle')?.checked || false;
-        const filtered = data.filter(d => {
-            if (serverFilter !== 'ALL' && d.server !== serverFilter) return false;
-            const blockFilter = this.state.magicinfoBlockFilter || 'ALL';
-            if (blockFilter !== 'ALL') {
-                if (!d.name.startsWith(blockFilter + '-')) return false;
-            }
-            if (query) {
-                const q = `${d.name} ${d.ip} ${d.mac} ${d.location}`.toUpperCase();
-                return q.includes(query);
-            }
-            return true;
-        });
-        // CSS for magicinfo cards
-        container.style.display = 'grid';
-        container.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
-        container.style.gap = '15px';
-        container.innerHTML = filtered.map(d => {
-            const screenshotUrl = showScreenshot && d.ip ? `${this.state.API_BASE}/magicinfo/screenshot?ip=${d.ip}` : 'logo/keydata.png';
-            // Performans Optimizasyonu: Lazy Loading
-            // src yerine data-src kullanarak sadece ekrana gelince yüklenmesini salayacaız
-            const imgHtml = showScreenshot 
-                ? `<img data-src="${screenshotUrl}" src="logo/keydata.png" alt="${d.name}" class="lazy-screenshot" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='logo/keydata.png'; this.style.objectFit='contain'; this.style.padding='20px';">`
-                : `<img src="logo/keydata.png" alt="${d.name}" style="width: 100%; height: 100%; object-fit: contain; padding:20px;">`;
-            const screenshotHtml = `<div style="height: 130px; background: #c5c5c5; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; border-bottom: 2px solid #5a9bd4;">
-                ${imgHtml}
-                ${!showScreenshot ? `<div style="position:absolute; background:rgba(0,0,0,0.6); color:#fff; padding:4px 8px; border-radius:4px; font-size:0.75rem; font-weight:bold;">Görüntü Kapalı</div>` : ''}
-            </div>`;
-            return `
-            <div class="card fade-in" style="padding: 0; overflow: hidden; border: 1px solid #7eaadb; display: flex; flex-direction: column; cursor: pointer; background: #89c4f4; border-radius: 4px;" onclick="app.showMagicInfoControls('${d.ip}', '${d.name}', ${d.id})">
-                <!-- st Kısım: Ekran Görüntüsü -->
-                ${screenshotHtml}
-                <!-- Alt Kısım: Mavi Bar ve İsim -->
-                <div style="padding: 10px; display: flex; flex-direction: column; gap: 15px; position: relative;">
-                    <span style="font-weight: 700; font-size: 0.95rem; color: #ffffff; text-shadow: 0px 1px 2px rgba(0,0,0,0.2);">${d.name || '-'}</span>
-                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                        <div style="display: flex; gap: 4px;">
-                            <span style="background: #00d2ff; color: #fff; font-size: 0.7rem; font-weight: 800; padding: 2px 6px; border-radius: 2px;">S6</span>
-                            <span style="background: #00d2ff; color: #fff; font-size: 0.7rem; font-weight: 800; padding: 2px 6px; border-radius: 2px;">P</span>
-                        </div>
-                        <!-- Sa alttaki (i) butonu -> Düzenleme ekranını açar -->
-                        <div style="background: #ffffff; color: #89c4f4; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-family: serif; font-size: 1rem; box-shadow: 0px 1px 3px rgba(0,0,0,0.2); z-index: 10;" 
-                             title="Düzenle: ${d.ip} | MAC: ${d.mac}" 
-                             onclick="event.stopPropagation(); app.openEditMagicInfoModal(${d.id})">
-                             <i class="fas fa-info" style="font-size:0.8rem;"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
-        // Observer balat (Görüntüleri sadece ekrana gelince yükler)
-        if (showScreenshot) {
-            this.initLazyLoading();
-        }
-    },
-    initLazyLoading: function() {
-        const observer = new IntersectionObserver((entries, obs) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const img = entry.target;
-                    if (img.dataset.src) {
-                        img.src = img.dataset.src;
-                        img.removeAttribute('data-src');
-                        obs.unobserve(img);
-                    }
-                }
-            });
-        }, { threshold: 0.1 });
-        document.querySelectorAll('.lazy-screenshot').forEach(img => observer.observe(img));
-    },
-    showMagicInfoControls: function(ip, name, id) {
-        // Kontrol butonlarını bir modal veya alert ile göster (Hızlı Kontrol)
-        const modalHtml = `
-            <div class="modal-overlay" id="magicinfo-control-modal" style="display:flex;">
-                <div class="modal-content fade-in" style="max-width:400px; text-align:center;">
-                    <div class="modal-header">
-                        <h3 style="color:var(--accent);">${name} - Hızlı Kontrol</h3>
-                        <i class="fas fa-times close-btn" onclick="document.getElementById('magicinfo-control-modal').remove()"></i>
-                    </div>
-                    <div class="modal-body" style="display:flex; flex-direction:column; gap:10px;">
-                        <button class="btn btn-secondary" onclick="app.runMagicInfoAction('${ip}', 'POWER_ON'); document.getElementById('magicinfo-control-modal').remove();">
-                            <i class="fas fa-power-off" style="color: #00ff88;"></i> Açık (Power On)
-                        </button>
-                        <button class="btn btn-secondary" onclick="app.runMagicInfoAction('${ip}', 'POWER_OFF'); document.getElementById('magicinfo-control-modal').remove();">
-                            <i class="fas fa-power-off" style="color: #ff4b2b;"></i> Kapalı (Power Off)
-                        </button>
-                        <button class="btn btn-secondary" onclick="app.runMagicInfoAction('${ip}', 'REBOOT'); document.getElementById('magicinfo-control-modal').remove();">
-                            <i class="fas fa-rotate-right" style="color: #00d2ff;"></i> Yeniden Balat
-                        </button>
-                        <button class="btn btn-secondary" onclick="app.runMagicInfoAction('${ip}', 'SOURCE_MAGICINFO'); document.getElementById('magicinfo-control-modal').remove();">
-                            <i class="fas fa-display" style="color: #ffb400;"></i> Kaynak Deitir (MagicInfo)
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-    },
-    filterMagicInfoByBlock: function(block) {
-        this.state.magicinfoBlockFilter = block;
-        document.querySelectorAll('#magicinfo-block-filters .btn-chip').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.block === block);
-        });
-        this.renderMagicInfo();
-    },
-    openEditMagicInfoModal: function(id) {
-        const d = this.state.magicinfo.find(x => x.id === id);
-        if(!d) return;
-        document.getElementById('edit-magicinfo-id').value = d.id;
-        document.getElementById('edit-magicinfo-name').value = d.name;
-        document.getElementById('edit-magicinfo-location').value = d.location;
-        document.getElementById('edit-magicinfo-server').value = d.server;
-        document.getElementById('magicinfo-edit-modal').style.display = 'flex';
-    },
-    saveMagicInfoChanges: async function() {
-        const payload = {
-            id: document.getElementById('edit-magicinfo-id').value,
-            name: document.getElementById('edit-magicinfo-name').value,
-            location: document.getElementById('edit-magicinfo-location').value,
-            server: document.getElementById('edit-magicinfo-server').value
-        };
-        try {
-            const resp = await fetch(this.state.API_BASE + '/magicinfo/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const res = await resp.json();
-            if(res.success) {
-                this.showToast('Deiiklikler kaydedildi.', 'success');
-                document.getElementById('magicinfo-edit-modal').style.display = 'none';
-                this.loadMagicInfo();
-            } else throw new Error(res.error);
-        } catch(e) { alert('Hata: ' + e.message); }
-    },
-    searchMagicInfo: function() {
-        this.renderMagicInfo();
-    },
-    filterMagicInfo: function(server) {
-        this.state.magicinfoServerFilter = server;
-        document.querySelectorAll('#magicinfo-filters .btn-chip').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.server === server);
-        });
-        this.renderMagicInfo();
-    },
+
     scanAllPrinters: async function() {
         if(!confirm("Tüm yazıcıların durumunu ve toner seviyesini arka planda güncellemek istediinize emin misiniz? Bu ilem birkaç dakika sürebilir.")) return;
         try {
@@ -1570,29 +1478,7 @@ var appData = {
             } else throw new Error(data.error);
         } catch(e) { this.showToast('Hata: ' + e.message, 'error'); }
     },
-    runMagicInfoAction: async function(ip, action) {
-        if(!ip || ip === '-') {
-            this.showToast('Geçerli bir IP adresi yok!', 'error');
-            return;
-        }
-        if(!confirm(`[${ip}] için ${action} komutu gönderilsin mi?`)) return;
-        this.showToast('Komut sunucuya iletiliyor...', 'info');
-        try {
-            const resp = await fetch(this.state.API_BASE + '/magicinfo/action', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip, action })
-            });
-            const res = await resp.json();
-            if(res.success) {
-                this.showToast(res.message, 'success');
-            } else {
-                this.showToast(res.error || 'Komut baarısız!', 'error');
-            }
-        } catch(e) {
-            this.showToast('Balantı hatası.', 'error');
-        }
-    },
+
     // 
     //  AREAS
     // 
@@ -1610,47 +1496,57 @@ var appData = {
         data = data || this.state.areas;
         const isAdmin = this.state.activeUser.role === 'ADMIN';
         container.innerHTML = data.map((area, idx) => `
-            <div class="card fade-in ${isAdmin ? 'area-card-admin' : ''}">
-                <div class="flex-between" style="margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
-                    <span style="color: var(--accent); font-weight: 700; font-size: 1.1rem;"><i class="fas fa-folder"></i> ${area.name}</span>
-                    ${isAdmin ? `<i class="fas fa-gears" style="opacity:0.3; cursor:pointer;" onclick="app.openAreaModal(${area.id})" title="Düzenle"></i>` : ''}
+            <div class="card fade-in ${isAdmin ? 'area-card-admin' : ''}" style="border: 1px solid rgba(255,255,255,0.05); background: linear-gradient(145deg, rgba(20,30,40,0.4) 0%, rgba(10,15,20,0.6) 100%);">
+                <div class="flex-between" style="min-height: 50px; margin-bottom: 5px; align-items: center;">
+                    <span style="color: #00d2ff; font-weight: 800; font-size: 1.1rem; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-folder" style="font-size: 1.3rem;"></i> ${area.name.toUpperCase()}
+                    </span>
+                    ${isAdmin ? `<i class="fas fa-gears" style="opacity:0.4; cursor:pointer; font-size: 1.1rem;" onclick="app.openAreaModal(${area.id})" title="Düzenle"></i>` : ''}
                 </div>
-                <div class="flex-between" style="padding: 5px 0; margin-bottom:8px; gap: 10px;">
-                    <span style="display: block; color: var(--text-secondary); word-break: break-all; font-size: 0.85rem;">${area.path || ''}</span>
-                    <button class="btn-chip" style="padding: 4px 8px; font-size: 0.7rem; flex-shrink: 0;" onclick="app.copyToClipboard('${(area.path || '').replace(/\\/g, '\\\\')}')">
+                <div style="height: 1px; background: rgba(255,255,255,0.08); margin-bottom: 12px; width: 100%;"></div>
+
+                <div class="flex-between mb-3" style="background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.03);">
+                    <span style="color: var(--text-secondary); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;">${area.path || ''}</span>
+                    <button class="btn-chip" style="background: rgba(255,255,255,0.1); padding: 4px 12px; font-size: 0.7rem; border-radius: 15px;" onclick="app.copyToClipboard('${(area.path || '').replace(/\\/g, '\\\\')}')">
                          <i class="fas fa-copy"></i> YOL
                     </button>
                 </div>
-                <div style="font-size: 0.75rem; color: var(--text-secondary);">
+
+                <div style="font-size: 0.8rem; color: var(--text-secondary); padding: 0 5px;">
                     <div class="flex-between mb-2">
                         <span>Kullanıcı:</span>
-                        <div class="flex-row gap-2">
-                            <span style="color:#fff;">${area.user || ''}</span>
-                            <i class="fas fa-copy" style="cursor:pointer; font-size:0.7rem;" onclick="app.copyToClipboard('${area.user || ''}')"></i>
+                        <div class="flex-row gap-2" style="align-items:center;">
+                            <span style="color:#fff; font-weight: 600;">${area.user || 'bilinmiyor'}</span>
+                            <i class="fas fa-copy" style="cursor:pointer; opacity: 0.5;" onclick="app.copyToClipboard('${area.user || ''}')"></i>
                         </div>
                     </div>
-                    <div class="flex-between mb-3">
-                        <span>ifre:</span>
-                        <div class="flex-row gap-2">
-                            <span id="pass-${idx}" onclick="app.togglePass(${idx}, '${area.password || ''}')" style="cursor:pointer; color:var(--accent);">${area.password ? '********' : '-'}</span>
-                            <i class="fas fa-copy" style="cursor:pointer; font-size:0.7rem;" onclick="app.copyToClipboard('${area.password || ''}')"></i>
+                    <div class="flex-between" style="margin-bottom: 5px;">
+                        <span>Şifre:</span>
+                        <div class="flex-row gap-2" style="align-items:center;">
+                            <span id="pass-${idx}" style="color:var(--accent); font-weight: 700;">${area.password ? '********' : '-'}</span>
+                            <i class="fas fa-copy" style="cursor:pointer; opacity: 0.5;" onclick="app.copyToClipboard('${area.password || ''}')"></i>
                         </div>
                     </div>
                 </div>
-                <!-- Aksiyon Butonları (KİLİT A, TANIMLA, SİL, WIN BAT) -->
-                <div class="flex-row gap-2" style="margin-top: 15px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 12px;">
-                    <button class="btn-chip" style="flex:1; font-size:0.65rem; background: rgba(0, 210, 255, 0.1);" onclick="event.stopPropagation(); app.runAreaAction(${area.id}, 'unlock')">
-                        <i class="fas fa-key"></i> KİLİT A
-                    </button>
-                    <button class="btn-chip" style="flex:1; font-size:0.65rem; background: rgba(0, 255, 136, 0.1); color:#00ff88;" onclick="event.stopPropagation(); app.runAreaAction(${area.id}, 'define')">
-                        <i class="fas fa-terminal"></i> TANIMLA
-                    </button>
-                    <button class="btn-chip" style="flex:1; font-size:0.65rem; background: rgba(0, 120, 215, 0.2); color:#0078d7; border: 1px solid rgba(0, 120, 215, 0.3);" onclick="app.downloadConnectBat(${area.id})">
-                        <i class="fas fa-windows"></i> WIN BAT
-                    </button>
-                    <button class="btn-chip" style="flex:1; font-size:0.65rem; background: rgba(255, 75, 43, 0.1); color:#ff4b2b;" onclick="event.stopPropagation(); app.runAreaAction(${area.id}, 'delete')">
-                        <i class="fas fa-trash"></i> SİL
-                    </button>
+
+                <!-- Aksiyon Butonları (Resim 3 Stili) -->
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 15px;">
+                    <div class="area-action-btn" onclick="app.runAreaAction(${area.id}, 'unlock')" title="KİLİT AÇ">
+                        <div class="icon-circle" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);"><i class="fas fa-key"></i></div>
+                        <span>KİLİT AÇ</span>
+                    </div>
+                    <div class="area-action-btn" onclick="app.runAreaAction(${area.id}, 'define')" title="TANIMLA" style="color: #00ff88;">
+                        <div class="icon-circle" style="background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.2);"><i class="fas fa-terminal"></i></div>
+                        <span>TANIMLA</span>
+                    </div>
+                    <div class="area-action-btn" onclick="app.downloadConnectBat(${area.id})" title="WIN BAT" style="color: #00d2ff;">
+                        <div class="icon-circle" style="background: rgba(0, 210, 255, 0.1); border: 1px solid rgba(0, 210, 255, 0.2);"><i class="fas fa-windows"></i></div>
+                        <span>WIN BAT</span>
+                    </div>
+                    <div class="area-action-btn" onclick="app.runAreaAction(${area.id}, 'delete')" title="SİL" style="color: #ff4b2b;">
+                        <div class="icon-circle" style="background: rgba(255, 75, 43, 0.1); border: 1px solid rgba(255, 75, 43, 0.2);"><i class="fas fa-trash"></i></div>
+                        <span>SİL</span>
+                    </div>
                 </div>
             </div>`).join('');
     },
@@ -1660,6 +1556,41 @@ var appData = {
             (a.name || '').toUpperCase().includes(query) ||
             (a.path || '').toUpperCase().includes(query)
         ));
+    },
+    openPrinterActionFromArea: function(id) {
+        const area = this.state.areas.find(a => a.id == id);
+        if (!area) return;
+        
+        // Kullanıcı "mevcut pc nin ip adresi gelecek" dedi.
+        // Bizim elimizde istemcinin (mevcut PC) IP'si genellikle app.state.clientIp'de olabilir (backend'den gelen).
+        // Eğer yoksa, bu alandaki IP'yi (server IP) hedef alabiliriz ama kullanıcı "mevcut pc" diyor.
+        // İpucunu frontend'den alalım: window.location.hostname veya backend'e soralım.
+        
+        this.showToast('İstemci IP adresi üzerinden yazıcı işlemleri başlatılıyor...', 'info');
+        
+        // Batch modalını aç ama hedef olarak "Mevcut IP"yi bulup seç.
+        // Backend'den kendi IP'mizi öğrenip inventory'de bulmamız lazım.
+        fetch(this.state.API_BASE + '/get_my_ip')
+            .then(r => r.json())
+            .then(data => {
+                const myIp = data.ip;
+                const myDevice = this.state.inventory.find(i => i.ip === myIp);
+                if (myDevice) {
+                    this.openBatchModal('add', null); // Modal'ı aç
+                    // Modal açıldıktan sonra otomatik seçim için:
+                    setTimeout(() => {
+                        const chk = document.querySelector(`.batch-chk[data-val="${myDevice.id}"]`);
+                        if (chk) {
+                            chk.checked = true;
+                            this.updateBatchCounter();
+                        }
+                    }, 500);
+                } else {
+                    this.openBatchModal('add', null);
+                    this.showToast('Kendi cihazınız envanterde bulunamadı, lütfen listeden seçin.', 'warning');
+                }
+            })
+            .catch(() => this.openBatchModal('add', null));
     },
     parseNetworkPath: function(path) {
         // \\IP\FOLDER to {ip, folder}
@@ -1879,43 +1810,59 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             const label1 = isGidaOrSarf ? 'G. Hafta' : 'Saha';
             const label2 = isGidaOrSarf ? 'Daıtılan' : 'Arızalı';
             const label3 = isGidaOrSarf ? 'Kalan' : 'Kayıp';
+
             return `
-            <div class="card depot-card fade-in" style="cursor:pointer;" onclick="app.openEditDepotItem(${item.id})">
+            <div class="card depot-card fade-in" style="cursor:pointer; border-left: 4px solid ${barColor};" onclick="app.openEditDepotItem(${item.id})">
                 <div class="flex-between mb-2">
                     <span class="category-badge ${catClass}">${item.category || 'Belirsiz'}</span>
-                    <i class="fas fa-edit" style="opacity:0.5; font-size:0.8rem; color:var(--accent);"></i>
+                    <div class="stock-indicator ${stockClass}" style="margin:0; font-size:0.7rem; padding: 2px 8px;">
+                        <i class="fas ${stockIcon}"></i> ${stockText}
+                    </div>
                 </div>
-                <div style="font-size: 1.1rem; font-weight: 700; color: #fff; margin-bottom: 5px; min-height: 2.4em; display: flex; align-items: center;">${item.name}</div>
-                <div class="flex-between" style="font-size: 0.85rem;">
-                    <span>Depo: <strong style="color:#fff; font-size:1.1rem;">${item.current_stock}</strong> ${item.unit}</span>
-                    <span style="opacity:0.5;">Sınır: ${item.critical_stock}</span>
+                
+                <div style="font-size: 1.05rem; font-weight: 700; color: #fff; margin-bottom: 8px; min-height: 2.4em; line-height:1.2; display: flex; align-items: center;">${item.name}</div>
+                
+                <div class="flex-between" style="font-size: 0.85rem; background: rgba(255,255,255,0.03); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+                    <div class="flex-column">
+                        <span style="opacity:0.5; font-size:0.65rem;">DEPO STOK</span>
+                        <strong style="color:#fff; font-size:1.1rem;">${item.current_stock} <small style="font-weight:400; font-size:0.7rem; opacity:0.6;">${item.unit}</small></strong>
+                    </div>
+                    <div class="flex-column" style="text-align:right;">
+                        <span style="opacity:0.5; font-size:0.65rem;">KRİTİK SINIR</span>
+                        <strong style="color:var(--accent);">${item.critical_stock}</strong>
+                    </div>
                 </div>
-                <div class="stock-bar">
-                    <div class="stock-bar-fill" style="width: ${barWidth}%; background: ${barColor};"></div>
+
+                <div class="stock-bar" style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; margin-bottom: 12px;">
+                    <div class="stock-bar-fill" style="width: ${barWidth}%; background: ${barColor}; height: 100%;"></div>
                 </div>
-                <div class="flex-row gap-2 mt-2" style="font-size: 0.75rem; opacity: 0.8; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
-                    <div class="flex-column" style="flex:1; align-items:center;">
-                        <span style="opacity:0.6; font-size: 0.6rem;">${label1}</span>
+
+                <div class="flex-row gap-2 mb-3" style="font-size: 0.7rem; opacity: 0.8;">
+                    <div class="flex-column" style="flex:1; align-items:center; background: rgba(0,0,0,0.15); padding: 5px; border-radius: 4px;">
+                        <span style="opacity:0.6; font-size: 0.55rem;">${label1}</span>
                         <strong style="color:var(--accent);">${item.saha_stock || 0}</strong>
                     </div>
-                    <div class="flex-column" style="flex:1; align-items:center; border-left:1px solid rgba(255,255,255,0.1); border-right: ${isGidaOrSarf ? 'none' : '1px solid rgba(255,255,255,0.1)'};">
-                        <span style="opacity:0.6; font-size: 0.6rem;">${label2}</span>
+                    <div class="flex-column" style="flex:1; align-items:center; background: rgba(0,0,0,0.15); padding: 5px; border-radius: 4px;">
+                        <span style="opacity:0.6; font-size: 0.55rem;">${label2}</span>
                         <strong style="color:#ffb400;">${isGidaOrSarf ? (item.weekly_distributed || 0) : (item.arizali_stock || 0)}</strong>
                     </div>
                     ${isGidaOrSarf ? '' : `
-                    <div class="flex-column" style="flex:1; align-items:center;">
-                        <span style="opacity:0.6; font-size: 0.6rem;">${label3}</span>
+                    <div class="flex-column" style="flex:1; align-items:center; background: rgba(0,0,0,0.15); padding: 5px; border-radius: 4px;">
+                        <span style="opacity:0.6; font-size: 0.55rem;">${label3}</span>
                         <strong style="color:#ff4b2b;">${item.kayip_stock || 0}</strong>
                     </div>`}
                 </div>
-                <div class="stock-indicator ${stockClass} mt-2">
-                    <i class="fas ${stockIcon}"></i> ${stockText}
-                </div>
-                <div class="depot-actions">
-                    <button class="btn-chip" onclick="event.stopPropagation(); app.openDepotTransaction(${item.id}, '${item.name.replace(/'/g, "\\'")}')"><i class="fas fa-exchange-alt"></i> Giri/ıkı</button>
-                    ${hasDepotPriv ? `
-                    <button class="btn-chip" onclick="event.stopPropagation(); app.deleteDepotItem(${item.id})" style="color:#ff4b2b;" title="Sil"><i class="fas fa-trash"></i></button>
-                    ` : ''}
+
+                <div class="flex-row gap-2" style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">
+                    <button class="btn btn-secondary" style="flex:1; padding: 6px; font-size: 0.75rem; background: rgba(0,210,255,0.05); border-color: rgba(0,210,255,0.2); color: var(--accent);" onclick="event.stopPropagation(); app.openDepotTransaction(${item.id}, '${item.name.replace(/'/g, "\\'")}', 'in')">
+                        <i class="fas fa-arrow-down"></i> GİRİŞ
+                    </button>
+                    <button class="btn btn-secondary" style="flex:1; padding: 6px; font-size: 0.75rem; background: rgba(255,180,0,0.05); border-color: rgba(255,180,0,0.2); color: #ffb400;" onclick="event.stopPropagation(); app.openDepotTransaction(${item.id}, '${item.name.replace(/'/g, "\\'")}', 'out')">
+                        <i class="fas fa-arrow-up"></i> ÇIKIŞ
+                    </button>
+                    <button class="btn btn-chip" style="padding: 6px; width: 35px; justify-content:center;" onclick="event.stopPropagation(); app.openEditDepotItem(${item.id})" title="Düzenle">
+                        <i class="fas fa-cog"></i>
+                    </button>
                 </div>
             </div>`;
         }).join('');
@@ -1953,11 +1900,16 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
     },
     openAddDepotModal: function() {
         document.getElementById('depot-add-form').reset();
+        document.getElementById('depot-item-id').value = '';
         document.getElementById('depot-unit').value = 'Adet';
         document.getElementById('depot-saha').value = 0;
         document.getElementById('depot-arizali').value = 0;
         document.getElementById('depot-kayip').value = 0;
         document.getElementById('depot-asset-fields').style.display = 'none';
+        
+        const deleteBtn = document.getElementById('btn-depot-delete');
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        
         document.getElementById('depot-add-modal').style.display = 'flex';
     },
     handleDepotCategoryChange: function(val) {
@@ -2012,6 +1964,12 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
              catSelect.value = item.category;
         }
         this.handleDepotCategoryChange(item.category);
+
+        // Silme butonunu sadece adminlere ve duzenleme modunda goster
+        const deleteBtn = document.getElementById('btn-depot-delete');
+        const isAdmin = this.state.activeUser && this.state.activeUser.role === 'ADMIN';
+        if (deleteBtn) deleteBtn.style.display = (id && isAdmin) ? 'block' : 'none';
+
         document.getElementById('depot-add-modal').style.display = 'flex';
     },
     syncDepotsFromExcel: async function() {
@@ -2175,12 +2133,33 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             this.loadDashboardStats();
         } catch (e) { alert('Hata: ' + e.message); }
     },
-    openDepotTransaction: function(id, name) {
-        document.getElementById('depot-trans-title').innerText = `Stok İlemi: ${name}`;
+    deleteDepotItemFromModal: function() {
+        const id = document.getElementById('depot-item-id').value;
+        if (id) {
+            this.deleteDepotItem(id);
+            document.getElementById('depot-add-modal').style.display = 'none';
+        }
+    },
+    deleteDepotItem: async function(id) {
+        if (!confirm('Bu ürünü depodan silmek istediğinize emin misiniz?')) return;
+        try {
+            const resp = await fetch(this.state.API_BASE + '/depot/delete/' + id, { method: 'DELETE' });
+            const result = await resp.json();
+            if (result.error) throw new Error(result.error);
+            this.showToast('Ürün silindi.');
+            this.loadDepot();
+        } catch (e) { alert('Hata: ' + e.message); }
+    },
+    openDepotTransaction: function(id, name, mode = 'in') {
+        const isIn = mode === 'in';
+        document.getElementById('depot-trans-title').innerText = isIn ? `Stok Girişi: ${name}` : `Stok Çıkışı: ${name}`;
         document.getElementById('trans-item-id').value = id;
         document.getElementById('trans-quantity').value = 1;
         document.getElementById('trans-note').value = '';
-        this.setTransType('in');
+        this.setTransType(mode);
+        // Karttan tıklandığında toggle butonlarını gizle (sadece seçilen mod)
+        const toggleRow = document.getElementById('trans-type-toggle-row');
+        if (toggleRow) toggleRow.style.display = 'none';
         document.getElementById('depot-transaction-modal').style.display = 'flex';
     },
     setTransType: function(type) {
@@ -2437,6 +2416,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         const container = document.getElementById('edit-form-content');
         if (!container) return;
         const isAdmin = this.state.activeUser && this.state.activeUser.role === 'ADMIN';
+        const isEditor = isAdmin || (this.state.activeUser && this.state.activeUser.role === 'EDITOR');
         if (type === 'pc') {
             const isSimpleDevice = ['SIRAMATIK', 'KIOSK', 'TABLET'].includes((item.device_type || '').toUpperCase());
             const hideSimpleStyle = isSimpleDevice ? 'display: none;' : '';
@@ -2504,18 +2484,12 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                     <!-- Row 5: Monitor -->
                     <div class="form-row form-row-2" style="${hideSimpleStyle}">
                         <div class="form-group">
-                            <label>MONİTR SERİ / MODEL</label>
-                            <div class="flex-row gap-2">
-                                <input type="text" class="search-bar" id="edit-monitor_seri" value="${item.monitor_seri || ''}" placeholder="Seri" style="flex:1;">
-                                <input type="text" class="search-bar" id="edit-monitor_model" value="${item.monitor_model || ''}" placeholder="Model" style="flex:1;">
-                            </div>
+                            <label>MONİTR SERİ</label>
+                            <input type="text" class="search-bar" id="edit-monitor_seri" value="${item.monitor_seri || ''}" placeholder="Seri">
                         </div>
                         <div class="form-group">
-                            <label>2. MONİTR SERİ / MODEL</label>
-                            <div class="flex-row gap-2">
-                                <input type="text" class="search-bar" id="edit-monitor2_seri" value="${item.monitor2_seri || ''}" placeholder="Seri" style="flex:1;">
-                                <input type="text" class="search-bar" id="edit-monitor2_model" value="${item.monitor2_model || ''}" placeholder="Model" style="flex:1;">
-                            </div>
+                            <label>2. MONİTR SERİ</label>
+                            <input type="text" class="search-bar" id="edit-monitor2_seri" value="${item.monitor2_seri || ''}" placeholder="Seri">
                         </div>
                     </div>
                     <!-- Row: Tablet Specific (Only for TABLET) -->
@@ -2603,7 +2577,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                     <div class="form-row form-row-2">
                         <div class="form-group">
                             <label>MAHAL ADI / KODU</label>
-                            <input type="text" class="search-bar" id="edit-mahal" value="${item.mahal || ''}" ${!isAdmin ? 'readonly' : ''}>
+                            <input type="text" class="search-bar" id="edit-mahal" value="${item.mahal || ''}" ${!isEditor ? 'readonly' : ''}>
                         </div>
                         <div class="form-group">
                             <label>IP ADRESİ</label>
@@ -2621,16 +2595,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                             <input type="text" class="search-bar" id="edit-mac" value="${item.mac || ''}">
                         </div>
                     </div>
-                    ${item.ip ? `
-                    <div style="background:rgba(0,210,255,0.05); padding:10px; border-radius:8px; border:1px solid rgba(0,210,255,0.1); margin: 10px 0;">
-                        <div class="flex-between">
-                            <span style="font-size:0.75rem; color:var(--accent); font-weight:700;"><i class="fas fa-satellite-dish"></i> CANLI YAZICI DURUMU</span>
-                            <button class="btn-chip" style="font-size:0.65rem;" onclick="app.checkPrinterStatus('${item.ip}')">YENİLE</button>
-                        </div>
-                        <div id="printer-live-status-area" style="font-size:0.85rem; color:#fff; margin-top:8px; opacity:0.7;">
-                            Sorgulamak için Yenile'ye basın...
-                        </div>
-                    </div>` : ''}
+
                     <div class="form-group mt-2">
                         <label>Durum</label>
                         <div class="flex-row gap-2">
@@ -2650,8 +2615,13 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                                 <input type="radio" name="printer-status" id="edit-status-serviste" ${item.status === 'Serviste' ? 'checked' : ''} value="Serviste">
                                 <span class="checkmark" style="border-radius:50%;"></span>
                             </label>
+                            <label class="check-container" style="flex:1">Kayıp
+                                <input type="radio" name="printer-status" id="edit-status-kayip" ${item.status === 'Kayıp' ? 'checked' : ''} value="Kayıp">
+                                <span class="checkmark" style="border-radius:50%;"></span>
+                            </label>
                         </div>
                     </div>
+                </div>
                 </div>
                 ${this.loadEditFormFooter('pr')}`;
         }
@@ -2713,7 +2683,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                 display_name: this.state.activeUser.display_name || this.state.activeUser.name || 'Sistem'
             };
             if (type === 'pc') {
-                ['kule', 'kat', 'mahal_kodu', 'mahal_adi', 'telefon', 'ip', 'aciklama', 'pc_seri', 'monitor_seri', 'monitor_model', 'monitor2_seri', 'monitor2_model', 'bagli_yazicilar', 'by_seri', 'bo_seri', 'tarayici_seri', 'assigned_to', 'phone', 'title', 'unit'].forEach(k => {
+                ['kule', 'kat', 'mahal_kodu', 'mahal_adi', 'telefon', 'ip', 'aciklama', 'pc_seri', 'monitor_seri', 'monitor2_seri', 'bagli_yazicilar', 'by_seri', 'bo_seri', 'tarayici_seri', 'assigned_to', 'phone', 'title', 'unit'].forEach(k => {
                     const el = document.getElementById('edit-' + k);
                     if(el) payload[k] = el.value;
                 });
@@ -2844,21 +2814,23 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         }
     },
     loadEditFormFooter: function(type) {
-        const item = this.state.inventory.find(i => i.id == this.state.editingId);
-        const isPC = type === 'pc' && !['SIRAMATIK', 'KIOSK', 'TABLET'].includes((item.device_type || '').toUpperCase());
-        if (isPC) {
+        const item = (type === 'pc') ? 
+            this.state.inventory.find(i => i.id == this.state.editingId) : 
+            this.state.printers.find(p => p.id == this.state.editingId);
+            
+        if (!item) return '';
+
+        if (type === 'pr') {
             return `
-            <div class="flex-row gap-2 mt-4" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1.5fr;">
-                <button class="btn btn-secondary" onclick="app.closeDeviceDetail()">İptal</button>
-                <button class="btn btn-accent" id="btn-save-device" onclick="app.saveEdit()">Güncelle</button>
-                <button class="btn btn-secondary" onclick="app.fetchKeyOSData()" style="border-color: #ff4b2b; color: #ff4b2b; background: rgba(255,75,43,0.05); font-size: 0.75rem; white-space: nowrap; padding: 0 5px;">
-                    <i class="fas fa-rotate"></i> KeyOS Sorgula
-                </button>
-                <button class="btn btn-secondary" onclick="app.openKeyOSEditModal()" style="background: rgba(0,210,255,0.1); border-color: var(--accent); white-space: nowrap; font-size: 0.75rem; padding: 0 5px;">
-                    <i class="fas fa-shield-halved"></i> KeyOS zerinden Düzenle
+            <div class="flex-row gap-2 mt-4">
+                <button class="btn btn-secondary" style="flex: 1;" onclick="app.closeDeviceDetail()">İptal</button>
+                <button class="btn btn-accent" style="flex: 1;" onclick="app.saveEdit()">Güncelle</button>
+                <button class="btn btn-secondary" onclick="app.updateCupsLocation('${item.ip}', '${item.mahal}')" style="border-color: #ff4b2b; color: #ff4b2b; background: rgba(255,75,43,0.05); font-size: 0.75rem; white-space: nowrap; padding: 0 10px;">
+                    <i class="fas fa-location-dot"></i> CUPS Mahal Güncelle
                 </button>
             </div>`;
         }
+        
         return `
         <div class="flex-row gap-2 mt-4">
             <button class="btn btn-secondary" style="flex: 1;" onclick="app.closeDeviceDetail()">İptal</button>
@@ -2947,7 +2919,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title, content,
-                    user_id: this.state.activeUser.key,
+                    user_id: this.state.activeUser.username || this.state.activeUser.key,
                     role: this.state.activeUser.role
                 })
             });
@@ -2967,8 +2939,8 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         formData.append('device_type', this.state.editingType);
         formData.append('title', title);
         formData.append('content', content);
-        formData.append('user_id', this.state.activeUser.key);
-        formData.append('user_name', this.state.activeUser.name);
+        formData.append('user_id', this.state.activeUser.username || this.state.activeUser.key);
+        formData.append('user_name', this.state.activeUser.display_name || this.state.activeUser.name);
         if (imageInput.files.length > 0) {
             formData.append('image', imageInput.files[0]);
         }
@@ -3110,17 +3082,14 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                         <div class="kb-code-block">
                             <pre id="kb-pre-${n.id}">${n.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
                         </div>
-                        <div class="kb-action-sidebar" style="display: flex; flex-direction: column; gap: 10px; align-items: flex-end;">
-                            <div class="flex-row gap-3" style="margin-bottom: 5px;">
-                                <i class="fas fa-copy kb-mini-icon" onclick="app.copyToClipboard(document.getElementById('kb-pre-${n.id}').innerText)" title="Kopyala"></i>
-                                ${isAdmin ? `
-                                <i class="fas fa-edit kb-mini-icon" onclick="app.editKBEntry(${n.id})" title="Düzenle" style="color: #ffcc00;"></i>
-                                ` : ''}
-                            </div>
+                        <div class="kb-action-sidebar" style="display: flex; flex-direction: row; gap: 5px; align-items: center; justify-content: flex-end; margin-top: 5px;">
+                            ${isAdmin ? `
+                            <i class="fas fa-edit kb-mini-icon" onclick="app.editKBEntry(${n.id})" title="Düzenle" style="color: #ffcc00; font-size: 1.1rem; cursor:pointer;"></i>
+                            ` : ''}
+                            <i class="fas fa-copy kb-mini-icon" onclick="app.copyToClipboard(document.getElementById('kb-pre-${n.id}').innerText)" title="Kopyala" style="font-size: 1.1rem; cursor:pointer;"></i>
                             ${isKodlar ? `
-                            <button class="btn btn-accent btn-sm" onclick="app.openRunCommandModal(${n.id})" style="width: 100%; white-space: nowrap;">
-                                <i class="fas fa-terminal"></i> ALITIR
-                            </button>` : ''}
+                            <i class="fas fa-play-circle kb-mini-icon" onclick="app.openRunCommandModal(${n.id})" title="Çalıştır" style="color: var(--accent); font-size: 1.4rem; cursor:pointer;"></i>
+                            ` : ''}
                         </div>
                     </div>`;
             }
@@ -3143,18 +3112,75 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             </div>`;
         }).join('');
     },
+    handleKBTypeChange: function(type) {
+        const fileLabel = document.getElementById('kb-file-label') || { innerHTML: "" };
+        const fileInput = document.getElementById('kb-image');
+        const contentContainer = document.getElementById('kb-content').parentElement;
+        const contentLabel = contentContainer.querySelector('label');
+        
+        if (type === 'indir') {
+            fileLabel.innerHTML = '<i class="fas fa-file-export"></i> DOSYA YÜKLE (Gerekli İndirmeler)';
+            fileInput.removeAttribute('accept');
+            if (contentLabel) contentLabel.innerText = 'DOSYA AÇIKLAMASI / NOTLAR';
+            // Sadece ADMIN ise dosya yükleme alanını göster
+            const uploadArea = document.getElementById('kb-image').closest('.form-group');
+            if (uploadArea) uploadArea.style.display = (this.state.activeUser.role === 'ADMIN') ? 'block' : 'none';
+        } else {
+            fileLabel.innerHTML = 'RESİM (Opsiyonel)';
+            fileInput.setAttribute('accept', 'image/*');
+            if (contentLabel) contentLabel.innerText = 'İÇERİK / KOMUTLAR / NOTLAR';
+            const uploadArea = document.getElementById('kb-image').closest('.form-group');
+            if (uploadArea) uploadArea.style.display = 'block'; // Resim her zaman opsiyonel olarak görülebilir
+        }
+    },
+    openKBModal: function(id = null) {
+        const modal = document.getElementById('kb-modal');
+        const titleEl = document.getElementById('kb-modal-title');
+        const typeEl = document.getElementById('kb-type');
+        const titleInput = document.getElementById('kb-title');
+        const contentInput = document.getElementById('kb-content');
+        const fileInput = document.getElementById('kb-image');
+        const editIdInput = document.getElementById('kb-edit-id');
+        const reqUserCheck = document.getElementById('kb-requires-user');
+        const delBtn = document.getElementById('kb-btn-delete');
+
+        // Admin değilse 'indir' seçeneğini gizle
+        const indirOption = typeEl.querySelector('option[value="indir"]');
+        if (this.state.activeUser.role !== 'ADMIN') {
+            if (indirOption) indirOption.style.display = 'none';
+        } else {
+            if (indirOption) indirOption.style.display = 'block';
+        }
+
+        editIdInput.value = id || '';
+        titleInput.value = '';
+        contentInput.value = '';
+        fileInput.value = '';
+        reqUserCheck.checked = false;
+        typeEl.value = 'kodlar';
+        this.handleKBTypeChange('kodlar');
+        
+        if (id) {
+            const item = this.state_kb.raw.find(x => x.id == id);
+            if (item) {
+                titleEl.innerHTML = '<i class="fas fa-edit"></i> Bilgiyi Düzenle';
+                typeEl.value = item.type || 'kodlar';
+                titleInput.value = item.title || '';
+                contentInput.value = item.content || '';
+                reqUserCheck.checked = !!item.requires_user;
+                this.handleKBTypeChange(typeEl.value);
+                if (this.state.activeUser.role === 'ADMIN') delBtn.style.display = 'block';
+            }
+        } else {
+            titleEl.innerHTML = '<i class="fas fa-plus"></i> Yeni Bilgi / Not Ekle';
+            delBtn.style.display = 'none';
+        }
+
+        modal.style.display = 'flex';
+        titleInput.focus();
+    },
     editKBEntry: function(id) {
-        const n = this.state_kb.raw.find(item => item.id == id);
-        if(!n) return;
-        document.getElementById('kb-modal').style.display = 'flex';
-        document.getElementById('kb-modal-title').innerHTML = '<i class="fas fa-edit"></i> Bilgiyi Düzenle';
-        document.getElementById('kb-edit-id').value = id;
-        document.getElementById('kb-type').value = n.type || 'kodlar';
-        document.getElementById('kb-title').value = n.title || '';
-        document.getElementById('kb-content').value = n.content || '';
-        document.getElementById('kb-requires-user').checked = !!n.requires_user;
-        document.getElementById('kb-btn-delete').style.display = 'block';
-        document.getElementById('kb-title').focus();
+        this.openKBModal(id);
     },
     saveKBItem: async function() {
         const editId = document.getElementById('kb-edit-id').value;
@@ -3162,7 +3188,10 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         const content = document.getElementById('kb-content').value;
         const type = document.getElementById('kb-type').value;
         const imageFile = document.getElementById('kb-image').files[0];
-        if (!title || !content) return alert('Lütfen balık ve içerik giriniz.');
+
+        if (!title) return alert('Lütfen bir başlık giriniz.');
+        if (type !== 'indir' && !content) return alert('Lütfen içerik giriniz.');
+        if (type === 'indir' && !editId && !imageFile) return alert('Lütfen yüklenecek dosyayı seçiniz.');
         try {
             this.showToast('Bilgi kaydediliyor...', 'info');
             const formData = new FormData();
@@ -3308,6 +3337,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         this.renderGeneralNotes(filtered);
     },
     openKBModal: function() {
+        const isAdmin = this.state.activeUser.role === 'ADMIN';
         document.getElementById('kb-modal').style.display = 'flex';
         document.getElementById('kb-modal-title').innerHTML = '<i class="fas fa-pen-to-square"></i> Yeni Bilgi / Not Ekle';
         document.getElementById('kb-edit-id').value = '';
@@ -3317,6 +3347,14 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         document.getElementById('kb-requires-user').checked = false;
         document.getElementById('kb-btn-delete').style.display = 'none';
         document.getElementById('kb-image').value = '';
+        
+        // 'indir' seçeneği sadece adminlere görünür/erişilebilir olsun
+        const optIndir = document.querySelector('#kb-type option[value="indir"]');
+        if (optIndir) {
+            optIndir.style.display = isAdmin ? 'block' : 'none';
+            optIndir.disabled = !isAdmin;
+        }
+
         document.getElementById('kb-title').focus();
     },
     closeKBModal: function() {
@@ -3328,7 +3366,9 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         const content = document.getElementById('kb-content').value;
         const type = document.getElementById('kb-type').value;
         const imageFile = document.getElementById('kb-image').files[0];
-        if (!title || !content) { this.showToast('Lütfen balık ve içerik giriniz.', 'warning'); return; }
+        if (!title) { this.showToast('Lütfen başlık giriniz.', 'warning'); return; }
+        if (type === 'indir' && !editId && !imageFile) { this.showToast('Lütfen yüklenecek dosyayı seçiniz.', 'warning'); return; }
+        if (type !== 'indir' && !content) { this.showToast('Lütfen içerik giriniz.', 'warning'); return; }
         try {
             this.showToast('Bilgi kaydediliyor...', 'info');
             const formData = new FormData();
@@ -3431,17 +3471,17 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             }
 
             return `
-            <tr onclick="app.openServiceEditModal(${r.id})">
-                <td style="white-space:nowrap;"><span style="color:var(--accent); text-decoration:underline; font-weight:700; cursor:pointer;">${r.pr_no || '-'}</span></td>
-                <td>${r.seri || '-'}</td>
-                <td style="font-family:monospace; font-size:0.75rem; opacity:0.8;">${r.mac || '-'}</td>
-                <td style="font-size:0.8rem; font-weight:600;">${r.mahal || '-'}</td>
-                <td>${this.formatDate(r.acq_date)}</td>
-                <td>${this.formatDate(r.sent_date)}</td>
-                <td>${this.formatDate(r.return_date)}</td>
-                <td style="max-width:350px; word-wrap:break-word; font-style:italic; opacity:0.9; font-size:0.8rem;">${r.fault_desc || '-'}</td>
-                <td class="col-medium">${ikameHtml}</td>
-                <td><span class="status-badge status-${statusClass}" style="min-width:70px; text-align:center;">${statusText}</span></td>
+            <tr onclick="app.openServiceEditModal(${r.id})" style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s; cursor: pointer;" onmouseover="this.style.background='rgba(0,210,255,0.05)'" onmouseout="this.style.background='transparent'">
+                <td style="padding: 6px 10px; white-space: nowrap; width: 70px; min-width:70px;"><span style="color:var(--accent); font-weight:700; border-bottom: 1px solid var(--accent);">${r.pr_no || '-'}</span></td>
+                <td style="padding: 6px 10px; color: #fff; opacity: 0.9; white-space: nowrap; font-size: 0.75rem; width: 120px; min-width:120px;">${r.seri || '-'}</td>
+                <td style="padding: 6px 10px; font-family: 'JetBrains Mono', monospace; font-size:0.7rem; color: #fff; opacity: 0.7; white-space: nowrap; width: 130px; min-width:130px;">${r.mac || '-'}</td>
+                <td style="padding: 6px 10px; font-size:0.75rem; font-weight:600; color: #fff; white-space: nowrap; width: 120px; min-width:120px;">${r.mahal || '-'}</td>
+                <td style="padding: 6px 10px; color: #00d2ff; font-weight: 500; white-space: nowrap; font-size: 0.75rem; width: 85px; min-width:85px;">${this.formatDate(r.acq_date)}</td>
+                <td style="padding: 6px 10px; color: #fff; opacity: 0.6; white-space: nowrap; font-size: 0.75rem; width: 85px; min-width:85px;">${this.formatDate(r.sent_date)}</td>
+                <td style="padding: 6px 10px; color: #fff; opacity: 0.6; white-space: nowrap; font-size: 0.75rem; width: 85px; min-width:85px;">${this.formatDate(r.return_date)}</td>
+                <td style="padding: 6px 10px; word-wrap: break-word; font-style:italic; opacity:0.8; font-size:0.8rem; color: #fff; width: auto;">${r.fault_desc || '-'}</td>
+                <td style="padding: 6px 10px; font-size: 0.75rem; white-space: nowrap; width: 130px; min-width:130px; text-align: left;">${ikameHtml}</td>
+                <td style="padding: 6px 10px; text-align: right; width: 110px; min-width:110px;"><span class="status-badge status-${statusClass}" style="min-width:100px; text-align:center; font-weight: 800; border-radius: 4px; text-transform: uppercase; font-size: 0.65rem; border: 1px solid currentColor; display: inline-block;">${statusText}</span></td>
             </tr>`;
         }).join('');
     },
@@ -3523,6 +3563,81 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         } catch (err) {
             console.error("Servis modal hatası:", err);
             alert("Servis kaydı formu açılırken bir hata olutu: " + err.message);
+        }
+    },
+    openServiceEditModal: async function(id) {
+        const record = this.state_service.raw.find(s => s.id == id);
+        if (!record) return;
+        
+        // Modal balıı
+        const title = document.getElementById('service-modal-title');
+        if (title) title.innerHTML = `<i class="fas fa-edit"></i> Servis Kaydı Düzenle [${record.pr_no}]`;
+        
+        // ID set et
+        const editIdInput = document.getElementById('service-edit-id');
+        if (editIdInput) editIdInput.value = id;
+
+        // Alanları doldur
+        const fields = {
+            'service-printer-id': record.printer_id,
+            'service-pr-no': record.pr_no,
+            'service-seri': record.seri,
+            'service-mac': record.mac,
+            'service-model': record.model,
+            'service-mahal': record.mahal,
+            'service-acq-place': record.acq_place,
+            'service-acq-date': record.acq_date ? record.acq_date.split(' ')[0] : '',
+            'service-sent-date': record.sent_date ? record.sent_date.split(' ')[0] : '',
+            'service-return-date': record.return_date ? record.return_date.split(' ')[0] : '',
+            'service-status': record.status,
+            'service-substitute-pr-no': record.substitute_pr_no,
+            'service-fault-desc': record.fault_desc
+        };
+
+        for (const [fid, val] of Object.entries(fields)) {
+            const el = document.getElementById(fid);
+            if (el) {
+                el.value = val || '';
+                el.readOnly = false; // Tıklayınca düzenlenebilir olması için
+            }
+        }
+
+        // İkame yazıcı kontrolü
+        const ikameCheck = document.getElementById('service-has-substitute');
+        if (ikameCheck) {
+            ikameCheck.checked = !!record.has_substitute;
+            const subContainer = document.getElementById('service-substitute-container');
+            if (subContainer) subContainer.style.display = record.has_substitute ? 'block' : 'none';
+        }
+
+        // Silme butonunu adminlere göster
+        const deleteBtn = document.getElementById('btn-service-delete');
+        if (deleteBtn) {
+            deleteBtn.style.display = (this.state.activeUser && this.state.activeUser.role === 'ADMIN') ? 'block' : 'none';
+        }
+
+        const modal = document.getElementById('service-modal');
+        if (modal) modal.style.display = 'flex';
+    },
+    updateCupsLocation: async function(ip, mahal) {
+        if (!ip) return alert('IP adresi bulunamadı!');
+        if (!confirm(`${ip} IP'li yazıcının CUPS üzerindeki mahal bilgisini [${mahal}] olarak güncellemek istiyor musunuz?`)) return;
+        
+        try {
+            this.showToast('CUPS güncelleniyor, lütfen bekleyin...', 'info');
+            const resp = await fetch(this.state.API_BASE + '/printers/update_cups_location', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip: ip, location: mahal })
+            });
+            const result = await resp.json();
+            if (result.success) {
+                this.showToast('CUPS Mahal baarıyla güncellendi.');
+            } else {
+                throw new Error(result.error || 'Bilinmeyen bir hata olutu.');
+            }
+        } catch (e) {
+            alert('CUPS Hatası: ' + e.message);
         }
     },
     updatePrinterDatalist: function() {
@@ -3650,12 +3765,105 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
 
             document.getElementById('service-modal').style.display = 'none';
             this.showToast('Servis kaydı başarıyla kaydedildi!');
+            
+            // --- OTOMATİK YAZICI DEĞİŞİMİ ---
+            // SADECE YENİ KAYIT EKLENİRKEN (editId yoksa) tetikle
+            if (!editId && payload.has_substitute && payload.substitute_pr_no) {
+                this.handleAutomaticPrinterSwap(payload.pr_no, payload.substitute_pr_no);
+            }
+
             this.loadServiceRecords();
             this.renderPrinters(); 
             this.loadDashboardStats();
             this.loadInventory(); 
             this.navigateTo('service');
         } catch (e) { alert('Hata: ' + e.message); }
+    },
+    handleAutomaticPrinterSwap: async function(oldPrNo, newPrNo) {
+        try {
+            this.showToast(`${oldPrNo} -> ${newPrNo} otomatik değişimi başlatılıyor...`, 'info');
+            
+            // 1. Hedef PC'leri bul (Bağlı yazıcılarda eski PR No olanlar)
+            const targetPCs = this.state.inventory.filter(item => 
+                (item.bagli_yazicilar || '').toUpperCase().includes(oldPrNo.toUpperCase())
+            );
+            
+            if (targetPCs.length === 0) {
+                console.log("Otomatik değişim: Değişim yapılacak PC bulunamadı.");
+                return;
+            }
+            
+            // 2. Yazıcı ID'lerini bul (Backend printer_id bekliyor)
+            const oldPrinter = this.state.printers.find(p => (p.pr_no || '').toUpperCase() === oldPrNo.toUpperCase());
+            const newPrinter = this.state.printers.find(p => (p.pr_no || '').toUpperCase() === newPrNo.toUpperCase());
+            
+            if (!oldPrinter || !newPrinter) {
+                console.error("Yazıcı ID'leri bulunamadı:", { oldPrNo, newPrNo });
+                this.showToast("Yazıcı bilgileri eşleşmedi, otomatik işlem yapılamadı.", "error");
+                return;
+            }
+
+            const targetList = targetPCs.map(t => ({ type: 'PC', value: t.id }));
+            
+            // 3. BİM bilgilerini al
+            const bimUser = this.state.activeUser.bim_user;
+            const bimPass = this.state.activeUser.bim_pass;
+            
+            if (!bimUser || !bimPass) {
+                this.showToast("BİM şifresi kayıtlı değil! Lütfen profil ayarlarından kaydedin.", "error");
+                return;
+            }
+            
+            // 4. Eski Yazıcıyı Kaldır
+            const remResp = await fetch(this.state.API_BASE + '/printers/batch_action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'remove',
+                    printer_id: oldPrinter.id,
+                    targets: targetList,
+                    bim_user: bimUser,
+                    bim_pass: bimPass,
+                    bim_function: 'RemovePrinter',
+                    command: oldPrNo
+                })
+            });
+            
+            // 5. İkame Yazıcıyı Kur
+            const addResp = await fetch(this.state.API_BASE + '/printers/batch_action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'add',
+                    printer_id: newPrinter.id,
+                    targets: targetList,
+                    bim_user: bimUser,
+                    bim_pass: bimPass,
+                    bim_function: 'AddPrinter',
+                    command: `${newPrNo}/01`
+                })
+            });
+            
+            const remData = await remResp.json();
+            const addData = await addResp.json();
+
+            if (remData.success && addData.success) {
+                this.showToast(`Otomatik değişim ${targetPCs.length} PC için başarıyla tamamlandı.`, 'success');
+            } else {
+                const err = remData.error || addData.error || "BİM tarafında bazı sorunlar oluştu.";
+                this.showToast(err, "warning");
+            }
+        } catch (e) {
+            console.error("Otomatik değişim hatası:", e);
+            this.showToast("Otomatik değişim sırasında bir hata oluştu.", "error");
+        }
+    },
+    openPrinterInterface: function(ip, pr_no) {
+        if(!ip) return;
+        // Aynı anda iki sekmeyi aç (Kullanıcı etkileşimi içinde olmalı)
+        // NOT: Tarayıcı 2. sekmeyi bloklayabilir, kullanıcı "Her zaman izin ver" demelidir.
+        window.open(`http://${ip}`, '_blank');
+        window.open(`https://10.241.1.21:49631/printers/${pr_no}`, '_blank');
     },
     deleteServiceRecord: async function(id) {
         if (!confirm('Bu servis kaydını silmek istediinize emin misiniz?')) return;
@@ -3814,6 +4022,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('modal-backdrop')) {
                 const id = e.target.id;
+                if (id === 'login-overlay') return; // Login overlay dıarı tıklanarak kapanmaz
                 if (id.startsWith('doc-modal-')) {
                     this.closeDocModal(id.replace('doc-modal-', ''));
                 } else {
@@ -4641,6 +4850,13 @@ timeout /t 2 >nul
         document.getElementById('keyos-edit-hostname').value = item.hostname || '';
         document.getElementById('keyos-sys-hostname').value = item.hostname || ''; 
         document.getElementById('keyos-edit-mahal').value = item.mahal_kodu || '';
+        
+        // KeyOS Bilgilerini Otomatik Doldur
+        const keyosUserField = document.getElementById('keyos-admin-user');
+        const keyosPassField = document.getElementById('keyos-admin-pass');
+        if (keyosUserField && this.state.activeUser.keyos_user) keyosUserField.value = this.state.activeUser.keyos_user;
+        if (keyosPassField && this.state.activeUser.keyos_pass) keyosPassField.value = this.state.activeUser.keyos_pass;
+
         // Initial format check
         this.formatKeyOSMahal(document.getElementById('keyos-edit-mahal'));
         document.getElementById('keyos-edit-modal').style.display = 'flex';
@@ -5031,7 +5247,6 @@ timeout /t 2 >nul
                         line-height: 1.2;
                     }
                 </style>
-                </style>
             </head>
             <body>
                 ${labelsHtml}
@@ -5055,10 +5270,8 @@ timeout /t 2 >nul
         const blob = await resp.blob();
         const url = window.URL.createObjectURL(blob);
         if (contentType && (contentType.includes('word') || contentType.includes('excel') || contentType.includes('officedocument'))) {
-            // İndirme ilemi
             const a = document.createElement('a');
             a.href = url;
-            // Dosya adını Content-Disposition'dan almaya çalıalım
             const disposition = resp.headers.get('Content-Disposition');
             let filename = 'dokuman';
             if (disposition && disposition.indexOf('filename=') !== -1) {
@@ -5072,21 +5285,19 @@ timeout /t 2 >nul
             a.remove();
             this.showToast('Dosya indirildi.', 'success');
         } else {
-            // PDF Yazdırma ilemi
             this.directPrint(url);
-            this.showToast('İlem tamamlandı, yazdırma penceresi açılıyor.');
+            this.showToast('İşlem tamamlandı, yazdırma penceresi açılıyor.');
         }
-        // Modalları kapat
         ['hasar-tespit', 'zimmet', 'izin-istek', 'sla-sehven', 'barcode-55x45', 'barcode-100x100', 'barcode-manual'].forEach(id => this.closeDocModal(id));
     },
 };
-// Merge without overwriting existing critical functions like handleLogin
+
 for (var key in appData) {
     if (appData.hasOwnProperty(key)) {
         app[key] = appData[key];
     }
 }
-//  POST-MERGE: Additional app functions 
+
 app.directPrint = function(url) {
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
@@ -5099,6 +5310,7 @@ app.directPrint = function(url) {
         }, 500);
     };
 };
+
 app.openProfileSettingsModal = function() {
     const user = app.state.activeUser;
     if (!user) return;
@@ -5106,49 +5318,100 @@ app.openProfileSettingsModal = function() {
     document.getElementById('profile-keyos-pass').value = ''; 
     document.getElementById('profile-bim-user').value = user.bim_user || '';
     document.getElementById('profile-bim-pass').value = '';
-    document.getElementById('profile-magicinfo-user').value = user.magicinfo_user || '';
-    document.getElementById('profile-magicinfo-pass').value = '';
+    document.getElementById('profile-current-pass').value = '';
+    document.getElementById('profile-new-pass').value = '';
     document.getElementById('profile-session-timeout').value = user.session_timeout !== undefined ? user.session_timeout : 5;
     document.getElementById('profile-settings-modal').style.display = 'flex';
 };
+
 app.saveProfileSettings = async function() {
-    const payload = {
-        id: app.state.activeUser.id,
-        keyos_user: document.getElementById('profile-keyos-user').value,
-        keyos_pass: document.getElementById('profile-keyos-pass').value,
-        bim_user: document.getElementById('profile-bim-user').value,
-        bim_pass: document.getElementById('profile-bim-pass').value,
-        magicinfo_user: document.getElementById('profile-magicinfo-user').value,
-        magicinfo_pass: document.getElementById('profile-magicinfo-pass').value,
-        session_timeout: parseInt(document.getElementById('profile-session-timeout').value)
-    };
+    const user = app.state.activeUser;
+    const currentPass = document.getElementById('profile-current-pass').value;
+    const newPass = document.getElementById('profile-new-pass').value;
+    
     try {
+        if (newPass) {
+            if (!currentPass) throw new Error("Şifre değiştirmek için mevcut şifrenizi girmelisiniz!");
+            app.showToast('Şifre güncelleniyor...', 'info');
+            const pwResp = await fetch(app.state.API_BASE + '/users/change_password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + user.token },
+                body: JSON.stringify({ old_password: currentPass, new_password: newPass })
+            });
+            const pwResult = await pwResp.json();
+            if (pwResult.error) throw new Error("Şifre Hatası: " + pwResult.error);
+        }
+
+        const payload = {
+            id: user.id,
+            keyos_user: document.getElementById('profile-keyos-user').value,
+            keyos_pass: document.getElementById('profile-keyos-pass').value,
+            bim_user: document.getElementById('profile-bim-user').value,
+            bim_pass: document.getElementById('profile-bim-pass').value || user.bim_pass,
+            session_timeout: parseInt(document.getElementById('profile-session-timeout').value)
+        };
+
         app.showToast('Ayarlar kaydediliyor...', 'info');
         const resp = await fetch(app.state.API_BASE + '/users/update_profile', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + user.token },
             body: JSON.stringify(payload)
         });
         const result = await resp.json();
         if (result.error) throw new Error(result.error);
-        app.showToast('Profil ayarları baarıyla güncellendi.');
+
+        app.showToast('Profil ayarları başarıyla güncellendi.');
         document.getElementById('profile-settings-modal').style.display = 'none';
+        
         app.state.activeUser.keyos_user = payload.keyos_user;
+        app.state.activeUser.keyos_pass = payload.keyos_pass;
         app.state.activeUser.bim_user = payload.bim_user;
-        app.state.activeUser.magicinfo_user = payload.magicinfo_user;
-        if(payload.keyos_pass) app.state.activeUser.keyos_pass = payload.keyos_pass;
-        if(payload.bim_pass) app.state.activeUser.bim_pass = payload.bim_pass;
-        if(payload.magicinfo_pass) app.state.activeUser.magicinfo_pass = payload.magicinfo_pass;
+        app.state.activeUser.bim_pass = payload.bim_pass;
         app.state.activeUser.session_timeout = payload.session_timeout;
         localStorage.setItem('it_user_data', JSON.stringify(app.state.activeUser));
-    } catch (e) { alert('Hata: ' + e.message); }
+    } catch (e) { 
+        console.error(e);
+        alert(e.message); 
+    }
 };
+
+app.clearSearch = function(id) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.value = '';
+        if (id === 'main-search') this.filterInventory();
+        else if (id === 'printer-search') this.searchPrinters();
+        else if (id === 'depot-search') this.searchDepot();
+        else if (id === 'area-search') this.searchAreas();
+        else if (id === 'kb-search') this.searchKB();
+    }
+};
+
+app.updateCupsLocation = async function(ip, mahal) {
+    const pr_no_el = document.getElementById('edit-pr_no');
+    const pr_no = pr_no_el ? pr_no_el.value : null;
+    
+    if (!pr_no || !mahal) {
+        this.showToast('Yazıcı numarası veya mahal bilgisi eksik!', 'warning');
+        return;
+    }
+
+    try {
+        this.showToast('CUPS Mahal güncelleniyor...', 'info');
+        const resp = await fetch(this.state.API_BASE + '/printers/cups/update_mahal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pr_no: pr_no, mahal: mahal })
+        });
+        
+        const result = await resp.json();
+        if (result.error) throw new Error(result.error);
+        
+        this.showToast('CUPS Mahal başarıyla güncellendi.');
+    } catch (e) {
+        alert('CUPS Hatası: ' + e.message);
+    }
+};
+
 app.init();
 window.app = app;
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log('PWA Service Worker kayıtlı!', reg))
-            .catch(err => console.log('PWA kaydı baarısız: ', err));
-    });
-}

@@ -1,5 +1,4 @@
 from flask import Blueprint, jsonify, request
-import openpyxl
 from core.database_sql import query_db, get_db_connection
 from core.auth import require_auth, require_editor, require_admin
 import openpyxl
@@ -292,14 +291,14 @@ def sync_from_excel():
                     ]) or sheet.title or '').strip()
 
                     cat_norm = _norm(raw_cat)
-                    if 'SARF' in cat_norm:                        category = 'Sarf Malzeme'
-                    elif 'GIDA' in cat_norm:                      category = 'Gıda'
-                    elif 'YEDEK' in cat_norm:                     category = 'Yedek Parça'
-                    elif 'CEVRE' in cat_norm:                     category = 'Çevre Birimi'
-                    elif 'KABLO' in cat_norm:                     category = 'Kablo'
-                    elif 'DONANIM' in cat_norm:                   category = 'Donanım'
+                    if 'AG' in cat_norm or 'ALTYAPI' in cat_norm: category = 'AĞ VE ALTYAPI'
+                    elif 'AKSESUAR' in cat_norm:                  category = 'AKSESUAR'
+                    elif 'DONANIM' in cat_norm:                   category = 'DONANIM'
+                    elif 'SARF' in cat_norm:                      category = 'SARF MALZEME'
+                    elif 'GIDA' in cat_norm:                      category = 'GIDA'
+                    elif 'KABLO' in cat_norm:                     category = 'KABLO'
                     else:
-                        category = raw_cat if raw_cat else 'Genel'
+                        category = raw_cat if raw_cat else 'GENEL'
 
                     # Alan Eşleştirmeleri
                     current = _clean_int(_get_val(item, item_keys, [
@@ -383,6 +382,7 @@ def delete_item(item_id):
 
 
 @depot_manager_bp.route('/transaction', methods=['POST'])
+@require_auth
 def transaction():
     """Depo giriş/çıkış işlemi yapar. Cihaza atanıyorsa otomatik teknik not oluşturur."""
     data = request.json
@@ -405,8 +405,8 @@ def transaction():
 
         new_stock = current + qty if t_type == 'in' else current - qty
         
-        # Eğer bu bir Sarf Malzeme veya Gıda ise ve işlem "çıkış" ise haftalık dağıtımı artır
-        if t_type == 'out' and item['category'] in ['Sarf Malzeme', 'Gıda']:
+        # Eğer bu bir SARF MALZEME veya Gıda ise ve işlem "çıkış" ise haftalık dağıtımı artır
+        if t_type == 'out' and item['category'] in ['SARF MALZEME', 'Gıda']:
             conn.execute("UPDATE depot_items SET current_stock=?, weekly_distributed = weekly_distributed + ? WHERE id=?", (new_stock, qty, item_id))
         else:
             conn.execute("UPDATE depot_items SET current_stock=? WHERE id=?", (new_stock, item_id))
@@ -435,6 +435,7 @@ def transaction():
 
 
 @depot_manager_bp.route('/history/<int:item_id>', methods=['GET'])
+@require_auth
 def get_history(item_id):
     """Bir depo ürününün tüm işlem geçmişini getirir."""
     try:
@@ -448,6 +449,7 @@ def get_history(item_id):
 
 
 @depot_manager_bp.route('/clear_transactions', methods=['DELETE'])
+@require_admin
 def clear_all_transactions():
     """Tüm depo işlem geçmişini (depot_transactions) temizler."""
     try:

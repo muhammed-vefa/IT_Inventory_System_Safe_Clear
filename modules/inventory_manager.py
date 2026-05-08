@@ -72,11 +72,39 @@ def update_inventory():
 
         # 2.5 Hostname Güncelleme (Eski ve Yeni Mahal için)
         new_mahal = data.get('mahal_kodu')
+        new_hostname = data.get('hostname')
         old_mahal = old_record['mahal_kodu']
+        old_hostname = old_record['hostname']
         
         _sync_hostnames(conn, new_mahal)
         if old_mahal and old_mahal != new_mahal:
             _sync_hostnames(conn, old_mahal)
+
+        # 2.6 KeyOS Otomatik Güncelleme
+        # Eğer mahal veya hostname değiştiyse ve kullanıcının KeyOS şifresi varsa KeyOS'u güncelle
+        if (new_mahal != old_mahal or new_hostname != old_hostname):
+            try:
+                user_id = request.current_user.get('user_id')
+                user_info = conn.execute("SELECT keyos_user, keyos_pass FROM users WHERE id=?", (user_id,)).fetchone()
+                if user_info and user_info['keyos_user'] and user_info['keyos_pass']:
+                    from modules.keyos_service import update_device_internal
+                    # KeyOS'ta mahaller tireli tutulduğu için çeviriyoruz
+                    keyos_mahal = (new_mahal or '').replace('.', '-').upper()
+                    serial = old_record['pc_seri']
+                    if serial:
+                        success, error = update_device_internal(
+                            serial, new_hostname, keyos_mahal, 
+                            user_info['keyos_user'], user_info['keyos_pass']
+                        )
+                        if not success:
+                            # Admin uyarısı oluştur (Gelecekte bildirim tablosuna yazılabilir)
+                            print(f"KeyOS Otomatik Güncelleme Başarısız: {error}")
+                            # Değişiklik loguna özel not düş
+                            log_change(id, pc_label, "KeyOS Durumu", "Başarısız", f"Kullanıcı değişiklik yaptı ancak KeyOS güncellenemedi: {error}", changed_by, display_name)
+                else:
+                    log_change(id, pc_label, "KeyOS Durumu", "Atlandı", "KeyOS şifresi kayıtlı olmadığı için sadece envanter güncellendi.", changed_by, display_name)
+            except Exception as e:
+                print(f"KeyOS Sync Error in update_inventory: {e}")
 
         # 3. Değişiklikleri logla
         tracked_fields = ['kule', 'kat', 'mahal_kodu', 'mahal_adi', 'telefon', 'ip', 
@@ -181,7 +209,7 @@ def _backup_to_excel(conn):
         headers = ['PC', 'KULE', 'KAT', 'MAHAL KODU', 'MAHAL ADI', 'KEYOS MAHALİ', 'SAHADA', 'DEPO', 
                    'ARIZALI', 'MAHALSİZ', 'TELEFON', 'İP', 'BAĞLI OLAN YAZICILAR', 'PC SERİ NO', 
                    'MONİTÖR SERİ NO', 'MONİTÖR MODEL', '2. MONİTÖR SERİ NO', '2. MONİTÖR MODEL',
-                   'WİNDOWS', 'KEYOS', 'RDP', 
+                   'WINDOWS', 'KEYOS', 'RDP', 
                    '6900 PR-NO', '5200 PR-NO', '8690 PR-NO', 'BARKOD YAZICI SERİ NO', 
                    'BARKOD OKUYUCU SERİ NO', 'TARAYICI SERİ NO', 'AÇIKLAMA']
         
@@ -196,7 +224,7 @@ def _backup_to_excel(conn):
                 'MONİTÖR MODEL': row['monitor_model'],
                 '2. MONİTÖR SERİ NO': row['monitor2_seri'],
                 '2. MONİTÖR MODEL': row['monitor2_model'],
-                'WİNDOWS': row['windows'], 'KEYOS': row['keyos'],
+                'WINDOWS': row['windows'], 'KEYOS': row['keyos'],
                 'RDP': row['rdp'], '6900 PR-NO': row['pr6900'], '5200 PR-NO': row['pr5200'],
                 '8690 PR-NO': row['pr8690'], 'BARKOD YAZICI SERİ NO': row['by_seri'], 
                 'BARKOD OKUYUCU SERİ NO': row['bo_seri'], 'TARAYICI SERİ NO': row['tarayici_seri'], 

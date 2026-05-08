@@ -1,18 +1,20 @@
 {
-  "name": "KSH-IT",
-  "short_name": "KSH-IT",
-  "start_url": "./",
+  "name": "IT Envanter Sistemi",
+  "short_name": "IT Envanter",
+  "description": "Kocaeli Şehir Hastanesi IT Envanter ve Arıza Takip Sistemi",
+  "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0a0b10",
+  "background_color": "#06070a",
   "theme_color": "#00d2ff",
   "icons": [
     {
-      "src": "/logo/favicons/web-app-manifest-192x192.png",
+      "src": "logo/favicon/web-app-manifest-192x192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/logo/favicons/web-app-manifest-512x512.png",
+      "src": "logo/favicon/web-app-manifest-512x512.png",
       "sizes": "512x512",
       "type": "image/png"
     }

@@ -6,6 +6,9 @@ from modules.bim_service import get_bim_session, BIM_URL
 import requests
 from bs4 import BeautifulSoup
 import urllib3
+import subprocess
+import re
+import os
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -13,27 +16,385 @@ printer_manager_bp = Blueprint('printer_manager', __name__)
 
 PRINTER_STATUS_PORTAL = "https://10.241.1.21:49631/printers/"
 
+class CUPSHelper:
+    BASE_URL = "https://10.241.1.21:49631"
+    AUTH_USER = 'root'
+    AUTH_PASS = '1234qqqQ'
+
+    @classmethod
+    def get_session(cls):
+        session = requests.Session()
+        session.auth = (cls.AUTH_USER, cls.AUTH_PASS)
+        session.verify = False
+        
+        # Gelişmiş SSL ayarları (Eski CUPS sunucuları için)
+        try:
+            from urllib3.util import ssl_
+            ctx = ssl_.create_urllib3_context()
+            ctx.load_default_certs()
+            ctx.check_hostname = False
+            ctx.verify_mode = 0
+            ctx.set_ciphers('DEFAULT@SECLEVEL=1')
+            
+            adapter = requests.adapters.HTTPAdapter()
+            adapter.pool_connections = 1
+            adapter.pool_maxsize = 1
+            session.mount("https://", adapter)
+        except Exception as e:
+            print(f"CUPS Session SSL Warning: {e}")
+            
+        return session
+
+    @classmethod
+    def _run_curl(cls, url, data=None, referer=None, multipart=False):
+        """curl.exe kullanarak istek atar (Headers, Cookie ve SID Senkronizasyonu)."""
+        cookie_file = "cups_cookies.txt"
+        cmd = [
+            'curl.exe', '-k', '-L', '-s',
+            '--anyauth', '--user', f"{cls.AUTH_USER}:{cls.AUTH_PASS}",
+            '-c', cookie_file, '-b', cookie_file,
+            '-H', f'Origin: {cls.BASE_URL}',
+            '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        ]
+        
+        # Multipart değilse standart form header'ı ekle
+        if not multipart:
+            cmd.extend(['-H', 'Content-Type: application/x-www-form-urlencoded'])
+            
+        if referer:
+            cmd.extend(['-H', f'Referer: {referer}'])
+            
+        if data:
+            for k, v in data.items():
+                if multipart:
+                    # Multipart/form-data formatı
+                    cmd.extend(['-F', f"{k}={v}"])
+                else:
+                    # Standart URL-encoded formatı
+                    cmd.extend(['--data-urlencode', f"{k}={v}"])
+                
+                if k == "org.cups.sid":
+                    cmd.extend(['-b', f"{k}={v}"])
+        
+        cmd.append(url)
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=20, encoding='utf-8', errors='ignore')
+            # print(f"DEBUG: CURL Output for {url}: {result.stdout[:200]}...") # Gerekirse açılabilir
+            return result.stdout or ""
+        except Exception as e:
+            print(f"DEBUG: CUPS Curl Exception: {e}")
+            return ""
+
+    @classmethod
+    def get_sid(cls):
+        """SID'i çerez dosyasıyla birlikte taze olarak alır."""
+        try:
+            if os.path.exists("cups_cookies.txt"):
+                try: os.remove("cups_cookies.txt")
+                except: pass
+                
+            output = cls._run_curl(f"{cls.BASE_URL}/admin/")
+            
+            # Daha kapsamlı regex (name/value sırası değişebilir)
+            match = re.search(r'name=["\']org\.cups\.sid["\'][^>]*value=["\']?([a-f0-9]+)["\']?', output, re.I)
+            if not match:
+                match = re.search(r'value=["\']?([a-f0-9]+)["\']?[^>]*name=["\']org\.cups\.sid["\']', output, re.I)
+            
+            if match:
+                sid = match.group(1)
+                print(f"DEBUG: Extracted SID: {sid}")
+                return sid
+            
+            return None
+        except Exception as e:
+            print(f"CUPS SID Extraction Error: {e}")
+            return None
+
+    @classmethod
+    def set_status(cls, printer_name, op):
+        """op: pause-printer, resume-printer, reject-jobs, accept-jobs"""
+        # HTML Analizi Sonucu: Bu CUPS sürümü 'stop-printer' ve 'start-printer' değerlerini bekliyor.
+        real_op = op
+        if op == 'pause-printer': real_op = 'stop-printer'
+        elif op == 'resume-printer': real_op = 'start-printer'
+        
+        print(f"DEBUG: CUPS set_status (CURL+HEADERS) for {printer_name} with op {real_op}")
+        try:
+            sid = cls.get_sid()
+            if not sid: 
+                return False, "CUPS SID alınamadı."
+            
+            url = f"{cls.BASE_URL}/printers/{printer_name}"
+            payload = {
+                "org.cups.sid": sid,
+                "OP": real_op,
+                "printer_name": printer_name
+            }
+            
+            # Buton label'ları (Maintenance menüsü simülasyonu)
+            if real_op == 'stop-printer': payload["Pause Printer"] = "Pause Printer"
+            elif real_op == 'start-printer': payload["Resume Printer"] = "Resume Printer"
+            elif real_op == 'reject-jobs': payload["Reject Jobs"] = "Reject Jobs"
+            elif real_op == 'accept-jobs': payload["Accept Jobs"] = "Accept Jobs"
+
+            output = cls._run_curl(url, data=payload, referer=url)
+            
+            # Başarı kontrolü
+            if "Error" in output or "Wrong" in output:
+                return False, "CUPS sunucusu hata döndürdü."
+            
+            return True, f"İşlem başarılı: {real_op}"
+        except Exception as e:
+            print(f"DEBUG: CUPS set_status Exception: {e}")
+            return False, str(e)
+
+    @classmethod
+    def get_printer_name_by_ip(cls, target_ip):
+        """CUPS sunucusunda IP adresine (Device URI) göre yazıcı adını bulur. (Kesin eşleşme)"""
+        print(f"DEBUG: Searching CUPS for printer with EXACT IP: {target_ip}")
+        try:
+            url = f"{cls.BASE_URL}/printers/"
+            output = cls._run_curl(url)
+            soup = BeautifulSoup(output, 'html.parser')
+            links = [a.get('href') for a in soup.find_all('a') if a.get('href', '').startswith('/printers/') and not a.get('href', '').endswith('.ppd')]
+            
+            for href in set(links):
+                p_name = href.replace('/printers/', '').strip()
+                p_url = f"{cls.BASE_URL}/printers/{p_name}"
+                p_output = cls._run_curl(p_url)
+                
+                # IP'yi URI veya Bağlantı satırında kesin olarak ara
+                # Örn: socket://10.241.40.1 (yanında rakam olmamalı)
+                pattern = rf'[:/]{re.escape(target_ip)}(?![0-9])'
+                if re.search(pattern, p_output):
+                    print(f"DEBUG: Found EXACT printer {p_name} for IP {target_ip}")
+                    return p_name
+            return None
+        except Exception as e:
+            print(f"DEBUG: get_printer_name_by_ip error: {e}")
+            return None
+
+    @classmethod
+    def get_all_locations(cls):
+        """CUPS sunucusundaki tüm yazıcıların Location bilgisini çeker."""
+        print("DEBUG: Fetching all CUPS printer locations...")
+        try:
+            url = f"{cls.BASE_URL}/printers/"
+            output = cls._run_curl(url)
+            soup = BeautifulSoup(output, 'html.parser')
+            
+            locations = {}
+            # CUPS printers tablosu
+            table = soup.find('table')
+            if not table: return {}
+            
+            rows = table.find_all('tr')[1:] # Header atla
+            for row in rows:
+                cols = row.find_all('td')
+                if len(cols) >= 2:
+                    # Link içinden ismi al
+                    a_tag = cols[0].find('a')
+                    if a_tag:
+                        name = a_tag.get_text(strip=True)
+                        location = cols[1].get_text(strip=True)
+                        locations[name] = location
+            return locations
+        except Exception as e:
+            print(f"DEBUG: get_all_locations error: {e}")
+            return {}
+
+    @classmethod
+    def update_db_cups_locations(cls):
+        """CUPS'taki location bilgilerini DB'ye aktarır."""
+        print("DEBUG: Starting Batch CUPS Location Sync...")
+        try:
+            cups_data = cls.get_all_locations()
+            if not cups_data:
+                print("DEBUG: CUPS'tan veri alınamadı.")
+                return False
+                
+            conn = get_db_connection()
+            for name, loc in cups_data.items():
+                # pr_no ile eşleşen yazıcıyı bul (Büyük/Küçük harf duyarsız)
+                conn.execute("UPDATE printers SET cups_location=? WHERE UPPER(pr_no) = UPPER(?)", (loc, name))
+            conn.commit()
+            conn.close()
+            print(f"DEBUG: Batch CUPS Location Sync completed for {len(cups_data)} printers.")
+            return True
+        except Exception as e:
+            print(f"DEBUG: update_db_cups_locations error: {e}")
+            return False
+
+    @classmethod
+    def update_location(cls, printer_name, new_location, target_ip=None, new_info=None):
+        """CUPS Dinamik Sihirbaz İzleyici (Wizard Follower). Başarı mesajı gelene kadar tüm adımları geçer."""
+        print(f"DEBUG: CUPS update_location START for {printer_name} (Target IP: {target_ip})")
+        try:
+            if target_ip:
+                actual_name = cls.get_printer_name_by_ip(target_ip)
+                if actual_name: 
+                    print(f"DEBUG: CUPS üzerindeki gerçek ad doğrulandı: {actual_name}")
+                    printer_name = actual_name
+
+            url = f"{cls.BASE_URL}/admin/"
+            # Yazıcı ismini temizle (başında/sonunda slash varsa kaldır)
+            clean_printer_name = printer_name.strip('/')
+            printer_url = f"{cls.BASE_URL}/printers/{clean_printer_name}"
+            
+            # Fresh start: Çerezleri temizle
+            cookie_file = "cups_cookies.txt"
+            if os.path.exists(cookie_file):
+                try: os.remove(cookie_file)
+                except: pass
+
+            current_res = ""
+            current_referer = cls.BASE_URL
+            active_sid = ""
+
+            for step in range(1, 11):
+                print(f"DEBUG: CUPS Step {step} İşleniyor...")
+                
+                if step == 1:
+                    # Yazıcı sayfasından başla
+                    print(f"DEBUG: Yazıcı sayfasına gidiliyor: {printer_url}")
+                    current_res = cls._run_curl(printer_url, referer=cls.BASE_URL)
+                    current_referer = printer_url
+                
+                soup = BeautifulSoup(current_res, 'html.parser')
+                page_title = soup.title.string.strip() if soup.title else "Bilinmiyor"
+                
+                # SID Yakala
+                sid_match = re.search(r'name=["\']org\.cups\.sid["\'][^>]*value=["\']?([a-f0-9]+)["\']?', current_res, re.I)
+                active_sid = sid_match.group(1) if sid_match else active_sid
+                
+                if step == 1 and ("Administration" in page_title or not soup.find('form')):
+                    print("DEBUG: Step 1: Modify Printer operasyonu tetikleniyor (POST)...")
+                    payload = { "org.cups.sid": active_sid, "OP": "modify-printer", "printer_name": clean_printer_name }
+                    current_res = cls._run_curl(f"{cls.BASE_URL}/admin/", data=payload, referer=printer_url)
+                    current_referer = f"{cls.BASE_URL}/admin/"
+                    soup = BeautifulSoup(current_res, 'html.parser')
+                    page_title = soup.title.string.strip() if soup.title else "Bilinmiyor"
+
+                print(f"DEBUG: Mevcut Sayfa: '{page_title}'")
+                if active_sid: print(f"DEBUG: Step {step} SID: {active_sid}")
+
+                # Başarı kontrolü
+                if any(x in current_res.lower() for x in ["successfully", "başarıyla", "güncellendi", "updated"]):
+                    print(f"DEBUG: CUPS Güncelleme {step}. adımda TAMAMLANDI.")
+                    return True, "CUPS Mahal başarıyla güncellendi."
+
+                # Formu bul (Sayfadaki herhangi bir /admin formunu yakala)
+                form = soup.find('form', action=re.compile(r'/admin'))
+                
+                if not form:
+                    # Alternatif: Sayfada hiç form yoksa ama 'Modify Printer' linki varsa
+                    modify_link = soup.find('a', href=re.compile(r'modify-printer'))
+                    if modify_link:
+                        print("DEBUG: Modify link bulundu, link üzerinden gidiliyor...")
+                        link_url = cls.BASE_URL + modify_link['href'] if modify_link['href'].startswith('/') else f"{cls.BASE_URL}/admin/{modify_link['href']}"
+                        current_res = cls._run_curl(link_url, referer=current_referer)
+                        current_referer = link_url
+                        continue
+
+                    if step > 1: 
+                        print("DEBUG: Form bulunamadı, işlem bitmiş olabilir.")
+                        return True, "İşlem tamamlandı (Form kalmadı)."
+                    return False, f"CUPS Formu bulunamadı. Sayfa: {page_title}"
+
+                # Payload hazırla (Sayfadaki TÜM inputları, hidden dahil topla)
+                payload = {}
+                for inp in form.find_all(['input', 'select', 'textarea']):
+                    name = inp.get('name')
+                    if not name: continue
+                    
+                    # Varsayılan değeri belirle
+                    val = ''
+                    if inp.name == 'select':
+                        opt = inp.find('option', selected=True) or inp.find('option')
+                        val = opt.get('value', '') if opt else ''
+                    elif inp.name == 'textarea':
+                        val = inp.string or ''
+                    else:
+                        val = inp.get('value', '')
+
+                    # Özel alanları güncelle
+                    if name == 'PRINTER_LOCATION':
+                        val = new_location
+                        print(f"DEBUG: Location güncellendi: {val}")
+                    elif name == 'PRINTER_IS_SHARED':
+                        val = "0"
+                    
+                    payload[name] = val
+
+                # SID'yi zorunlu ekle
+                payload["org.cups.sid"] = active_sid
+                
+                # Adım 1 Özelleştirmesi
+                if step == 1 and "Printers" in page_title:
+                    payload["OP"] = "modify-printer"
+                    payload["printer_name"] = clean_printer_name
+
+                # Buton belirle (Continue veya Modify Printer)
+                submits = form.find_all('input', {'type': 'submit'})
+                button_sent = False
+                for p_val in ["Continue", "Modify Printer"]:
+                    for btn in submits:
+                        if p_val.lower() in (btn.get('value') or '').lower():
+                            if btn.get('name'): payload[btn['name']] = btn.get('value')
+                            else: payload[btn.get('value').upper().replace(' ', '_')] = btn.get('value')
+                            button_sent = True; break
+                    if button_sent: break
+                
+                if not button_sent and submits:
+                    btn = submits[0]
+                    payload[btn.get('name') or 'submit'] = btn.get('value', '')
+
+                # POST isteğini gönder
+                is_multipart = (form.get('enctype') == 'multipart/form-data')
+                print(f"DEBUG: Step {step} POST gönderiliyor... Action: {form.get('action')}")
+                
+                # ÖZEL DURUM: Buton seçimi
+                # Kullanıcı uyarısı: Mahal girildikten sonra 'Continue' denmeli, 'Modify Printer' değil.
+                if step < 4:
+                    if "Continue" in payload: 
+                        payload["Continue"] = "Continue"
+                        print("DEBUG: 'Continue' butonu seçildi.")
+                else:
+                    if "Modify Printer" in payload:
+                        payload["Modify Printer"] = "Modify Printer"
+                        print("DEBUG: 'Modify Printer' (Son Adım) seçildi.")
+
+                # Action içindeki parametreleri de payload'a ekle (Gerekliyse)
+                action_url = form.get('action')
+                full_post_url = cls.BASE_URL + action_url if action_url.startswith('/') else f"{cls.BASE_URL}/admin/{action_url}"
+                
+                res = cls._run_curl(full_post_url, data=payload, referer=current_referer, multipart=is_multipart)
+                
+                # Sayfa ilerleme kontrolü
+                new_soup = BeautifulSoup(res, 'html.parser')
+                new_title = new_soup.title.string.strip() if new_soup.title else "Bilinmiyor"
+                if new_title == page_title and step > 1:
+                    print("DEBUG: Sayfa ilerlemedi. Form verisi reddedilmiş olabilir.")
+
+                current_res = res
+                current_referer = full_post_url
+
+            return True, "CUPS İşlemleri bitti (Adım sınırı doldu)."
+        except Exception as e:
+            print(f"DEBUG: CUPS update_location ERROR: {e}")
+            return False, str(e)
+        except Exception as e:
+            print(f"DEBUG: CUPS update_location ERROR: {e}")
+            return False, str(e)
+
 def get_cups_printers():
     """CUPS sunucusundaki tüm yazıcı isimlerini (PR NO) çeker."""
     try:
-        # Gelişmiş SSL ayarları (Eski CUPS sunucuları için TLSv1.2 zorlama ve şifreleme desteği)
-        session = requests.Session()
-        from urllib3.util import ssl_
-        ctx = ssl_.create_urllib3_context()
-        ctx.load_default_certs()
-        ctx.check_hostname = False
-        ctx.verify_mode = 0 # SSL verify off
-        # TLSv1.2 ve altı için daha toleranslı olması için ciphers ayarı
-        ctx.set_ciphers('DEFAULT@SECLEVEL=1')
-        
-        adapter = requests.adapters.HTTPAdapter()
-        adapter.pool_connections = 1
-        adapter.pool_maxsize = 1
-        session.mount("https://", adapter)
-        
+        session = CUPSHelper.get_session()
         # SSL Context'i session ile kullanıyoruz
         try:
-            res = session.get(PRINTER_STATUS_PORTAL, verify=False, timeout=5)
+            res = session.get(PRINTER_STATUS_PORTAL, timeout=5)
             if res.status_code != 200: return []
             
             soup = BeautifulSoup(res.text, 'html.parser')
@@ -143,21 +504,22 @@ def update_printer():
 
         # 3. Güncelleme yap
         conn.execute('''UPDATE printers SET 
-            pr_no=?, model=?, ip=?, seri=?, mac=?, status=?
+            pr_no=?, model=?, ip=?, seri=?, mac=?, status=?, mahal=?
             WHERE id=?''', (
             data.get('pr_no'), data.get('model'), data.get('ip'), 
-            data.get('seri'), data.get('mac'), data.get('status'), id
+            data.get('seri'), data.get('mac'), data.get('status'), data.get('mahal'), id
         ))
 
         # 3. Değişiklikleri logla
-        tracked_fields = ['pr_no', 'model', 'ip', 'seri', 'mac', 'status']
+        tracked_fields = ['pr_no', 'model', 'ip', 'seri', 'mac', 'status', 'mahal']
         for field in tracked_fields:
             old_val = str(old_record.get(field, '') or '')
             new_val = str(data.get(field, '') or '')
             
             label_map = {
                 'pr_no': 'PR Numarası', 'model': 'Model', 'ip': 'IP Adresi',
-                'seri': 'Seri No', 'mac': 'MAC Adresi', 'status': 'Durum'
+                'seri': 'Seri No', 'mac': 'MAC Adresi', 'status': 'Durum',
+                'mahal': 'Mahal / Konum'
             }
             label = label_map.get(field, field)
             
@@ -342,7 +704,7 @@ def batch_action():
             pc = conn.execute("SELECT * FROM inventory WHERE id=?", (pc_id,)).fetchone()
             if not pc: continue
             
-            # 1. DB GÜNCELLEME
+            # 1. DB GÜNCELLEME (BİM başarılı olursa commit edeceğiz)
             current_raw = (pc['bagli_yazicilar'] or "").strip()
             pr_list = [x.strip() for x in current_raw.split(',') if x.strip()]
             
@@ -352,57 +714,110 @@ def batch_action():
                     pr_list.append(pr_no)
                     db_updated = True
             elif action == 'remove':
-                if pr_no in pr_list:
-                    pr_list.remove(pr_no)
+                original_len = len(pr_list)
+                # Kısmi eşleşme kontrolü (Örn: 'PR-001 (Sahada)' kaydını 'PR-001' ile silmek için)
+                # Regex: Başlangıçta pr_no olacak, sonra ya boşluk, ya parantez ya da satır sonu gelecek.
+                pattern = re.compile(rf'^{re.escape(pr_no)}(\s|\(|$)', re.IGNORECASE)
+                pr_list = [p for p in pr_list if not pattern.match(p)]
+                
+                if len(pr_list) < original_len:
                     db_updated = True
             
-            if db_updated:
+            # 2. BIM KOMUTU GÖNDERME
+            bim_success = True
+            if session_token and bim_func and command:
+                if not pc['ip']:
+                    bim_errors.append(f"PC-{pc['pc_no']}: IP Eksik")
+                    bim_success = False
+                else:
+                    try:
+                        payload = {
+                            "Functions": bim_func,
+                            "UserName": bim_user,
+                            "IPAddress": pc['ip'],
+                            "PrinterName": command if bim_func in ['AddPrinter', 'RemovePrinter'] else None,
+                            "Commands": command if bim_func not in ['AddPrinter', 'RemovePrinter'] else None
+                        }
+                        payload = {k: v for k, v in payload.items() if v is not None}
+                        headers = {"IPASession": session_token}
+                        
+                        resp = requests.post(BIM_URL, data=payload, headers=headers, timeout=15)
+                        if resp.status_code != 200 or "Error" in resp.text:
+                            err_detail = "BIM Reddedildi"
+                            if "Error" in resp.text:
+                                # Hata mesajını çekmeye çalış
+                                err_detail = resp.text.split(':')[-1].strip() if ':' in resp.text else resp.text[:30]
+                            bim_errors.append(f"PC-{pc['pc_no']}: {err_detail}")
+                            bim_success = False
+                    except Exception as e:
+                        bim_errors.append(f"PC-{pc['pc_no']}: Bağlantı Hatası")
+                        bim_success = False
+
+            # Eğer BIM komutu gerekmiyorsa veya başarılıysa DB'yi güncelle
+            if bim_success and db_updated:
                 new_val = ", ".join(pr_list)
                 conn.execute("UPDATE inventory SET bagli_yazicilar=? WHERE id=?", (new_val, pc_id))
                 client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
                 log_change(conn, 'inventory', pc_id, f"PC-{pc['pc_no']}", f'Bağlı Yazıcılar (Toplu {action.capitalize()})', current_raw, new_val, user_name, user_name, client_ip=client_ip)
                 updated_count += 1
 
-            # 2. BIM KOMUTU GÖNDERME
-            if session_token and pc['ip'] and bim_func and command:
-                try:
-                    payload = {
-                        "Functions": bim_func,
-                        "UserName": bim_user,
-                        "IPAddress": pc['ip'],
-                        "PrinterName": command if bim_func in ['AddPrinter', 'RemovePrinter'] else None,
-                        "Commands": command if bim_func not in ['AddPrinter', 'RemovePrinter'] else None
-                    }
-                    # None olanları temizle
-                    payload = {k: v for k, v in payload.items() if v is not None}
-                    
-                    headers = {"IPASession": session_token}
-                    resp = requests.post(BIM_URL, data=payload, headers=headers, timeout=15)
-                    
-                    if resp.status_code != 200 or "Error" in resp.text:
-                        bim_errors.append(f"PC-{pc['pc_no']} ({pc['ip']}): BIM Hatası")
-                except Exception as e:
-                    bim_errors.append(f"PC-{pc['pc_no']} ({pc['ip']}): Bağlantı Hatası")
-
         conn.commit()
         conn.close()
         
-        # Excel yedekleme (opsiyonel)
+        # Excel yedekleme
         try:
             from modules.inventory_manager import _backup_to_excel
             _backup_to_excel(get_db_connection())
         except: pass
 
-        if bim_errors and not session_token:
-             return jsonify({"success": True, "count": updated_count, "message": "DB güncellendi ancak BIM girişi yapılamadı."})
-        
         if bim_errors:
+            error_summary = f"{len(bim_errors)} cihazda sorun oluştu:\n" + "\n".join(bim_errors[:10])
+            if len(bim_errors) > 10: error_summary += "\n..."
             return jsonify({
-                "success": False, 
-                "error": f"Bazı cihazlarda BIM hatası oluştu: {', '.join(bim_errors[:3])}...",
+                "success": updated_count > 0, 
+                "error": error_summary,
                 "count": updated_count
             })
 
         return jsonify({"success": True, "count": updated_count, "message": f"{updated_count} cihazda işlem başarıyla tamamlandı."})
     except Exception as e:
+        if 'conn' in locals(): conn.close()
         return jsonify({"error": str(e)}), 500
+
+@printer_manager_bp.route('/cups/update_mahal', methods=['POST'])
+@require_editor
+def cups_update_mahal():
+    data = request.json
+    pr_no = data.get('pr_no')
+    mahal = data.get('mahal')
+    if not pr_no or not mahal:
+        return jsonify({"error": "Parametreler eksik."}), 400
+    
+    # Yazıcının IP ve Model bilgisini veritabanından bulalım
+    printer_ip = None
+    printer_model = None
+    try:
+        res = query_db("SELECT ip, model FROM printers WHERE pr_no=?", (pr_no,), one=True)
+        if res:
+            printer_ip = res['ip']
+            printer_model = res['model']
+    except: pass
+
+    success, msg = CUPSHelper.update_location(pr_no, mahal, target_ip=printer_ip, new_info=printer_model)
+    if success:
+        return jsonify({"success": True, "message": msg})
+    return jsonify({"error": msg}), 500
+
+@printer_manager_bp.route('/cups/set_status', methods=['POST'])
+@require_editor
+def cups_set_status():
+    data = request.json
+    pr_no = data.get('pr_no')
+    op = data.get('op') # pause-printer, resume-printer, reject-jobs, accept-jobs
+    if not pr_no or not op:
+        return jsonify({"error": "Parametreler eksik."}), 400
+    
+    success, msg = CUPSHelper.set_status(pr_no, op)
+    if success:
+        return jsonify({"success": True, "message": msg})
+    return jsonify({"error": msg}), 500

@@ -33,7 +33,7 @@ def get_brother_printer_status(ip):
     
     for url in urls:
         try:
-            response = requests.get(url, timeout=3, verify=False, headers=headers)
+            response = requests.get(url, timeout=5, verify=False, headers=headers)
             if response.ok:
                 html_content = response.text
                 soup = BeautifulSoup(html_content, 'html.parser')

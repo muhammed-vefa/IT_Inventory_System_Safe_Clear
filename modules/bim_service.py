@@ -53,7 +53,7 @@ def get_client_ip():
     return jsonify({"ip": ip})
 
 @bim_service_bp.route('/run_command', methods=['POST'])
-@require_admin
+@require_auth
 def run_command():
     """BIM sistemi üzerinden belirtilen IP'ye komut gönderir."""
     try:

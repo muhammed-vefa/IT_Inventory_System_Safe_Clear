@@ -2,7 +2,17 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#06070a">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="logo/favicon/web-app-manifest-192x192.png">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch(err => console.log('SW Registration failed', err));
+            });
+        }
+    </script>
     <title>KEYDATA Kocaeli - Sistem Yönetim Paneli</title>
 	<meta name="description" content="KEYDATA Kocaeli - Sistem Yönetim Paneli">	
 	<meta name="apple-mobile-web-app-title" content="KSH-IT">
@@ -20,7 +30,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=5.2">
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
@@ -38,8 +48,8 @@
             if(!u || !p) { alert('Lütfen kullanıcı adı ve şifre girin.'); return; }
             
             // Try to use the full app if loaded, otherwise minimal fallback
-            if(window.app && typeof window.app._handleLoginInternal === 'function') {
-                window.app._handleLoginInternal();
+            if(window.app && typeof window.app.handleLoginButtonClick === 'function') {
+                window.app.handleLoginButtonClick();
             } else {
                 // Critical Fallback (Directly calling API or Hardcoded) - Using XHR for IE11 support
                 var xhr = new XMLHttpRequest();
@@ -159,7 +169,7 @@
                 <a href="#" class="nav-link" data-view="dashboard">Dashboard</a>
                 <a href="#" class="nav-link" data-view="inventory">Envanter</a>
                 <a href="#" class="nav-link" data-view="general-notes">Bilgi Bankası</a>
-                <a href="#" class="nav-link" data-view="magicinfo">MagicInfo</a>
+
                 <a href="#" class="nav-link" data-view="areas">Ortak Alanlar</a>
                 <a href="#" class="nav-link" data-view="printers">Yazıcılar</a>
                 <a href="#" class="nav-link" data-view="depot">Depo</a>
@@ -177,9 +187,7 @@
                         <a href="https://hbys.kocaelish.com/" target="_blank"><i class="fas fa-hospital"></i> HBYS</a>
                         <a href="https://keyosmgt.kocaelish.com/login" target="_blank"><i class="fas fa-shield-halved"></i> KEYOS</a>
                         <a href="http://print01.kocaelish.com:49631/printers/" target="_blank"><i class="fas fa-print"></i> CUPS</a>
-                        <a href="http://minfo-01.kocaelish.com:7001/MagicInfo/login.htm?cmd=INIT#" target="_blank"><i class="fas fa-display"></i> MAGIC INFO 1</a>
-                        <a href="http://minfo-02.kocaelish.com:7001/MagicInfo/login.htm?cmd=INIT" target="_blank"><i class="fas fa-display"></i> MAGIC INFO 2</a>
-                        <a href="http://minfo-03.kocaelish.com:7001/MagicInfo/login.htm?cmd=INIT" target="_blank"><i class="fas fa-display"></i> MAGIC INFO 3</a>
+
                         <a href="https://desktopcentral.kocaelish.com:8383/webclient#/uems/home/summary" target="_blank"><i class="fas fa-desktop"></i> DESKTOP</a>
                         <a href="https://ipa-nd01.kocaelish.local/ipa/ui/#/e/user/search" target="_blank"><i class="fas fa-user-lock"></i> İPA</a>
                         <a href="https://lms.kocaelish.com/Login" target="_blank"><i class="fas fa-graduation-cap"></i> LMS</a>
@@ -317,7 +325,10 @@
                     <button class="btn-chip" data-category="SK" onclick="app.setInvCategory('SK')">SIRAMATİK & KİOSK</button>
                     <button class="btn-chip" data-category="TABLET" onclick="app.setInvCategory('TABLET')">TABLET</button>
                 </div>
-                <input type="text" id="main-search" class="search-bar" style="max-width: 400px;" placeholder="Mahal, IP, Seri No veya PC No..." oninput="app.searchInventory()">
+                <div class="search-wrapper" style="max-width: 400px;">
+                    <input type="text" id="main-search" class="search-bar" placeholder="Mahal, IP, Seri No veya PC No..." oninput="app.searchInventory()">
+                    <i class="fas fa-times clear-search" onclick="app.clearSearch('main-search')"></i>
+                </div>
             </div>
             <div class="flex-between mb-3">
                 <div class="filter-chips" id="inventory-filters" style="margin-bottom: 0;">
@@ -383,7 +394,10 @@
                     </button>
                 </div>
                 <div class="flex-row gap-2" style="align-items: center;">
-                    <input type="text" id="kb-search" class="search-bar" style="max-width: 300px;" placeholder="Bilgi veya başlık ara..." oninput="app.searchKB()">
+                    <div class="search-wrapper" style="max-width: 300px;">
+                        <input type="text" id="kb-search" class="search-bar" placeholder="Bilgi veya başlık ara..." oninput="app.searchKB()">
+                        <i class="fas fa-times clear-search" onclick="app.clearSearch('kb-search')"></i>
+                    </div>
                     <button class="btn btn-accent" onclick="app.openKBModal()">
                         <i class="fas fa-plus"></i> Yeni Bilgi Ekle
                     </button>
@@ -400,37 +414,7 @@
             </div>
         </section>
 
-        <!-- ═══════════════ MAGICINFO VIEW ═══════════════ -->
-        <section id="view-magicinfo" class="view fade-in" style="display: none;">
-            <div class="flex-between mb-2" style="align-items: center;">
-                <div class="flex-row gap-2" style="align-items: center;">
-                    <div class="filter-chips" id="magicinfo-filters" style="margin-bottom: 0;">
-                        <button class="btn-chip active" data-server="ALL" onclick="app.filterMagicInfo('ALL')">Tümü</button>
-                        <button class="btn-chip" data-server="minfo-01" onclick="app.filterMagicInfo('minfo-01')">Servis 01</button>
-                        <button class="btn-chip" data-server="minfo-02" onclick="app.filterMagicInfo('minfo-02')">Servis 02</button>
-                        <button class="btn-chip" data-server="minfo-03" onclick="app.filterMagicInfo('minfo-03')">Servis 03</button>
-                    </div>
-                    <label class="check-container" style="font-size: 0.85rem; color: #fff; margin: 0; padding-left: 25px;">
-                        Canlı Ekran Resmi Görüntüle
-                        <input type="checkbox" id="magicinfo-screenshot-toggle" onchange="app.renderMagicInfo()">
-                        <span class="checkmark"></span>
-                    </label>
-                </div>
-                <input type="text" id="magicinfo-search" class="search-bar" placeholder="IP, MAC veya Aygıt Adı ara..." oninput="app.searchMagicInfo()" style="flex:1; max-width: 400px;">
-            </div>
-            
-            <div class="filter-chips mb-4" id="magicinfo-block-filters">
-                <button class="btn-chip active" data-block="ALL" onclick="app.filterMagicInfoByBlock('ALL')">TÜMÜ</button>
-                <button class="btn-chip" data-block="A" onclick="app.filterMagicInfoByBlock('A')">A-BLOK</button>
-                <button class="btn-chip" data-block="B" onclick="app.filterMagicInfoByBlock('B')">B-BLOK</button>
-                <button class="btn-chip" data-block="C" onclick="app.filterMagicInfoByBlock('C')">C-BLOK</button>
-                <button class="btn-chip" data-block="D" onclick="app.filterMagicInfoByBlock('D')">D-BLOK</button>
-            </div>
-            
-            <div class="grid" id="magicinfo-grid">
-                <!-- MagicInfo devices will be injected here -->
-            </div>
-        </section>
+
 
         <!-- ═══════════════ AREAS VIEW ═══════════════ -->
         <section id="view-areas" class="view fade-in" style="display: none;">
@@ -440,7 +424,10 @@
                     <p style="color: var(--text-secondary); font-size: 0.85rem;">Birimler için tanımlanmış ağ sürücüleri ve bağlantı komutları.</p>
                 </div>
                 <div class="flex-row gap-2" style="align-items: center;">
-                    <input type="text" id="area-search" class="search-bar" style="max-width: 300px;" placeholder="Birim adı veya ağ yolu..." oninput="app.searchAreas()">
+                <div class="search-wrapper" style="max-width: 300px;">
+                    <input type="text" id="area-search" class="search-bar" placeholder="Birim adı veya ağ yolu..." oninput="app.searchAreas()">
+                    <i class="fas fa-times clear-search" onclick="app.clearSearch('area-search')"></i>
+                </div>
                     <button class="btn btn-accent" onclick="app.openAreaModal(null)">
                         <i class="fas fa-plus"></i> Yeni Ortak Alan
                     </button>
@@ -456,15 +443,18 @@
             <div class="flex-between mb-4" style="align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div class="filter-chips" id="printer-filters" style="margin-bottom: 0;">
                     <button class="btn-chip active" data-ptype="ALL" onclick="app.filterPrinters('ALL')">Tümü</button>
-                    <button class="btn-chip" data-ptype="5200" onclick="app.filterPrinters('5200')">52</button>
-                    <button class="btn-chip" data-ptype="6900" onclick="app.filterPrinters('6900')">069 00</button>
-                    <button class="btn-chip" data-ptype="8690" onclick="app.filterPrinters('8690')">86 90</button>
+                    <button class="btn-chip" data-ptype="5200" onclick="app.filterPrinters('5200')">5200</button>
+                    <button class="btn-chip" data-ptype="6900" onclick="app.filterPrinters('6900')">6900</button>
+                    <button class="btn-chip" data-ptype="8690" onclick="app.filterPrinters('8690')">8690</button>
                     <button class="btn-chip" data-ptype="BY" onclick="app.filterPrinters('BY')">Barkod Yazıcı</button>
                     <button class="btn-chip" data-ptype="BO" onclick="app.filterPrinters('BO')">Barkod Okuyucu</button>
                     <button class="btn-chip" data-ptype="TR" onclick="app.filterPrinters('TR')">Tarayıcı</button>
                 </div>
                 <div class="flex-row gap-2" style="align-items: center;">
-                    <input type="text" id="printer-search" class="search-bar" style="max-width: 300px;" placeholder="Hızlı ara..." oninput="app.searchPrinters()">
+                <div class="search-wrapper" style="max-width: 300px;">
+                    <input type="text" id="printer-search" class="search-bar" placeholder="Hızlı ara..." oninput="app.searchPrinters()">
+                    <i class="fas fa-times clear-search" onclick="app.clearSearch('printer-search')"></i>
+                </div>
                     <button class="btn btn-secondary" onclick="app.navigateTo('service')" title="Servis İşlemleri ve Geçmişi">
                         <i class="fas fa-tools"></i> Servis İşlemleri
                     </button>
@@ -482,16 +472,20 @@
             <div class="flex-between mb-4" style="align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div class="filter-chips" id="depot-filters" style="margin-bottom: 0;">
                     <button class="btn-chip active" data-dcat="ALL" onclick="app.filterDepot('ALL')">Tümü</button>
-                    <button class="btn-chip" data-dcat="ALERTS" onclick="app.filterDepot('ALERTS')" style="border-color: var(--status-fault); color: var(--status-fault);">
+                    <button class="btn-chip" data-dcat="ALERTS" onclick="app.filterDepot('ALERTS')" style="border-color: #ffb400; color: #ffb400;">
                         <i class="fas fa-triangle-exclamation"></i> Uyarılar
                     </button>
-                    <button class="btn-chip" data-dcat="Sarf Malzeme" onclick="app.filterDepot('Sarf Malzeme')">Sarf Malzeme</button>
-                    <button class="btn-chip" data-dcat="Yedek Parça" onclick="app.filterDepot('Yedek Parça')">Yedek Parça</button>
-                    <button class="btn-chip" data-dcat="Çevre Birimi" onclick="app.filterDepot('Çevre Birimi')">Çevre Birimi</button>
-                    <button class="btn-chip" data-dcat="Kablo" onclick="app.filterDepot('Kablo')">Kablo</button>
+                    <button class="btn-chip" data-dcat="AĞ VE ALTYAPI" onclick="app.filterDepot('AĞ VE ALTYAPI')">AĞ VE ALTYAPI</button>
+                    <button class="btn-chip" data-dcat="DONANIM" onclick="app.filterDepot('DONANIM')">DONANIM</button>
+                    <button class="btn-chip" data-dcat="AKSESUAR" onclick="app.filterDepot('AKSESUAR')">AKSESUAR</button>
+                    <button class="btn-chip" data-dcat="SARF MALZEME" onclick="app.filterDepot('SARF MALZEME')">SARF MALZEME</button>
+                    <button class="btn-chip" data-dcat="OFİS / GIDA" onclick="app.filterDepot('OFİS / GIDA')">OFİS / GIDA</button>
                 </div>
                 <div class="flex-row gap-2" style="align-items: center;">
-                    <input type="text" id="depot-search" class="search-bar" style="max-width: 300px;" placeholder="Ürün veya kategori ara..." oninput="app.searchDepot()">
+                <div class="search-wrapper" style="max-width: 300px;">
+                    <input type="text" id="depot-search" class="search-bar" placeholder="Ürün veya kategori ara..." oninput="app.searchDepot()">
+                    <i class="fas fa-times clear-search" onclick="app.clearSearch('depot-search')"></i>
+                </div>
                     <button class="btn btn-secondary" onclick="app.generateDepotWeeklyReport()" title="Haftalık Rapor Çıkar (PDF)">
                         <i class="fas fa-file-pdf"></i> Haftalık Rapor
                     </button>
@@ -926,7 +920,7 @@
                     <i class="fas fa-user-plus"></i> Yeni Kullanıcı
                 </button>
             </div>
-            <div class="card">
+            <div class="card" style="overflow-x: auto;">
                 <table class="user-table">
                     <thead>
                         <tr>
@@ -976,10 +970,11 @@
                 <div class="form-row form-row-2">
                     <div class="form-group">
                         <label>BİLGİ TÜRÜ / KATEGORİ</label>
-                        <select id="kb-type" class="search-bar">
+                        <select id="kb-type" class="search-bar" onchange="app.handleKBTypeChange(this.value)">
                             <option value="kodlar">Kodlar / Komutlar / Notlar</option>
                             <option value="kapanis">Kapanış Açıklamaları (BT Tab)</option>
                             <option value="sorun-giderme">Sorun Giderme Notları</option>
+                            <option value="indir" class="admin-only">Gerekli İndirmeler (Yalnızca Admin)</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -993,7 +988,7 @@
                 </div>
                 
                 <div class="form-group mb-3">
-                    <label>RESİM (Opsiyonel)</label>
+                    <label id="kb-file-label">RESİM (Opsiyonel)</label>
                     <input type="file" id="kb-image" class="search-bar" accept="image/*">
                 </div>
 
@@ -1311,11 +1306,11 @@
                     <label>ÜRÜN KATEGORİSİ</label>
                     <select id="depot-category" class="search-bar" onchange="app.handleDepotCategoryChange(this.value)">
                         <option value="">Kategori Seçin</option>
-                        <option value="Sarf Malzeme">Sarf Malzeme</option>
-                        <option value="Yedek Parça">Yedek Parça</option>
-                        <option value="Çevre Birimi">Çevre Birimi</option>
-                        <option value="Kablo">Kablo</option>
-                        <option value="Gıda">Gıda</option>
+                        <option value="AĞ VE ALTYAPI">AĞ VE ALTYAPI</option>
+                        <option value="DONANIM">DONANIM</option>
+                        <option value="AKSESUAR">AKSESUAR</option>
+                        <option value="SARF MALZEME">SARF MALZEME</option>
+                        <option value="OFİS / GIDA">OFİS / GIDA</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -1358,6 +1353,7 @@
                     <input type="text" id="depot-desc" class="search-bar" placeholder="Açıklama (opsiyonel)">
                 </div>
                 <div class="flex-row gap-2 mt-3">
+                    <button id="btn-depot-delete" class="btn btn-danger" style="flex: 0.5; display: none;" onclick="app.deleteDepotItemFromModal()">Sil</button>
                     <button class="btn btn-secondary" style="flex: 1;" onclick="document.getElementById('depot-add-modal').style.display='none'">İptal</button>
                     <button class="btn btn-accent" style="flex: 1;" onclick="app.saveDepotItem()">Kaydet</button>
                 </div>
@@ -1370,7 +1366,7 @@
         <div class="card" style="max-width: 400px; width: 90%;">
             <h3 class="mb-3" id="depot-trans-title">Stok İşlemi</h3>
             <div class="flex-column gap-2">
-                <div class="flex-row gap-2">
+                <div class="flex-row gap-2" id="trans-type-toggle-row">
                     <button class="btn-chip active" id="trans-type-in" onclick="app.setTransType('in')"><i class="fas fa-arrow-down"></i> Giriş</button>
                     <button class="btn-chip" id="trans-type-out" onclick="app.setTransType('out')"><i class="fas fa-arrow-up"></i> Çıkış</button>
                 </div>
@@ -1573,7 +1569,7 @@
         </div>
     </div>
 
-    <script src="frontend/UI_controller.js?v=3.2"></script>
+    <script src="frontend/UI_controller.js?v=5.4"></script>
 
     <datalist id="pr-seri-datalist"></datalist>
     <datalist id="bo-seri-datalist"></datalist>
@@ -1601,41 +1597,41 @@
                     </div>
                 </div>
 
-                <div style="background:rgba(255,255,255,0.02); padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.05);">
+                <div style="background:rgba(255,255,255,0.02); padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.05); margin-top: 10px;">
+                    <h4 style="font-size:0.85rem; color:#ffcc00; margin-bottom:8px;"><i class="fas fa-key"></i> Sistem Giriş Şifresi</h4>
+                    <div class="form-group mb-1">
+                        <label style="font-size: 0.75rem;">Mevcut Şifre (Doğrulama İçin)</label>
+                        <input type="password" id="profile-current-pass" class="search-bar" style="padding: 6px 12px; height: 35px;" placeholder="Eski Şifreniz">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size: 0.75rem;">Yeni Şifre</label>
+                        <input type="password" id="profile-new-pass" class="search-bar" style="padding: 6px 12px; height: 35px;" placeholder="Yeni Şifreniz (Değiştirmek istemiyorsanız boş bırakın)">
+                    </div>
+                </div>
+
+                <div style="background:rgba(255,255,255,0.02); padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.05); margin-top: 10px;">
                     <h4 style="font-size:0.85rem; color:#00ff88; margin-bottom:8px;"><i class="fas fa-terminal"></i> BİM Giriş Bilgileri</h4>
                     <div class="form-group mb-1">
                         <label style="font-size: 0.75rem;">BİM Kullanıcı Adı</label>
-                        <input type="text" id="profile-bim-user" class="search-bar" style="padding: 6px 12px; height: 35px;" placeholder="bimUser">
+                        <input type="text" id="profile-bim-user" class="search-bar" style="padding: 6px 12px; height: 35px;" placeholder="muhammed.arabaci">
                     </div>
                     <div class="form-group">
                         <label style="font-size: 0.75rem;">BİM Şifre</label>
                         <input type="password" id="profile-bim-pass" class="search-bar" style="padding: 6px 12px; height: 35px;" placeholder="********">
                     </div>
                 </div>
-                
-                <div style="background:rgba(255,255,255,0.02); padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.05);">
-                    <h4 style="font-size:0.85rem; color:#ffb400; margin-bottom:8px;"><i class="fas fa-display"></i> MagicInfo Giriş Bilgileri</h4>
-                    <div class="form-group mb-1">
-                        <label style="font-size: 0.75rem;">MagicInfo Kullanıcı Adı</label>
-                        <input type="text" id="profile-magicinfo-user" class="search-bar" style="padding: 6px 12px; height: 35px;" placeholder="userName">
-                    </div>
-                    <div class="form-group mb-2">
-                        <label style="font-size: 0.75rem;">MagicInfo Şifre</label>
-                        <input type="password" id="profile-magicinfo-pass" class="search-bar" style="padding: 6px 12px; height: 35px;" placeholder="********">
-                    </div>
-                    
-                    <div style="border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px;">
-                        <h4 style="font-size:0.85rem; color:#00d2ff; margin-bottom:8px;"><i class="fas fa-clock"></i> Oturum Süresi (Dakika)</h4>
-                        <select id="profile-session-timeout" class="search-bar" style="height: 35px; padding: 0 10px; background: rgba(0,0,0,0.2);">
-                            <option value="5" selected>5 Dakika (Güvenli)</option>
-                            <option value="15">15 Dakika</option>
-                            <option value="30">30 Dakika</option>
-                            <option value="60">1 Saat</option>
-                            <option value="240">4 Saat</option>
-                            <option value="480">8 Saat (Tüm Gün)</option>
-                            <option value="0">Sınırsız (Çıkış Yapana Kadar)</option>
-                        </select>
-                    </div>
+
+                <div style="background:rgba(255,255,255,0.02); padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.05); margin-top: 10px;">
+                    <h4 style="font-size:0.85rem; color:#00d2ff; margin-bottom:8px;"><i class="fas fa-clock"></i> Oturum Süresi (Dakika)</h4>
+                    <select id="profile-session-timeout" class="search-bar" style="height: 35px; padding: 0 10px; background: rgba(0,0,0,0.2);">
+                        <option value="5" selected>5 Dakika (Güvenli)</option>
+                        <option value="15">15 Dakika</option>
+                        <option value="30">30 Dakika</option>
+                        <option value="60">1 Saat</option>
+                        <option value="240">4 Saat</option>
+                        <option value="480">8 Saat (Tüm Gün)</option>
+                        <option value="0">Sınırsız (Çıkış Yapana Kadar)</option>
+                    </select>
                 </div>
 
                 <div class="flex-row gap-2 mt-2">
@@ -1645,43 +1641,29 @@
             </div>
         </div>
     </div>
-    <!-- MAGICINFO EDIT MODAL -->
-    <div class="modal-overlay" id="magicinfo-edit-modal" style="display: none;">
-        <div class="card" style="max-width: 450px; width: 90%;">
-            <div class="flex-between mb-3">
-                <h3 style="color:var(--accent);"><i class="fas fa-edit"></i> Ekran Düzenle</h3>
-                <i class="fas fa-times modal-close" onclick="document.getElementById('magicinfo-edit-modal').style.display='none'"></i>
-            </div>
-            <div class="flex-column gap-3">
-                <input type="hidden" id="edit-magicinfo-id">
-                
-                <div>
-                    <label style="font-size: 0.8rem; color: var(--text-secondary);">Aygıt Adı</label>
-                    <input type="text" id="edit-magicinfo-name" class="search-bar" style="width: 100%;">
-                </div>
-                
-                <div>
-                    <label style="font-size: 0.8rem; color: var(--text-secondary);">Konum / Mahal</label>
-                    <input type="text" id="edit-magicinfo-location" class="search-bar" style="width: 100%;">
-                </div>
-                
-                <div>
-                    <label style="font-size: 0.8rem; color: var(--text-secondary);">Sunucu</label>
-                    <select id="edit-magicinfo-server" class="search-bar" style="width: 100%; background: #1a1a1a;">
-                        <option value="minfo-01">Server 01</option>
-                        <option value="minfo-02">Server 02</option>
-                        <option value="minfo-03">Server 03</option>
-                    </select>
-                </div>
 
-                <div class="flex-row gap-2 mt-2">
-                    <button class="btn btn-primary flex-1" onclick="app.saveMagicInfoChanges()">
-                        <i class="fas fa-save"></i> Değişiklikleri Kaydet
-                    </button>
-                    <button class="btn btn-secondary" onclick="document.getElementById('magicinfo-edit-modal').style.display='none'">İptal</button>
-                </div>
+    <!-- ═══════════════ PWA INSTALL PROMPT ═══════════════ -->
+    <div id="pwa-install-prompt" class="modal-backdrop" style="display: none; z-index: 10002; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px);">
+        <div class="card" style="max-width: 380px; width: 90%; text-align: center; border: 1.5px solid var(--accent); box-shadow: 0 0 50px rgba(0,210,255,0.3); padding: 30px;">
+            <div style="background: linear-gradient(135deg, var(--accent), #3a7bd5); width: 70px; height: 70px; border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; box-shadow: 0 10px 20px rgba(0,210,255,0.3);">
+                <i class="fas fa-mobile-screen-button" style="font-size: 2rem; color: white;"></i>
             </div>
+            <h3 style="color: white; font-weight: 800; margin-bottom: 10px;">Envanter Sistemi Uygulaması</h3>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; margin-bottom: 25px;">
+                Sistemi telefonunuza uygulama olarak ekleyerek daha hızlı ve kolay erişim sağlayabilirsiniz.
+            </p>
+            <div class="flex-column gap-2">
+                <button class="btn btn-accent" style="width: 100%; padding: 12px; font-weight: 700; font-size: 1rem;" onclick="app.triggerPwaInstall()">
+                    <i class="fas fa-download"></i> ŞİMDİ YÜKLE
+                </button>
+                <button class="btn" style="width: 100%; background: transparent; border: 1px solid rgba(255,255,255,0.1); color: #888; font-size: 0.85rem;" onclick="document.getElementById('pwa-install-prompt').style.display='none'">
+                    Daha Sonra
+                </button>
+            </div>
+            <p style="margin-top: 20px; font-size: 0.75rem; color: #555;">* Android Chrome üzerinde en iyi sonucu verir.</p>
         </div>
     </div>
+
+    <script src="frontend/UI_controller.js?v=7.1"></script>
 </body>
 </html>
