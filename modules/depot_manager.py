@@ -193,7 +193,10 @@ def get_alerts():
 def add_item():
     """Depoya yeni ürün ekler."""
     data = request.json
-    name = data.get('name', '').strip()
+    name_raw = data.get('name', '').strip()
+    
+    # Standartlaştırma (Kullanıcı talebi: BARKOD OKUYUCU, BARKOD YAZICI, TARAYICI vb.)
+    name = name_raw.upper().replace('İ','I').replace('Ğ','G').replace('Ü','U').replace('Ş','S').replace('Ö','O').replace('Ç','C')
     category = data.get('category', 'GENEL')
     
     try:
@@ -222,9 +225,12 @@ def update_item(item_id):
     data = request.json
     try:
         conn = get_db_connection()
+        name_raw = data.get('name', '').strip()
+        name = name_raw.upper().replace('İ','I').replace('Ğ','G').replace('Ü','U').replace('Ş','S').replace('Ö','O').replace('Ç','C')
+        
         conn.execute(
             "UPDATE depot_items SET category=?, name=?, critical_stock=?, current_stock=?, unit=?, description=?, saha_stock=?, arizali_stock=?, kayip_stock=? WHERE id=?",
-            (data.get('category'), data.get('name'), data.get('critical_stock'),
+            (data.get('category'), name, data.get('critical_stock'),
              data.get('current_stock'), data.get('unit'), data.get('description'),
              data.get('saha_stock', 0), data.get('arizali_stock', 0), data.get('kayip_stock', 0), item_id)
         )

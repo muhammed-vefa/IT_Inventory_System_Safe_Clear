@@ -1106,11 +1106,22 @@ def get_dashboard_stats():
     bo_kurulu = conn.execute("SELECT COUNT(*) FROM inventory WITH (NOLOCK) WHERE bo_seri IS NOT NULL AND bo_seri != ''").fetchone()[0] or 0
     by_kurulu = conn.execute("SELECT COUNT(*) FROM inventory WITH (NOLOCK) WHERE by_seri IS NOT NULL AND by_seri != ''").fetchone()[0] or 0
     
-    # Depo (Depot Items'dan) - Daha hassas filtreleme
+    # Depo + Kurulu (Toplam Veri) - Standardize isimler
     # Kullanıcı bildirimi: BY: 9, BO: 51
-    # Bu değerlere ulaşmak için kategori ve isim filtrelerini sadeleştiriyoruz.
-    bo_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%OKUYUCU%'").fetchone()[0] or 0
-    by_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%BARKOD YAZICI%'").fetchone()[0] or 0
+    # Toplam = Depodaki Stok + Envanterdeki Kurulu Adet
+    # Büyük/Küçük harf duyarlılığı için UPPER kullanıyoruz
+    bo_depo_stock = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE UPPER(name) LIKE '%OKUYUCU%'").fetchone()[0] or 0
+    bo_kurulu_count = conn.execute("SELECT COUNT(*) FROM inventory WITH (NOLOCK) WHERE bo_seri IS NOT NULL AND bo_seri != '' AND bo_seri != '---'").fetchone()[0] or 0
+    bo_depo = bo_depo_stock + bo_kurulu_count
+
+    by_depo_stock = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE UPPER(name) LIKE '%BARKOD YAZICI%'").fetchone()[0] or 0
+    by_kurulu_count = conn.execute("SELECT COUNT(*) FROM inventory WITH (NOLOCK) WHERE by_seri IS NOT NULL AND by_seri != '' AND by_seri != '---'").fetchone()[0] or 0
+    by_depo = by_depo_stock + by_kurulu_count
+
+    # Tarayıcı Toplam
+    tr_depo_stock = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE UPPER(name) LIKE '%TARAYICI%'").fetchone()[0] or 0
+    tr_kurulu_count = conn.execute("SELECT COUNT(*) FROM inventory WITH (NOLOCK) WHERE tarayici_seri IS NOT NULL AND tarayici_seri != '' AND tarayici_seri != '---'").fetchone()[0] or 0
+    tr_toplam = tr_depo_stock + tr_kurulu_count
 
     # 5. OS Bilgileri ve KeyOS Uptime
     keyos_count = pc_data['keyos'] or 0
@@ -1157,7 +1168,6 @@ def sync_all():
     results = []
     success = True
     try:
-        from modules.inventory_manager import sync_excel_to_db_internal
         from modules.printer_manager import sync_printers_from_excel_internal
         from modules.depot_manager import sync_depot_from_excel_internal
         from modules.notes_manager import sync_kb_from_excel_internal
