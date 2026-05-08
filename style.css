@@ -1829,15 +1829,39 @@ textarea.search-bar {
     
     /* Search boxes on mobile */
     .search-container {
-        flex-direction: column;
-        gap: 10px;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
     }
     
-    .search-bar { width: 100% !important; }
+    .search-bar { 
+        width: 100% !important; 
+        max-width: none !important;
+    }
+
+    .flex-row {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .btn {
+        width: 100%;
+        justify-content: center;
+    }
 
     /* Dashboard mobile adjustments */
     #view-dashboard .grid {
         grid-template-columns: 1fr !important;
+    }
+    
+    /* Header action buttons alignment */
+    .header-actions {
+        width: 100%;
+        display: flex;
+        gap: 8px;
+    }
+    .header-actions .btn, .header-actions .refresh-btn {
+        flex: 1;
     }
 }
 

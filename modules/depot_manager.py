@@ -193,11 +193,19 @@ def get_alerts():
 def add_item():
     """Depoya yeni ürün ekler."""
     data = request.json
+    name = data.get('name', '').strip()
+    category = data.get('category', 'GENEL')
+    
     try:
         conn = get_db_connection()
+        # Mükerrer Kontrolü
+        exists = conn.execute("SELECT id FROM depot_items WHERE name=? AND category=?", (name, category)).fetchone()
+        if exists:
+            return jsonify({"error": f"Bu isimle ({name}) bu kategoride ({category}) zaten bir ürün mevcut!"}), 409
+
         conn.execute(
             "INSERT INTO depot_items (category, name, critical_stock, current_stock, unit, description) VALUES (?,?,?,?,?,?)",
-            (data.get('category'), data.get('name'), data.get('critical_stock', 5),
+            (category, name, data.get('critical_stock', 5),
              data.get('current_stock', 0), data.get('unit', 'Adet'), data.get('description', ''))
         )
         conn.commit()

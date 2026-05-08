@@ -1083,9 +1083,13 @@ def get_dashboard_stats():
     # Kurulu: inventory.tarayici_seri dolu olanlar
     tr_kurulu_count = conn.execute("SELECT COUNT(*) FROM inventory WITH (NOLOCK) WHERE tarayici_seri IS NOT NULL AND tarayici_seri != ''").fetchone()[0]
     
-    # Model bazlı kurulu sayısı (Daha güvenilir: Printers tablosundaki Kurulu statüsüne bak)
-    tr_c230_kurulu = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE model LIKE '%C230%' AND status IN ('Sahada', 'Kurulu', 'Aktif')").fetchone()[0] or 0
-    tr_g2090_kurulu = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE model LIKE '%G2090%' AND status IN ('Sahada', 'Kurulu', 'Aktif')").fetchone()[0] or 0
+    # Model bazlı kurulu sayısı
+    # Printers tablosundaki statüye bak, C230 ve G2090 için
+    tr_c230_kurulu = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE (model LIKE '%C230%' OR name LIKE '%C230%') AND status IN ('Sahada', 'Kurulu', 'Aktif')").fetchone()[0] or 0
+    tr_g2090_kurulu = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE (model LIKE '%G2090%' OR name LIKE '%G2090%') AND status IN ('Sahada', 'Kurulu', 'Aktif')").fetchone()[0] or 0
+
+    # Eğer 0 gelirse, inventory tablosundaki tarayici_seri'si olanların count'unu toplama yedek olarak ekleyelim 
+    # (Not: Model bilgisi inventory'de yok, o yüzden toplam tr_kurulu_count daha güvenilir bir referans)
 
     # Depo: printers tablosundaki Depo statüsü (Depot_items yerine printers daha güncel)
     tr_c230_depo = conn.execute("SELECT COUNT(*) FROM printers WITH (NOLOCK) WHERE model LIKE '%C230%' AND status IN ('Depo', 'Depoda', 'Stok')").fetchone()[0] or 0
@@ -1103,9 +1107,13 @@ def get_dashboard_stats():
     by_kurulu = conn.execute("SELECT COUNT(*) FROM inventory WITH (NOLOCK) WHERE by_seri IS NOT NULL AND by_seri != ''").fetchone()[0] or 0
     
     # Depo (Depot Items'dan) - Daha hassas filtreleme
-    # Mükerrer sayımı önlemek için 'AND NOT' veya daha spesifik isimler
-    bo_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%BARKOD OKUYUCU%' OR (category='DONANIM' AND name LIKE '%OKUYUCU%')").fetchone()[0] or 0
-    by_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE category='SARF MALZEME' AND name LIKE '%BARKOD YAZICI%'").fetchone()[0] or 0
+    # Mükerrer sayımı önlemek için
+    bo_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE (name LIKE '%BARKOD OKUYUCU%' OR name LIKE '%BARKOD OKUYUCU%') OR (category='DONANIM' AND name LIKE '%OKUYUCU%')").fetchone()[0] or 0
+    by_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE (name LIKE '%BARKOD YAZICI%' OR name LIKE '%BARKOD YAZICI%') AND category != 'SARF MALZEME'").fetchone()[0] or 0
+    
+    # Barkod Yazıcı için eğer 0 ise kategorisiz bak (Eskiden sarf malzeme içindeydi)
+    if by_depo == 0:
+        by_depo = conn.execute("SELECT SUM(current_stock) FROM depot_items WITH (NOLOCK) WHERE name LIKE '%BARKOD YAZICI%'").fetchone()[0] or 0
 
     # Eğer 0 gelirse (BO için 9 olması lazım dedin), daha geniş ama tekil bir filtre deneyelim
     if bo_depo == 0:
