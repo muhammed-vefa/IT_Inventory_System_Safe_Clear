@@ -1133,6 +1133,17 @@ def get_dashboard_stats():
         k11_29 = round(keyos_count * 0.05)
         k30p = keyos_count - (k5 + k5_10 + k11_29)
 
+    # 6. KeyOS Uyumsuzluk Sayısı (Cache'den oku)
+    keyos_mismatches_count = 0
+    cache_path = os.path.join(BASE_DIR, 'logs', 'keyos_cache.json')
+    if os.path.exists(cache_path):
+        try:
+            import json
+            with open(cache_path, 'r') as f:
+                cache_data = json.load(f)
+                keyos_mismatches_count = cache_data.get('count', 0)
+        except: pass
+
     depot_alerts = conn.execute("SELECT * FROM depot_items WITH (NOLOCK) WHERE current_stock <= critical_stock").fetchall()
     conn.close()
     
@@ -1149,6 +1160,7 @@ def get_dashboard_stats():
             'depo': pr_data['depo'], 
             'kayip': pr_data['kayip']
         },
+        'keyos_mismatches': keyos_mismatches_count,
         'bo': {'kurulu': int(bo_kurulu), 'depo': int(bo_depo)}, 
         'by': {'kurulu': int(by_kurulu), 'depo': int(by_depo)},
         'tr_kurulu': int(tr_kurulu_count or 0),
@@ -1285,6 +1297,13 @@ def background_sync_worker():
                 mismatches, error = get_all_mismatches_internal()
                 if not error:
                     print(f"KeyOS Kontrolü Tamamlandı. {len(mismatches)} uyuşmazlık bulundu.")
+                    # Sonucu cache'e kaydet
+                    try:
+                        import json
+                        cache_path = os.path.join(BASE_DIR, 'logs', 'keyos_cache.json')
+                        with open(cache_path, 'w') as f:
+                            json.dump({'count': len(mismatches), 'last_check': str(now)}, f)
+                    except: pass
                 else:
                     print(f"KeyOS Kontrol Hatası: {error}")
                 

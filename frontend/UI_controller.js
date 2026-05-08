@@ -419,6 +419,20 @@ var appData = {
     },
     renderStats: function(stats) {
         if(!stats) return;
+
+        // KeyOS Alert Banner
+        const keyosBanner = document.getElementById('keyos-alert-banner');
+        const keyosCountEl = document.getElementById('keyos-mismatch-count');
+        if (keyosBanner && keyosCountEl) {
+            const mismatchCount = stats.keyos_mismatches || 0;
+            if (mismatchCount > 0) {
+                keyosCountEl.innerText = mismatchCount;
+                keyosBanner.style.display = 'flex';
+            } else {
+                keyosBanner.style.display = 'none';
+            }
+        }
+
         const set = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val !== undefined ? val : 0; };
         // PC (Nested Structure)
         if(stats.pc) {
