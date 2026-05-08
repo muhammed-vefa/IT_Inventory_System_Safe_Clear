@@ -2933,9 +2933,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             <div class="flex-row gap-2 mt-4">
                 <button class="btn btn-secondary" style="flex: 1;" onclick="app.closeDeviceDetail()">İptal</button>
                 <button class="btn btn-accent" style="flex: 1;" onclick="app.saveEdit()">Güncelle</button>
-                <button class="btn btn-accent" onclick="app.quickPrintPrinterLabel(${item.id})" style="background:#00ff88; color:#000; font-weight:800; border:none;" title="Bu yazıcı için barkod bas">
-                    <i class="fas fa-barcode"></i> Barkod Bas
-                </button>
+                <!-- Barkod butonu kullanıcı talebiyle kaldırıldı -->
                 <button class="btn btn-secondary" onclick="app.updateCupsLocation('${item.ip}', '${item.mahal}')" style="border-color: #ff4b2b; color: #ff4b2b; background: rgba(255,75,43,0.05); font-size: 0.75rem; white-space: nowrap; padding: 0 10px;">
                     <i class="fas fa-location-dot"></i> CUPS Mahal Güncelle
                 </button>

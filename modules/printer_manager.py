@@ -806,10 +806,14 @@ def cups_update_mahal():
             printer_model = res['model']
     except: pass
 
-    success, msg = CUPSHelper.update_location(pr_no, mahal, target_ip=printer_ip, new_info=printer_model)
-    if success:
-        return jsonify({"success": True, "message": msg})
-    return jsonify({"error": msg}), 500
+    try:
+        success, msg = CUPSHelper.update_location(pr_no, mahal, target_ip=printer_ip, new_info=printer_model)
+        if success:
+            return jsonify({"success": True, "message": msg})
+        return jsonify({"error": msg}), 200 # Frontend hata mesajını alabilsin
+    except Exception as e:
+        print(f"CUPS Update Mahal Error: {e}")
+        return jsonify({"error": f"Sistem Hatası: {str(e)}"}), 200
 
 @printer_manager_bp.route('/cups/set_status', methods=['POST'])
 @require_editor
