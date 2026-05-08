@@ -181,7 +181,7 @@ var appData = {
                 }
                 // Dropdown menü öelerini yetkiye göre gizle/göster
                 var isAdmin = this.state.activeUser.role === 'ADMIN';
-                var ids = ['menu-users', 'menu-all-sync', 'menu-keyos-sync', 'menu-system-logs', 'menu-history', 'btn-inventory-add', 'design-mode-btn'];
+                var ids = ['menu-users', 'menu-all-sync', 'menu-keyos-sync', 'menu-system-logs', 'menu-history', 'btn-inventory-add'];
                 for (var i = 0; i < ids.length; i++) {
                     var el = document.getElementById(ids[i]);
                     if(el) el.style.display = isAdmin ? 'block' : 'none';
@@ -645,7 +645,7 @@ var appData = {
         // Redundant as per user request to move alerts to Depot view.
         return;
     },
-    navigateTo: function(view) {
+    navigateTo: function(view, updateUrl = true) {
         this.state.view = view;
         document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
         const viewEl = document.getElementById(`view-${view}`);
@@ -653,6 +653,12 @@ var appData = {
         document.querySelectorAll('.nav-link').forEach(l => {
             l.classList.toggle('active', l.dataset.view === view);
         });
+
+        if (updateUrl) {
+            const url = new URL(window.location);
+            url.searchParams.set('view', view);
+            window.history.pushState({}, '', url);
+        }
         const role = (this.state.activeUser && this.state.activeUser.role) ? this.state.activeUser.role : 'GUEST';
 
         // Depot UI Restrictions
@@ -4107,8 +4113,9 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         });
         document.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', (e) => {
-                const view = e.target.dataset.view;
-                this.navigateTo(view);
+                e.preventDefault();
+                const view = e.currentTarget.dataset.view;
+                if (view) this.navigateTo(view);
                 // Lazy-load printers when tab is clicked
                 if (view === 'printers' && !this.state.printers.length) {
                     this.renderPrinters();
