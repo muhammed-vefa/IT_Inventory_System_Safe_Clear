@@ -789,30 +789,23 @@ def batch_action():
 
 @printer_manager_bp.route('/cups/update_mahal', methods=['POST'])
 @require_editor
-def cups_update_mahal():
-    data = request.json
-    pr_no = data.get('pr_no')
+    ip = data.get('ip')
     mahal = data.get('mahal')
-    if not pr_no or not mahal:
-        return jsonify({"error": "Parametreler eksik."}), 400
+    if not ip or not mahal:
+        return jsonify({"error": "Parametreler eksik (IP veya Mahal)."}), 400
     
-    # Yazıcının IP ve Model bilgisini veritabanından bulalım
-    printer_ip = None
-    printer_model = None
     try:
-        res = query_db("SELECT ip, model FROM printers WHERE pr_no=?", (pr_no,), one=True)
-        if res:
-            printer_ip = res['ip']
-            printer_model = res['model']
-    except: pass
+        # IP üzerinden CUPS adını bul (Kullanıcı kesinlikle IP ile bulunsun dedi)
+        printer_name = CUPSHelper.get_printer_name_by_ip(ip)
+        if not printer_name:
+            return jsonify({"error": f"CUPS üzerinde {ip} adresine sahip bir yazıcı bulunamadı."}), 200
 
-    try:
-        success, msg = CUPSHelper.update_location(pr_no, mahal, target_ip=printer_ip, new_info=printer_model)
+        success, msg = CUPSHelper.update_location(printer_name, mahal, target_ip=ip)
         if success:
             return jsonify({"success": True, "message": msg})
-        return jsonify({"error": msg}), 200 # Frontend hata mesajını alabilsin
+        return jsonify({"error": msg}), 200
     except Exception as e:
-        print(f"CUPS Update Mahal Error: {e}")
+        print(f"CUPS Update Mahal (IP-based) Error: {e}")
         return jsonify({"error": f"Sistem Hatası: {str(e)}"}), 200
 
 @printer_manager_bp.route('/cups/set_status', methods=['POST'])
