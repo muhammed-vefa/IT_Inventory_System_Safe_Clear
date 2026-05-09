@@ -318,10 +318,22 @@ class CUPSHelper:
 
                 payload["org.cups.sid"] = active_sid
 
-                # Buton Tespiti (Çok daha esnek: type="submit" şartı olmadan ara)
-                submits = form.find_all(['input', 'button', 'a'])
-                available_buttons = []
-                target_submits = []
+                # CUPS 2.2.6 ÖZEL: Yazıcı sayfasındaki 'administration' dropdown ve 'Go' butonu yönetimi
+                admin_select = form.find('select', {'name': 'administration'})
+                if admin_select:
+                    print("DEBUG: Administration dropdown bulundu, 'modify-printer' seçiliyor.")
+                    payload['administration'] = 'modify-printer'
+                    # 'Go' butonunu bul
+                    go_btn = form.find(['input', 'button'], value=re.compile(r'Go', re.I))
+                    if go_btn:
+                        payload[go_btn.get('name') or 'go'] = go_btn.get('value') or 'Go'
+                        button_sent = True
+
+                # Buton Tespiti (Dropdown tetiklenmediyse genel arama)
+                if not button_sent:
+                    submits = form.find_all(['input', 'button', 'a'])
+                    available_buttons = []
+                    target_submits = []
 
                 for btn in submits:
                     val = (btn.get('value') or btn.string or '').strip()
