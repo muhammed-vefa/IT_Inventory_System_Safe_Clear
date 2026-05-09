@@ -254,6 +254,7 @@ class CUPSHelper:
 
             for step in range(1, 11):
                 print(f"DEBUG: CUPS Step {step} İşleniyor...")
+                time.sleep(1.5) # Kullanıcı isteği: İşlemi yavaş yap (geç yükleniyor)
                 
                 if step == 1:
                     # Yazıcı sayfasından başla
@@ -277,38 +278,33 @@ class CUPSHelper:
                     page_title = soup.title.string.strip() if soup.title else "Bilinmiyor"
 
                 print(f"DEBUG: Mevcut Sayfa: '{page_title}'")
-                if active_sid: print(f"DEBUG: Step {step} SID: {active_sid}")
-
+                
                 # Başarı kontrolü
                 if any(x in current_res.lower() for x in ["successfully", "başarıyla", "güncellendi", "updated"]):
                     print(f"DEBUG: CUPS Güncelleme {step}. adımda TAMAMLANDI.")
                     return True, "CUPS Mahal başarıyla güncellendi."
 
-                # Formu bul (Sayfadaki herhangi bir /admin formunu yakala)
+                # Formu bul
                 form = soup.find('form', action=re.compile(r'/admin'))
-                
                 if not form:
-                    # Alternatif: Sayfada hiç form yoksa ama 'Modify Printer' linki varsa
+                    # Alternatif: Link üzerinden git
                     modify_link = soup.find('a', href=re.compile(r'modify-printer'))
                     if modify_link:
-                        print("DEBUG: Modify link bulundu, link üzerinden gidiliyor...")
                         link_url = cls.BASE_URL + modify_link['href'] if modify_link['href'].startswith('/') else f"{cls.BASE_URL}/admin/{modify_link['href']}"
                         current_res = cls._run_curl(link_url, referer=current_referer)
                         current_referer = link_url
                         continue
-
-                    if step > 1: 
-                        print("DEBUG: Form bulunamadı, işlem bitmiş olabilir.")
-                        return True, "İşlem tamamlandı (Form kalmadı)."
+                    if step > 1: return True, "İşlem tamamlandı (Form kalmadı)."
                     return False, f"CUPS Formu bulunamadı. Sayfa: {page_title}"
 
-                # Payload hazırla (Sayfadaki TÜM inputları, hidden dahil topla)
+                # Payload hazırla
                 payload = {}
+                input_names = []
                 for inp in form.find_all(['input', 'select', 'textarea']):
                     name = inp.get('name')
                     if not name: continue
+                    input_names.append(name)
                     
-                    # Varsayılan değeri belirle
                     val = ''
                     if inp.name == 'select':
                         opt = inp.find('option', selected=True) or inp.find('option')
@@ -318,72 +314,56 @@ class CUPSHelper:
                     else:
                         val = inp.get('value', '')
 
-                    # Özel alanları güncelle
                     if name == 'PRINTER_LOCATION':
                         val = new_location
-                        print(f"DEBUG: Location güncellendi: {val}")
                     elif name == 'PRINTER_IS_SHARED':
                         val = "0"
                     
                     payload[name] = val
 
-                # SID'yi zorunlu ekle
                 payload["org.cups.sid"] = active_sid
                 
-                # Adım 1 Özelleştirmesi
-                if step == 1 and "Printers" in page_title:
-                    payload["OP"] = "modify-printer"
-                    payload["printer_name"] = clean_printer_name
-
-                # Buton belirle (Continue veya Modify Printer)
+                # Buton Seçimi (Daha hassas)
                 submits = form.find_all('input', {'type': 'submit'})
+                available_buttons = [btn.get('value', 'İsimsiz') for btn in submits]
                 button_sent = False
-                for p_val in ["Continue", "Modify Printer"]:
+                
+                # Akış: 1. Continue, 2. Continue, 3. Modify Printer
+                is_location_page = 'PRINTER_LOCATION' in payload
+                
+                btn_priority = ["Continue", "Modify Printer"]
+                if is_location_page: btn_priority = ["Continue"]
+                
+                for p_val in btn_priority:
                     for btn in submits:
                         if p_val.lower() in (btn.get('value') or '').lower():
-                            if btn.get('name'): payload[btn['name']] = btn.get('value')
-                            else: payload[btn.get('value').upper().replace(' ', '_')] = btn.get('value')
+                            payload[btn.get('name') or p_val.upper()] = btn.get('value')
                             button_sent = True; break
                     if button_sent: break
                 
-                if not button_sent and submits:
-                    btn = submits[0]
-                    payload[btn.get('name') or 'submit'] = btn.get('value', '')
+                if not button_sent:
+                    print(f"!!! HATA: Adım {step} için hedef buton ({', '.join(btn_priority)}) BULUNAMADI!")
+                    print(f"!!! Mevcut Sayfa: '{page_title}' | Mevcut Butonlar: {', '.join(available_buttons)}")
+                    if submits:
+                        btn = submits[0]
+                        print(f"!!! Fallback: İlk butona basılıyor -> {btn.get('value')}")
+                        payload[btn.get('name') or 'submit'] = btn.get('value')
+                        button_sent = True
 
-                # POST isteğini gönder
+                print(f"DEBUG: Step {step} POST (Buton: {button_sent}) -> {form.get('action')}")
                 is_multipart = (form.get('enctype') == 'multipart/form-data')
-                print(f"DEBUG: Step {step} POST gönderiliyor... Action: {form.get('action')}")
-                
-                # ÖZEL DURUM: Buton seçimi
-                # Kullanıcı uyarısı: Mahal girildikten sonra 'Continue' denmeli, 'Modify Printer' değil.
-                if step < 4:
-                    if "Continue" in payload: 
-                        payload["Continue"] = "Continue"
-                        print("DEBUG: 'Continue' butonu seçildi.")
-                else:
-                    if "Modify Printer" in payload:
-                        payload["Modify Printer"] = "Modify Printer"
-                        print("DEBUG: 'Modify Printer' (Son Adım) seçildi.")
-
-                # Action içindeki parametreleri de payload'a ekle (Gerekliyse)
                 action_url = form.get('action')
                 full_post_url = cls.BASE_URL + action_url if action_url.startswith('/') else f"{cls.BASE_URL}/admin/{action_url}"
                 
-                res = cls._run_curl(full_post_url, data=payload, referer=current_referer, multipart=is_multipart)
+                new_res = cls._run_curl(full_post_url, data=payload, referer=current_referer, multipart=is_multipart)
                 
-                # Sayfa ilerleme kontrolü
-                new_soup = BeautifulSoup(res, 'html.parser')
-                new_title = new_soup.title.string.strip() if new_soup.title else "Bilinmiyor"
-                if new_title == page_title and step > 1:
-                    print("DEBUG: Sayfa ilerlemedi. Form verisi reddedilmiş olabilir.")
-
-                current_res = res
+                if new_res == current_res or (soup.title and BeautifulSoup(new_res, 'html.parser').title and soup.title.string == BeautifulSoup(new_res, 'html.parser').title.string):
+                    print(f"DEBUG: Sayfa ilerlemedi. Form verisi reddedilmiş olabilir.")
+                
+                current_res = new_res
                 current_referer = full_post_url
-
-            return True, "CUPS İşlemleri bitti (Adım sınırı doldu)."
-        except Exception as e:
-            print(f"DEBUG: CUPS update_location ERROR: {e}")
-            return False, str(e)
+            
+            return False, "CUPS Sihirbazı çok fazla adım sürdü veya takıldı."
         except Exception as e:
             print(f"DEBUG: CUPS update_location ERROR: {e}")
             return False, str(e)
