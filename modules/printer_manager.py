@@ -789,6 +789,8 @@ def batch_action():
 
 @printer_manager_bp.route('/cups/update_mahal', methods=['POST'])
 @require_editor
+def cups_update_mahal():
+    data = request.json
     ip = data.get('ip')
     mahal = data.get('mahal')
     if not ip or not mahal:
