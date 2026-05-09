@@ -326,10 +326,12 @@ class CUPSHelper:
                 if admin_select:
                     print("DEBUG: Administration dropdown bulundu, 'modify-printer' seçiliyor.")
                     payload['administration'] = 'modify-printer'
-                    # 'Go' butonunu bul
-                    go_btn = form.find(['input', 'button'], value=re.compile(r'Go', re.I))
+                    # 'Go' butonunu bul (value veya metin içeriği)
+                    go_btn = form.find(['input', 'button'], string=re.compile(r'Go', re.I)) or \
+                             form.find(['input', 'button'], value=re.compile(r'Go', re.I))
                     if go_btn:
-                        payload[go_btn.get('name') or 'go'] = go_btn.get('value') or 'Go'
+                        btn_val = go_btn.get('value') or go_btn.string or 'Go'
+                        payload[go_btn.get('name') or 'go'] = btn_val
                         button_sent = True
 
                 # Buton Tespiti (Dropdown tetiklenmediyse genel arama)
