@@ -2934,7 +2934,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                 <button class="btn btn-secondary" style="flex: 1;" onclick="app.closeDeviceDetail()">İptal</button>
                 <button class="btn btn-accent" style="flex: 1;" onclick="app.saveEdit()">Güncelle</button>
                 <!-- Barkod butonu kullanıcı talebiyle kaldırıldı -->
-                <button class="btn btn-secondary" onclick="app.updateCupsLocation('${item.ip}', '${item.mahal}')" style="border-color: #ff4b2b; color: #ff4b2b; background: rgba(255,75,43,0.05); font-size: 0.75rem; white-space: nowrap; padding: 0 10px;">
+                <button class="btn btn-secondary" onclick="app.updateCupsLocation('${item.ip}')" style="border-color: #ff4b2b; color: #ff4b2b; background: rgba(255,75,43,0.05); font-size: 0.75rem; white-space: nowrap; padding: 0 10px;">
                     <i class="fas fa-location-dot"></i> CUPS Mahal Güncelle
                 </button>
             </div>`;
@@ -3728,8 +3728,13 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         const modal = document.getElementById('service-modal');
         if (modal) modal.style.display = 'flex';
     },
-    updateCupsLocation: async function(ip, mahal) {
+    updateCupsLocation: async function(ip, manualMahal) {
         if (!ip) return alert('Yazıcı IP adresi bulunamadı!');
+        
+        // Eğer manuel verilmediyse input alanından (güncel değer) oku
+        const mahal = manualMahal || document.getElementById('edit-mahal')?.value;
+        if (!mahal) return alert('Mahal bilgisi belirlenemedi!');
+
         if (!confirm(`${ip} IP'li yazıcının CUPS üzerindeki mahal bilgisini [${mahal}] olarak güncellemek istiyor musunuz?`)) return;
         
         try {
