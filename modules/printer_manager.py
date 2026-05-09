@@ -274,8 +274,13 @@ class CUPSHelper:
                     print(f"DEBUG: CUPS Güncelleme TAMAMLANDI.")
                     return True, "CUPS Mahal başarıyla güncellendi."
 
-                # Form tespiti (CUPS /admin/... formlarını ara)
-                form = soup.find('form', action=re.compile(r'/admin'))
+                # Form tespiti (Admin dropdown içeren formu veya genel admin formlarını ara)
+                form = soup.find('form', string=re.compile(r'administration', re.I)) or \
+                       soup.find('select', {'name': 'administration'})
+                if form and form.name != 'form': form = form.find_parent('form')
+                
+                if not form:
+                    form = soup.find('form', action=re.compile(r'/admin')) or soup.find('form')
                 
                 # ADIM 1 ÖZEL: Eğer yazıcı sayfasındaysak ve form yoksa, 'Modify Printer' tetikle
                 if step == 1 and not form:
