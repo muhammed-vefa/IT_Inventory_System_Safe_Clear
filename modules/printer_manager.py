@@ -317,6 +317,9 @@ class CUPSHelper:
                     payload[name] = val
 
                 payload["org.cups.sid"] = active_sid
+                
+                button_sent = False
+                submits = []
 
                 # CUPS 2.2.6 ÖZEL: Yazıcı sayfasındaki 'administration' dropdown ve 'Go' butonu yönetimi
                 admin_select = form.find('select', {'name': 'administration'})
@@ -332,8 +335,9 @@ class CUPSHelper:
                 # Buton Tespiti (Dropdown tetiklenmediyse genel arama)
                 if not button_sent:
                     submits = form.find_all(['input', 'button', 'a'])
-                    available_buttons = []
-                    target_submits = []
+                
+                available_buttons = []
+                target_submits = []
 
                 for btn in submits:
                     val = (btn.get('value') or btn.string or '').strip()
