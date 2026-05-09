@@ -265,6 +265,14 @@ class CUPSHelper:
                 page_title = soup.title.string.strip() if soup.title else "Bilinmiyor"
                 print(f"DEBUG: Mevcut Sayfa: '{page_title}'")
 
+                # Hata ayıklama için HTML'i kaydet
+                try:
+                    debug_file = os.path.join('logs', f'cups_debug_step_{step}.html')
+                    with open(debug_file, 'w', encoding='utf-8') as f:
+                        f.write(f"<!-- URL: {current_referer} -->\n" + current_res)
+                    print(f"DEBUG: Sayfa HTML'i kaydedildi: {debug_file}")
+                except: pass
+
                 # SID Yakala
                 sid_match = re.search(r'name=["\']org\.cups\.sid["\'][^>]*value=["\']?([a-f0-9]+)["\']?', current_res, re.I)
                 active_sid = sid_match.group(1) if sid_match else active_sid
@@ -274,41 +282,52 @@ class CUPSHelper:
                     print(f"DEBUG: CUPS Güncelleme TAMAMLANDI.")
                     return True, "CUPS Mahal başarıyla güncellendi."
 
-                # Form tespiti (Admin dropdown içeren formu veya genel admin formlarını ara)
-                form = soup.find('form', string=re.compile(r'administration', re.I)) or \
-                       soup.find('select', {'name': 'administration'})
-                if form and form.name != 'form': form = form.find_parent('form')
+                # 1. Form Tespiti (Akıllı Arama)
+                form = None
+                all_forms = soup.find_all('form')
+                print(f"DEBUG: Sayfada {len(all_forms)} adet form bulundu.")
+
+                # Öncelik 1: Administration select içeren form
+                for f in all_forms:
+                    if f.find('select', {'name': 'administration'}):
+                        form = f
+                        print(f"DEBUG: 'administration' select içeren form seçildi. Action: {f.get('action')}")
+                        break
                 
+                # Öncelik 2: /admin içeren form
                 if not form:
-                    form = soup.find('form', action=re.compile(r'/admin')) or soup.find('form')
+                    for f in all_forms:
+                        if f.get('action') and '/admin' in f.get('action'):
+                            form = f
+                            print(f"DEBUG: '/admin' action içeren form seçildi.")
+                            break
                 
-                # ADIM 1 ÖZEL: Eğer yazıcı sayfasındaysak ve form yoksa, 'Modify Printer' tetikle
+                # Öncelik 3: Herhangi bir form
+                if not form and all_forms:
+                    form = all_forms[0]
+                    print(f"DEBUG: İlk form varsayılan olarak seçildi.")
+
+                # ADIM 1 ÖZEL: Eğer yazıcı sayfasındaysak ve form yoksa, 'Modify Printer' linki ara
                 if step == 1 and not form:
-                    modify_link = soup.find('a', href=re.compile(r'modify-printer'))
+                    modify_link = soup.find('a', href=re.compile(r'modify-printer', re.I))
                     if modify_link:
                         print("DEBUG: Modify linki bulundu, tıklandı.")
                         link_url = cls.BASE_URL + modify_link['href'] if modify_link['href'].startswith('/') else f"{cls.BASE_URL}/admin/{modify_link['href']}"
                         current_res = cls._run_curl(link_url, referer=current_referer)
                         current_referer = link_url
                         continue
-                    else:
-                        print("DEBUG: Form yok, manuel Modify tetikleniyor...")
-                        payload = { "org.cups.sid": active_sid, "OP": "modify-printer", "printer_name": clean_printer_name }
-                        current_res = cls._run_curl(f"{cls.BASE_URL}/admin/", data=payload, referer=printer_url)
-                        current_referer = f"{cls.BASE_URL}/admin/"
-                        continue
 
                 if not form:
                     if step > 1: return True, "Form bitti."
+                    print(f"!!! HATA: Sayfada form bulunamadı: {page_title}")
                     return False, f"Form bulunamadı (Sayfa: {page_title})"
 
-                # Payload Hazırla (input, select, textarea ve BUTTON etiketlerini tara)
+                # Payload Hazırla
                 payload = {}
-                for inp in form.find_all(['input', 'select', 'textarea', 'button']):
+                for inp in form.find_all(['input', 'select', 'textarea']):
                     name = inp.get('name')
                     if not name: continue
                     
-                    val = ''
                     if inp.name == 'select':
                         opt = inp.find('option', selected=True) or inp.find('option')
                         val = opt.get('value', '') if opt else ''
@@ -341,47 +360,57 @@ class CUPSHelper:
 
                 # Buton Tespiti (Dropdown tetiklenmediyse genel arama)
                 if not button_sent:
-                    submits = form.find_all(['input', 'button', 'a'])
-                
-                available_buttons = []
-                target_submits = []
+                    # Önce input ve buttonları tara (daha yüksek öncelik)
+                    submits = form.find_all(['input', 'button'])
+                    available_buttons = []
+                    target_submits = []
 
-                for btn in submits:
-                    val = (btn.get('value') or btn.string or '').strip()
-                    if val: available_buttons.append(val)
+                    for btn in submits:
+                        val = (btn.get('value') or btn.string or '').strip()
+                        if val: available_buttons.append(val)
+                        
+                        btn_type = (btn.get('type') or '').lower()
+                        btn_text = val.lower()
+                        
+                        # Hedef kelimeler (Adım 1-5 arası tüm ihtimaller)
+                        # 'Go' ekledik çünkü yazıcı sayfasında 'Go' butonu var
+                        targets = ["continue", "modify printer", "add printer", "go"]
+                        
+                        if btn_type == 'submit' or any(t in btn_text for t in targets):
+                            target_submits.append(btn)
                     
-                    # Eğer input submit ise veya düğme metni hedef kelimeleri içeriyorsa
-                    btn_text = val.lower()
-                    if btn.get('type') == 'submit' or "continue" in btn_text or "modify" in btn_text or "add" in btn_text:
-                        target_submits.append(btn)
-                
-                button_sent = False
-                is_location_page = 'PRINTER_LOCATION' in payload
-                btn_priority = ["Continue", "Modify Printer"]
-                if is_location_page: btn_priority = ["Continue"]
+                    # Eğer hala bulunamadıysa linkleri (a tag) tara
+                    if not target_submits:
+                        links = form.find_all('a')
+                        for a in links:
+                            val = (a.string or '').strip()
+                            if any(t in val.lower() for t in ["modify", "continue", "add"]):
+                                target_submits.append(a)
+                                if val: available_buttons.append(val)
 
-                for p_val in btn_priority:
-                    for btn in target_submits:
-                        btn_text = (btn.get('value') or btn.string or '').lower()
-                        if p_val.lower() in btn_text:
-                            # Payload'a ekle
-                            btn_name = btn.get('name') or p_val.upper().replace(' ','_')
-                            payload[btn_name] = btn.get('value') or btn.string or p_val
-                            button_sent = True; break
-                    if button_sent: break
-                
-                if not button_sent:
-                    print(f"!!! HATA: Hedef buton bulunamadı. Sayfa: {page_title}")
-                    print(f"!!! Mevcut Elemanlar: {', '.join(available_buttons)}")
-                    if target_submits:
-                        btn = target_submits[0]
-                        payload[btn.get('name') or 'submit'] = btn.get('value') or btn.string or 'Submit'
-                        button_sent = True
-                    else:
-                        # Buton yoksa ama form varsa, default submit dene (Action'ı kontrol ederek)
-                        print("!!! UYARI: Buton yok, yine de form gönderiliyor...")
-                        payload["submit"] = "Submit"
-                        button_sent = True
+                    btn_priority = ["continue", "modify printer", "go", "add printer"]
+                    if 'PRINTER_LOCATION' in payload: btn_priority = ["continue"]
+
+                    for p_val in btn_priority:
+                        for btn in target_submits:
+                            btn_text = (btn.get('value') or btn.string or '').lower()
+                            if p_val.lower() == btn_text or (p_val.lower() in btn_text and len(btn_text) < 20):
+                                btn_name = btn.get('name') or p_val.upper().replace(' ','_')
+                                payload[btn_name] = btn.get('value') or btn.string or p_val
+                                button_sent = True; break
+                        if button_sent: break
+                    
+                    if not button_sent:
+                        print(f"!!! HATA: Hedef buton bulunamadı. Sayfa: {page_title}")
+                        print(f"!!! Mevcut Elemanlar: {', '.join(available_buttons)}")
+                        if target_submits:
+                            btn = target_submits[0]
+                            payload[btn.get('name') or 'submit'] = btn.get('value') or btn.string or 'Submit'
+                            button_sent = True
+                        else:
+                            print("!!! UYARI: Buton yok, yine de form gönderiliyor...")
+                            payload["submit"] = "Submit"
+                            button_sent = True
 
                 # POST Gönder
                 action_url = form.get('action')
