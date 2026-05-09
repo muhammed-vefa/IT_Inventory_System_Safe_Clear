@@ -1348,7 +1348,7 @@ if __name__ == '__main__':
     
     # İlk açılışta bir kez senkronize et
     try:
-        sync_excel_to_db()
+        sync_excel_to_db_internal()
     except Exception as e:
         print("Initial Sync Error:", e)
     

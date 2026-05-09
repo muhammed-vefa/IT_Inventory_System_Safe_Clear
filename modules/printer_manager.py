@@ -318,29 +318,46 @@ class CUPSHelper:
 
                 payload["org.cups.sid"] = active_sid
 
-                # Buton Tespiti (Hem input hem button etiketleri)
-                submits = form.find_all(['input', 'button'], {'type': 'submit'})
-                available_buttons = [btn.get('value') or btn.string or 'İsimsiz' for btn in submits]
-                button_sent = False
+                # Buton Tespiti (Çok daha esnek: type="submit" şartı olmadan ara)
+                submits = form.find_all(['input', 'button', 'a'])
+                available_buttons = []
+                target_submits = []
+
+                for btn in submits:
+                    val = (btn.get('value') or btn.string or '').strip()
+                    if val: available_buttons.append(val)
+                    
+                    # Eğer input submit ise veya düğme metni hedef kelimeleri içeriyorsa
+                    btn_text = val.lower()
+                    if btn.get('type') == 'submit' or "continue" in btn_text or "modify" in btn_text or "add" in btn_text:
+                        target_submits.append(btn)
                 
-                # Hedef butonlar (Kullanıcı sırası: Continue -> Continue -> Modify Printer)
+                button_sent = False
                 is_location_page = 'PRINTER_LOCATION' in payload
                 btn_priority = ["Continue", "Modify Printer"]
                 if is_location_page: btn_priority = ["Continue"]
 
                 for p_val in btn_priority:
-                    for btn in submits:
+                    for btn in target_submits:
                         btn_text = (btn.get('value') or btn.string or '').lower()
                         if p_val.lower() in btn_text:
-                            payload[btn.get('name') or p_val.upper().replace(' ','_')] = btn.get('value') or btn.string or p_val
+                            # Payload'a ekle
+                            btn_name = btn.get('name') or p_val.upper().replace(' ','_')
+                            payload[btn_name] = btn.get('value') or btn.string or p_val
                             button_sent = True; break
                     if button_sent: break
                 
                 if not button_sent:
-                    print(f"!!! HATA: Buton bulunamadı. Sayfa: {page_title} | Butonlar: {available_buttons}")
-                    if submits:
-                        btn = submits[0]
+                    print(f"!!! HATA: Hedef buton bulunamadı. Sayfa: {page_title}")
+                    print(f"!!! Mevcut Elemanlar: {', '.join(available_buttons)}")
+                    if target_submits:
+                        btn = target_submits[0]
                         payload[btn.get('name') or 'submit'] = btn.get('value') or btn.string or 'Submit'
+                        button_sent = True
+                    else:
+                        # Buton yoksa ama form varsa, default submit dene (Action'ı kontrol ederek)
+                        print("!!! UYARI: Buton yok, yine de form gönderiliyor...")
+                        payload["submit"] = "Submit"
                         button_sent = True
 
                 # POST Gönder
