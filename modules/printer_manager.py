@@ -128,42 +128,50 @@ class CUPSHelper:
             curr_url = f"{cls.BASE_URL}/admin/"
             payload = {"org.cups.sid": sid, "OP": "modify-printer", "printer_name": printer_name, "administration": "modify-printer"}
             curr_res = cls._run_curl(curr_url, data=payload, referer=printer_url)
-            
-            # 3. Dinamik Döngü (Max 12 Adım)
-            for i in range(4, 15):
-                # Sayfa başlığını yakala
-                title_match = re.search(r'<title>(.*?)<\/title>', curr_res, re.I)
-                title = title_match.group(1) if title_match else "Bilinmeyen Sayfa"
-                
+
+            # 3. Dinamik Döngü (İçerik Odaklı)
+            last_title = ""
+            title_repeat_count = 0
+            for i in range(1, 15):
+                # Başarı Kontrolü
                 if any(word in curr_res.lower() for word in ["successfully", "başarıyla", "updated", "changed"]):
                     CUPS_LATEST_STATUS = "Tamamlandı: Başarıyla güncellendi."
-                    print(f"DEBUG SUCCESS: {title} sayfasında başarı mesajı alındı.")
                     return True, "CUPS Mahal başarıyla güncellendi."
 
-                step_name = f"Adım {i}"
-                print(f"DEBUG: {step_name} - Sayfa: {title}")
+                # Sayfa Tespiti
+                title_match = re.search(r'<title>(.*?)<\/title>', curr_res, re.I)
+                title = (title_match.group(1) if title_match else "Bilinmeyen Sayfa").strip()
                 
-                # Formda PRINTER_LOCATION varsa override et
-                overrides = {}
-                if 'name="PRINTER_LOCATION"' in curr_res:
-                    overrides["PRINTER_LOCATION"] = new_location
-                    print(f"DEBUG: {step_name} - Mahal '{new_location}' olarak ayarlanıyor.")
+                if title == last_title: title_repeat_count += 1
+                else: title_repeat_count = 0
+                last_title = title
                 
-                # Mevcut butonları formdan çek (Karar aşaması için)
-                soup = BeautifulSoup(curr_res, 'html.parser')
-                form = soup.find('form')
-                buttons = form.find_all(['input', 'button'], type=re.compile(r'submit|button', re.I)) if form else []
-                btn_list = [str(b.get('value', '')) for b in buttons]
-                
-                # KRİTİK BUTON TESPİTİ
+                if title_repeat_count >= 4:
+                    return False, f"HATA: {title} sayfasında takılı kalındı (Döngü)."
+
+                step_name = f"Aşama {i}"
                 btn_target = "Continue"
-                # Eğer buton listesinde "Modify" geçen bir buton varsa hedef o olmalı
-                for b_val in btn_list:
-                    if "Modify" in b_val:
-                        btn_target = b_val
-                        print(f"DEBUG: {step_name} - Onay butonu tespit edildi: {btn_target}")
-                        break
-                
+                overrides = {}
+
+                # İÇERİK ODAKLI KARAR MEKANİZMASI (Kullanıcı Önerisi)
+                if "Current Connection" in curr_res:
+                    print(f"DEBUG: {step_name} - Bağlantı onaylanıyor...")
+                    btn_target = "Continue"
+                elif "Location:" in curr_res or 'name="PRINTER_LOCATION"' in curr_res:
+                    print(f"DEBUG: {step_name} - Mahal '{new_location}' yazılıyor...")
+                    overrides["PRINTER_LOCATION"] = new_location
+                    btn_target = "Continue"
+                elif "Model:" in curr_res or "Make:" in curr_res:
+                    # Model/Driver seçimi aşaması - Onay butonu Modify Printer olur
+                    if "Modify Printer" in curr_res:
+                        print(f"DEBUG: {step_name} - Model sayfası, Kaydediliyor (Modify Printer)...")
+                        btn_target = "Modify Printer"
+                    else:
+                        print(f"DEBUG: {step_name} - Model/Sürücü seçimi yapılıyor...")
+                        btn_target = "Continue"
+                else:
+                    print(f"DEBUG: {step_name} - Bilinmeyen sayfa ({title}), varsayılan 'Continue' denenecek.")
+
                 res_obj, err = cls._process_wizard_step(curr_res, curr_url, step_name, overrides, btn_target)
                 if err: return False, err
                 
@@ -185,13 +193,6 @@ class CUPSHelper:
             return None, f"HATA: {step_name} sayfasında FORM bulunamadı."
         
         payload = cls._extract_form_data(form)
-        
-        # Mevcut butonları listele
-        buttons = form.find_all(['input', 'button'], type=re.compile(r'submit|button', re.I))
-        btn_list = [f"{b.get('name')}:{b.get('value')}" for b in buttons]
-        print(f"DEBUG: {step_name} Mevcut Butonlar: {btn_list}")
-        
-        # GÜVENLİK: overrides
         if overrides and isinstance(overrides, dict):
             payload.update(overrides)
         
@@ -201,20 +202,18 @@ class CUPSHelper:
         btn = form.find(['input', 'button'], value=re.compile(btn_target, re.I))
         if btn: 
             payload[btn.get('name', 'submit')] = btn.get('value', btn_target)
-            print(f"DEBUG: {step_name} Basılan Buton -> {btn.get('value')}")
         else:
-            # Buton bulunamazsa rastgele bir submit dene
             any_btn = form.find(['input', 'button'], type='submit')
-            if any_btn:
-                payload[any_btn.get('name', 'submit')] = any_btn.get('value', 'Continue')
-                print(f"DEBUG: {step_name} Hedef '{btn_target}' yok, ALTERNATİF buton -> {any_btn.get('value')}")
-            else:
-                return None, f"HATA: {step_name} aşamasında hiçbir buton bulunamadı."
+            if any_btn: payload[any_btn.get('name', 'submit')] = any_btn.get('value', 'Continue')
+        
+        print(f"DEBUG: {step_name} Gönderilen Veri (Keys): {list(payload.keys())}")
         
         action = form.get('action', '/admin/')
+        # URL'nin sonuna slaj ekle (Yönlendirme hatasını önlemek için)
+        if not action.endswith('/'): action += '/'
         target_url = f"{cls.BASE_URL}{action}" if action.startswith('/') else f"{cls.BASE_URL}/admin/{action}"
         
-        time.sleep(1.2)
+        time.sleep(1.5)
         is_multipart = (form.get('enctype') == 'multipart/form-data')
         next_html = cls._run_curl(target_url, data=payload, referer=referer, multipart=is_multipart)
         
