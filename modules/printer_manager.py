@@ -6,7 +6,7 @@ import requests
 import urllib3
 from flask import Blueprint, request, jsonify
 from core.auth import require_auth, require_editor, require_admin
-from main import get_db_connection, query_db, log_change
+# from main import get_db_connection, query_db, log_change  <-- Circular import riski nedeniyle kaldırıldı
 from bs4 import BeautifulSoup
 
 # Disable insecure request warnings
@@ -151,6 +151,7 @@ def get_cups_status():
 @require_auth
 def get_printers():
     """Tüm yazıcıları yazıcılar tablosundan getirir."""
+    from main import query_db
     try:
         items = query_db("SELECT * FROM printers")
         return jsonify([dict(row) for row in items])
@@ -176,6 +177,7 @@ def get_status(ip):
 @printer_manager_bp.route('/update', methods=['POST'])
 @require_editor
 def update_printer():
+    from main import get_db_connection
     data = request.json
     id = data.get('id')
     if not id: return jsonify({"error": "ID missing"}), 400
