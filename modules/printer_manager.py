@@ -134,31 +134,46 @@ class CUPSHelper:
         """Form verilerini koruyarak sihirbaz adımlarını geçer."""
         soup = BeautifulSoup(html, 'html.parser')
         form = soup.find('form')
-        if not form: return None, f"{step_name}: Form bulunamadı."
+        if not form: 
+            print(f"DEBUG CRITICAL: {step_name} sayfasında FORM bulunamadı! HTML Snippet: {html[:300].replace('\n', ' ')}")
+            return None, f"{step_name}: Form bulunamadı."
         
         payload = cls._extract_form_data(form)
-        print(f"DEBUG: {step_name} extracted payload type: {type(payload)}")
+        
+        # Mevcut butonları listele (Hata ayıklama için kritik)
+        buttons = form.find_all(['input', 'button'], type=re.compile(r'submit|button', re.I))
+        btn_list = [f"{b.get('name')}:{b.get('value')}" for b in buttons]
+        print(f"DEBUG: {step_name} FORM BUTONLARI: {btn_list}")
         
         # GÜVENLİK: overrides'ın sözlük olduğunu doğrula
         if overrides and isinstance(overrides, dict):
-            print(f"DEBUG: Applying overrides to {step_name}")
+            print(f"DEBUG: Applying overrides to {step_name}: {overrides}")
             payload.update(overrides)
-        elif overrides is not None:
-            # String bir buton hedefi geçilmiş olabilir (Adım 7'deki "modify printer" gibi)
-            print(f"DEBUG: Overrides is not a dict, it's {type(overrides)}. Skipping payload.update()")
         
         # SID ve Submit butonu yönetimi
         payload['org.cups.sid'] = cls._extract_sid(html)
-        btn = form.find(['input', 'button'], value=re.compile(btn_target, re.I))
-        if btn: payload[btn.get('name', 'submit')] = btn.get('value', btn_target)
-        else: payload['submit'] = 'Continue'
+        
+        # overrides string ise (örneğin buton adıysa) ona göre davran
+        actual_btn = overrides if isinstance(overrides, str) else btn_target
+        
+        # Butonu bulmaya çalış
+        btn = form.find(['input', 'button'], value=re.compile(actual_btn, re.I))
+        if btn: 
+            payload[btn.get('name', 'submit')] = btn.get('value', actual_btn)
+            print(f"DEBUG: {step_name} seçilen buton: {btn.get('value')}")
+        else: 
+            print(f"DEBUG: {step_name} için '{actual_btn}' butonu bulunamadı, fallback: 'Continue'")
+            payload['submit'] = 'Continue'
         
         action = form.get('action', '/admin/')
         target_url = f"{cls.BASE_URL}{action}" if action.startswith('/') else f"{cls.BASE_URL}/admin/{action}"
         
+        print(f"DEBUG: {step_name} POST -> {target_url} (Payload keys: {list(payload.keys())})")
         time.sleep(1.5)
         is_multipart = (form.get('enctype') == 'multipart/form-data')
         next_html = cls._run_curl(target_url, data=payload, referer=referer, multipart=is_multipart)
+        
+        print(f"DEBUG: {step_name} RESPONSE Snippet: {next_html[:200].replace('\n', ' ')}")
         return {"html": next_html, "url": target_url}, None
 
     @classmethod
