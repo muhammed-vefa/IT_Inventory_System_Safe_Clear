@@ -131,25 +131,29 @@ class CUPSHelper:
             
             # 3. Dinamik Döngü (Max 12 Adım)
             for i in range(4, 15):
-                # Başarı kontrolü (Küçük harf duyarsız)
+                # Sayfa başlığını yakala
+                title_match = re.search(r'<title>(.*?)<\/title>', curr_res, re.I)
+                title = title_match.group(1) if title_match else "Bilinmeyen Sayfa"
+                
                 if any(word in curr_res.lower() for word in ["successfully", "başarıyla", "updated", "changed"]):
                     CUPS_LATEST_STATUS = "Tamamlandı: Başarıyla güncellendi."
-                    print(f"DEBUG SUCCESS: {step_name} sonrası başarı mesajı alındı.")
+                    print(f"DEBUG SUCCESS: {title} sayfasında başarı mesajı alındı.")
                     return True, "CUPS Mahal başarıyla güncellendi."
 
                 step_name = f"Adım {i}"
+                print(f"DEBUG: {step_name} - Sayfa: {title}")
                 
                 # Formda PRINTER_LOCATION varsa override et
                 overrides = {}
                 if 'name="PRINTER_LOCATION"' in curr_res:
                     overrides["PRINTER_LOCATION"] = new_location
-                    print(f"DEBUG: {step_name} - Mahal '{new_location}' olarak ayarlandı.")
+                    print(f"DEBUG: {step_name} - Mahal '{new_location}' olarak ayarlanıyor.")
                 
-                # KRİTİK BUTON TESPİTİ: Modify Printer varsa direkt ona bas
-                btn_target = "Continue" # Varsayılan
-                if re.search(r'value=["\']?Modify Printer["\']?', curr_res, re.I):
+                # KRİTİK BUTON TESPİTİ
+                btn_target = "Continue"
+                if "Modify" in curr_res:
                     btn_target = "Modify Printer"
-                    print(f"DEBUG: {step_name} - 'Modify Printer' butonu bulundu, onaylanıyor...")
+                    print(f"DEBUG: {step_name} - 'Modify' kelimesi bulundu, hedef buton: Modify Printer")
                 
                 res_obj, err = cls._process_wizard_step(curr_res, curr_url, step_name, overrides, btn_target)
                 if err: return False, err
@@ -172,6 +176,11 @@ class CUPSHelper:
             return None, f"HATA: {step_name} sayfasında FORM bulunamadı."
         
         payload = cls._extract_form_data(form)
+        
+        # Mevcut butonları listele
+        buttons = form.find_all(['input', 'button'], type=re.compile(r'submit|button', re.I))
+        btn_list = [f"{b.get('name')}:{b.get('value')}" for b in buttons]
+        print(f"DEBUG: {step_name} Mevcut Butonlar: {btn_list}")
         
         # GÜVENLİK: overrides
         if overrides and isinstance(overrides, dict):
