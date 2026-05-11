@@ -153,24 +153,26 @@ class CUPSHelper:
                 btn_target = "Continue"
                 overrides = {}
 
-                # İÇERİK ODAKLI KARAR MEKANİZMASI (Canlı İnceleme Sonuçları)
-                if "Current Connection:" in curr_res:
-                    print(f"DEBUG: {step_name} - Bağlantı aşaması onaylanıyor...")
+                # HASSAS FORM ELEMANI KONTROLÜ (Kenar çubuğundaki metinlere aldanmaz)
+                if 'name="SELECT_MAKE"' in curr_res:
+                    print(f"DEBUG: {step_name} - Marka/Üretici seçim sayfası...")
                     btn_target = "Continue"
-                elif "Location:" in curr_res:
-                    print(f"DEBUG: {step_name} - Mahal girişi yapılıyor...")
+                elif 'name="PPD_NAME"' in curr_res or "Modify Printer" in curr_res:
+                    print(f"DEBUG: {step_name} - Model/Sürücü onay sayfası, kaydediliyor...")
+                    btn_target = "Modify Printer"
+                elif 'name="PRINTER_LOCATION"' in curr_res:
+                    print(f"DEBUG: {step_name} - Mahal sayfası tespit edildi. Mahal '{new_location}' yazılıyor...")
                     overrides["PRINTER_LOCATION"] = new_location
                     btn_target = "Continue"
-                elif "Model:" in curr_res or "Make:" in curr_res:
-                    print(f"DEBUG: {step_name} - Model/Sürücü aşaması, kaydediliyor...")
-                    btn_target = "Modify Printer"
+                elif "Current Connection:" in curr_res:
+                    print(f"DEBUG: {step_name} - Bağlantı onaylanıyor...")
+                    btn_target = "Continue"
                 elif "modified successfully" in curr_res.lower():
                     CUPS_LATEST_STATUS = "Tamamlandı: Başarıyla güncellendi."
                     print(f"DEBUG SUCCESS: İşlem başarıyla bitti.")
                     return True, "CUPS Mahal başarıyla güncellendi."
                 else:
-                    # Tanınamayan sayfa durumunda güvenli ilerleme
-                    print(f"DEBUG: {step_name} - Sayfa içeriği analiz edilemedi, varsayılan 'Continue' denenecek.")
+                    print(f"DEBUG: {step_name} - Sayfa tam tanınamadı ({title}), 'Continue' ile denemeye devam.")
                     btn_target = "Continue"
 
                 res_obj, err = cls._process_wizard_step(curr_res, curr_url, step_name, overrides, btn_target)
