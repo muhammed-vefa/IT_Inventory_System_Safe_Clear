@@ -46,41 +46,23 @@ def _get_raw_connection():
 
 
 
-class DictRow:
-    """SQLite Row benzeri erişim sağlar: row['column'] ve row[0] ikisi de çalışır."""
+class DictRow(dict):
+    """Sözlük mirası alarak dict() dönüşümlerini ve index erişimini destekler."""
     def __init__(self, columns, values):
+        super().__init__(zip(columns, values))
         self._columns = columns
         self._values = list(values)
-        self._dict = dict(zip(columns, self._values))
 
     def __getitem__(self, key):
         if isinstance(key, int):
             return self._values[key]
-        return self._dict[key]
-
-    def __contains__(self, key):
-        return key in self._dict
-
-    def __iter__(self):
-        return iter(self._dict.items())
-
-    def __len__(self):
-        return len(self._values)
-
-    def get(self, key, default=None):
-        return self._dict.get(key, default)
+        return super().__getitem__(key)
 
     def keys(self):
         return self._columns
 
     def values(self):
         return self._values
-
-    def items(self):
-        return self._dict.items()
-
-    def __repr__(self):
-        return repr(self._dict)
 
 
 class CursorWrapper:
@@ -284,6 +266,7 @@ def init_db():
             phone NVARCHAR(MAX),
             title NVARCHAR(MAX),
             unit NVARCHAR(MAX),
+            mac NVARCHAR(MAX),
             kurulum_bekliyor INT DEFAULT 0
         )
     """)
@@ -303,6 +286,7 @@ def init_db():
     add_column_if_not_exists('inventory', 'last_edit_user', 'NVARCHAR(MAX)')
     add_column_if_not_exists('inventory', 'monitor_model', 'NVARCHAR(MAX)')
     add_column_if_not_exists('inventory', 'monitor2_model', 'NVARCHAR(MAX)')
+    add_column_if_not_exists('inventory', 'mac', 'NVARCHAR(MAX)')
 
     create_table_if_not_exists('users', """
         CREATE TABLE users (
