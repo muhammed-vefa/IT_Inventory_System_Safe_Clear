@@ -151,7 +151,7 @@ def get_cups_status():
 @require_auth
 def get_printers():
     """Tüm yazıcıları yazıcılar tablosundan getirir."""
-    from main import query_db
+    from core.database_sql import query_db
     try:
         items = query_db("SELECT * FROM printers")
         return jsonify([dict(row) for row in items])
@@ -177,7 +177,7 @@ def get_status(ip):
 @printer_manager_bp.route('/update', methods=['POST'])
 @require_editor
 def update_printer():
-    from main import get_db_connection
+    from core.database_sql import get_db_connection
     data = request.json
     id = data.get('id')
     if not id: return jsonify({"error": "ID missing"}), 400
