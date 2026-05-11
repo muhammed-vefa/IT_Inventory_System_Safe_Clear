@@ -104,54 +104,97 @@ class CUPSHelper:
             return False, str(e)
 
     @classmethod
-    def _process_wizard_step(cls, html, referer, step_name, overrides=None, btn_target="continue"):
+    def update_location(cls, printer_name, new_location, target_ip=None):
+        """Dinamik Rota Algoritması: Başarı mesajı görene kadar formu takip eder."""
+        global CUPS_LATEST_STATUS
+        try:
+            # 1. SID Çek
+            printer_url = f"{cls.BASE_URL}/printers/{printer_name}"
+            res = cls._run_curl(printer_url, referer=f"{cls.BASE_URL}/printers/")
+            sid = cls._extract_sid(res)
+            
+            # 2. Sihirbazı Başlat
+            CUPS_LATEST_STATUS = "Sihirbaz başlatılıyor..."
+            curr_url = f"{cls.BASE_URL}/admin/"
+            payload = {"org.cups.sid": sid, "OP": "modify-printer", "printer_name": printer_name, "administration": "modify-printer"}
+            curr_res = cls._run_curl(curr_url, data=payload, referer=printer_url)
+            
+            # 3. Dinamik Döngü (Max 12 Adım)
+            for i in range(4, 15):
+                # Başarı kontrolü (Küçük harf duyarsız)
+                if any(word in curr_res.lower() for word in ["successfully", "başarıyla", "updated", "changed"]):
+                    CUPS_LATEST_STATUS = "Tamamlandı: Başarıyla güncellendi."
+                    print(f"DEBUG SUCCESS: {step_name} sonrası başarı mesajı alındı.")
+                    return True, "CUPS Mahal başarıyla güncellendi."
+
+                step_name = f"Adım {i}"
+                
+                # Formda PRINTER_LOCATION varsa override et
+                overrides = {}
+                if 'name="PRINTER_LOCATION"' in curr_res:
+                    overrides["PRINTER_LOCATION"] = new_location
+                    print(f"DEBUG: {step_name} - Mahal '{new_location}' olarak ayarlandı.")
+                
+                # KRİTİK BUTON TESPİTİ: Modify Printer varsa direkt ona bas
+                btn_target = "Continue" # Varsayılan
+                if re.search(r'value=["\']?Modify Printer["\']?', curr_res, re.I):
+                    btn_target = "Modify Printer"
+                    print(f"DEBUG: {step_name} - 'Modify Printer' butonu bulundu, onaylanıyor...")
+                
+                res_obj, err = cls._process_wizard_step(curr_res, curr_url, step_name, overrides, btn_target)
+                if err: return False, err
+                
+                curr_res = res_obj["html"]
+                curr_url = res_obj["url"]
+
+            return False, "HATA: Maksimum adım sayısına ulaşıldı."
+            
+        except Exception as e:
+            CUPS_LATEST_STATUS = f"HATA: {str(e)}"
+            return False, str(e)
+
+    @classmethod
+    def _process_wizard_step(cls, html, referer, step_name, overrides=None, btn_target="Continue"):
         """Form verilerini koruyarak sihirbaz adımlarını geçer."""
         soup = BeautifulSoup(html, 'html.parser')
         form = soup.find('form')
         if not form: 
-            print(f"DEBUG CRITICAL: {step_name} sayfasında FORM bulunamadı! HTML Snippet: {html[:300].replace('\n', ' ')}")
-            return None, f"{step_name}: Form bulunamadı."
+            return None, f"HATA: {step_name} sayfasında FORM bulunamadı."
         
         payload = cls._extract_form_data(form)
         
-        # Mevcut butonları listele (Hata ayıklama için kritik)
-        buttons = form.find_all(['input', 'button'], type=re.compile(r'submit|button', re.I))
-        btn_list = [f"{b.get('name')}:{b.get('value')}" for b in buttons]
-        print(f"DEBUG: {step_name} FORM BUTONLARI: {btn_list}")
-        
-        # GÜVENLİK: overrides'ın sözlük olduğunu doğrula
+        # GÜVENLİK: overrides
         if overrides and isinstance(overrides, dict):
-            print(f"DEBUG: Applying overrides to {step_name}: {overrides}")
             payload.update(overrides)
         
-        # SID ve Submit butonu yönetimi
         payload['org.cups.sid'] = cls._extract_sid(html)
         
-        # overrides string ise (örneğin buton adıysa) ona göre davran
-        actual_btn = overrides if isinstance(overrides, str) else btn_target
-        
-        # Butonu bulmaya çalış
-        btn = form.find(['input', 'button'], value=re.compile(actual_btn, re.I))
+        # Butonu Bul ve Bas
+        btn = form.find(['input', 'button'], value=re.compile(btn_target, re.I))
         if btn: 
-            payload[btn.get('name', 'submit')] = btn.get('value', actual_btn)
-            print(f"DEBUG: {step_name} seçilen buton: {btn.get('value')}")
-        else: 
-            print(f"DEBUG: {step_name} için '{actual_btn}' butonu bulunamadı, fallback: 'Continue'")
-            payload['submit'] = 'Continue'
+            payload[btn.get('name', 'submit')] = btn.get('value', btn_target)
+            print(f"DEBUG: {step_name} Basılan Buton -> {btn.get('value')}")
+        else:
+            # Buton bulunamazsa rastgele bir submit dene
+            any_btn = form.find(['input', 'button'], type='submit')
+            if any_btn:
+                payload[any_btn.get('name', 'submit')] = any_btn.get('value', 'Continue')
+                print(f"DEBUG: {step_name} Hedef '{btn_target}' yok, ALTERNATİF buton -> {any_btn.get('value')}")
+            else:
+                return None, f"HATA: {step_name} aşamasında hiçbir buton bulunamadı."
         
         action = form.get('action', '/admin/')
         target_url = f"{cls.BASE_URL}{action}" if action.startswith('/') else f"{cls.BASE_URL}/admin/{action}"
         
-        print(f"DEBUG: {step_name} POST -> {target_url} (Payload keys: {list(payload.keys())})")
-        time.sleep(1.5)
+        time.sleep(1.2)
         is_multipart = (form.get('enctype') == 'multipart/form-data')
         next_html = cls._run_curl(target_url, data=payload, referer=referer, multipart=is_multipart)
         
-        print(f"DEBUG: {step_name} RESPONSE Snippet: {next_html[:200].replace('\n', ' ')}")
         return {"html": next_html, "url": target_url}, None
 
     @classmethod
     def _extract_form_data(cls, form):
+        """Mevcut formdaki tüm inputları (gizli dahil) yakalar."""
         data = {}
         for inp in form.find_all(['input', 'select', 'textarea']):
             name = inp.get('name')
