@@ -3730,27 +3730,41 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
     },
     updateCupsLocation: async function(ip, manualMahal) {
         if (!ip) return alert('Yazıcı IP adresi bulunamadı!');
-        
-        // Eğer manuel verilmediyse input alanından (güncel değer) oku
         const mahal = manualMahal || document.getElementById('edit-mahal')?.value;
         if (!mahal) return alert('Mahal bilgisi belirlenemedi!');
 
         if (!confirm(`${ip} IP'li yazıcının CUPS üzerindeki mahal bilgisini [${mahal}] olarak güncellemek istiyor musunuz?`)) return;
         
+        let progressInterval;
         try {
             this.showToast('CUPS güncelleniyor, lütfen bekleyin...', 'info');
+            
+            progressInterval = setInterval(async () => {
+                try {
+                    const sResp = await fetch(this.state.API_BASE + '/printers/cups_status');
+                    const sData = await sResp.json();
+                    if (sData.status) {
+                        this.showToast(sData.status, 'info');
+                    }
+                } catch(e) {}
+            }, 2000);
+
             const resp = await fetch(this.state.API_BASE + '/printers/cups/update_mahal', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ip: ip, mahal: mahal })
             });
             const result = await resp.json();
+            
+            if (progressInterval) clearInterval(progressInterval);
+
             if (result.success) {
                 this.showToast('CUPS Mahal başarıyla güncellendi.');
             } else {
-                throw new Error(result.error || 'Bilinmeyen bir hata oluştu.');
+                throw new Error(result.error || result.message || 'Bilinmeyen bir hata oluştu.');
             }
         } catch (e) {
+            if (progressInterval) clearInterval(progressInterval);
             alert('CUPS Hatası: ' + e.message);
         }
     },
