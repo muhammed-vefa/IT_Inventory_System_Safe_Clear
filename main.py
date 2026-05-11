@@ -1346,11 +1346,11 @@ if __name__ == '__main__':
     bg_thread = threading.Thread(target=background_sync_worker, daemon=True)
     bg_thread.start()
     
-    # İlk açılışta bir kez senkronize et
-    try:
-        sync_excel_to_db_internal()
-    except Exception as e:
-        print("Initial Sync Error:", e)
+    # İlk açılışta bir kez senkronize et (Kullanıcı talebiyle kapatıldı)
+    # try:
+    #     sync_excel_to_db_internal()
+    # except Exception as e:
+    #     print("Initial Sync Error:", e)
     
     # Try using waitress for production, fallback to Flask dev server
     try:

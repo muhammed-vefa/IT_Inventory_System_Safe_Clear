@@ -26,16 +26,26 @@ class CUPSHelper:
     @classmethod
     def _run_curl(cls, url, data=None, referer=None, multipart=False):
         cookie_file = "cups_cookies.txt"
-        cmd = ['curl.exe', '-k', '-L', '-s', '--anyauth', '--user', f"{cls.AUTH_USER}:{cls.AUTH_PASS}", '-c', cookie_file, '-b', cookie_file]
+        # Modern User-Agent ve Expect başlığı CUPS'ın takılmasını engeller
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        cmd = ['curl.exe', '-k', '-L', '-s', '--anyauth', '--user', f"{cls.AUTH_USER}:{cls.AUTH_PASS}", 
+               '-c', cookie_file, '-b', cookie_file, '-H', 'Expect:', '-A', user_agent]
+        
         if not multipart: cmd.extend(['-H', 'Content-Type: application/x-www-form-urlencoded'])
         if referer: cmd.extend(['-H', f'Referer: {referer}'])
+        
         if data:
             if not isinstance(data, dict):
-                print(f"DEBUG ERROR: _run_curl data is not dict! Type: {type(data)}")
                 data = {}
             for k, v in data.items():
-                if multipart: cmd.extend(['-F', f"{k}={v}"])
-                else: cmd.extend(['--data-urlencode', f"{k}={v}"])
+                if multipart:
+                    if k == 'PPD_FILE' and not v:
+                        # Boş dosya girişi için Windows'ta @nul kullanmak daha güvenlidir
+                        cmd.extend(['-F', 'PPD_FILE=@nul'])
+                    else:
+                        cmd.extend(['-F', f"{k}={v}"])
+                else:
+                    cmd.extend(['--data-urlencode', f"{k}={v}"])
         cmd.append(url)
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=20, encoding='utf-8', errors='ignore')
