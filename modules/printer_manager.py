@@ -153,18 +153,18 @@ class CUPSHelper:
                 btn_target = "Continue"
                 overrides = {}
 
-                # KATI FORM ELEMANI KONTROLÜ (Menüdeki metinlerden etkilenmez)
-                if 'name="SELECT_MAKE"' in curr_res:
+                # ESNEK FORM ELEMANI KONTROLÜ (Regex ile tırnak/harf duyarsız)
+                if re.search(r'name=["\']?SELECT_MAKE["\']?', curr_res, re.I):
                     print(f"DEBUG: {step_name} - Marka/Üretici seçimi sayfası...")
                     btn_target = "Continue"
-                elif 'name="PPD_NAME"' in curr_res:
+                elif re.search(r'name=["\']?PPD_NAME["\']?', curr_res, re.I):
                     print(f"DEBUG: {step_name} - Son onay sayfası (Model), kaydediliyor...")
                     btn_target = "Modify Printer"
-                elif 'name="PRINTER_LOCATION"' in curr_res:
+                elif re.search(r'name=["\']?PRINTER_LOCATION["\']?', curr_res, re.I):
                     print(f"DEBUG: {step_name} - Mahal sayfası tespit edildi. Mahal '{new_location}' yazılıyor...")
                     overrides["PRINTER_LOCATION"] = new_location
                     btn_target = "Continue"
-                elif 'name="DEVICE_URI"' in curr_res:
+                elif re.search(r'name=["\']?DEVICE_URI["\']?', curr_res, re.I):
                     print(f"DEBUG: {step_name} - Bağlantı/Protokol aşaması onaylanıyor...")
                     btn_target = "Continue"
                 elif "modified successfully" in curr_res.lower():
@@ -172,10 +172,10 @@ class CUPSHelper:
                     print(f"DEBUG SUCCESS: İşlem başarıyla bitti.")
                     return True, "CUPS Mahal başarıyla güncellendi."
                 else:
-                    # Formdaki butonlara bakarak Modify Printer var mı kontrol et
-                    if 'value="Modify Printer"' in curr_res:
+                    # Alternatif: Form içindeki Modify Printer butonunu her zaman kolla
+                    if re.search(r'value=["\']?Modify Printer["\']?', curr_res, re.I):
                         btn_target = "Modify Printer"
-                        print(f"DEBUG: {step_name} - Form içinde Modify Printer butonu bulundu.")
+                        print(f"DEBUG: {step_name} - Modify Printer butonu yakalandı.")
                     else:
                         print(f"DEBUG: {step_name} - Sayfa tam tanınamadı, 'Continue' ile denenecek.")
                         btn_target = "Continue"
