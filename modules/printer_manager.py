@@ -95,25 +95,35 @@ class CUPSHelper:
             ]
             
             curr_res, curr_url = res, init_url
+            final_html = ""
             for s_name, s_msg, s_override in steps:
                 CUPS_LATEST_STATUS = s_msg
                 btn = "modify printer" if s_name == "Adım 7" else "continue"
                 
                 res_obj, err = cls._process_wizard_step(curr_res, curr_url, s_name, s_override, btn)
                 
-                # GÜVENLİK: res_obj kontrolü
                 if err: return False, err
                 if res_obj is None or not isinstance(res_obj, dict):
                     return False, f"HATA: {s_name} aşamasında geçersiz yanıt objesi alındı."
                 
                 curr_res = res_obj.get("html", "")
                 curr_url = res_obj.get("url", "")
+                final_html = curr_res # Son dönen HTML'i sakla
                 
                 if not curr_res:
                     return False, f"HATA: {s_name} aşamasında HTML içeriği alınamadı."
 
-            CUPS_LATEST_STATUS = "Tamamlandı: Başarıyla güncellendi."
-            return True, "CUPS Mahal başarıyla güncellendi."
+            # GÜVENLİK: İşlem gerçekten başarılı oldu mu?
+            success_keywords = ["successfully", "başarıyla", "updated", "kaydedildi", "değiştirildi"]
+            if any(word in final_html.lower() for word in success_keywords):
+                CUPS_LATEST_STATUS = "Tamamlandı: Başarıyla güncellendi."
+                return True, "CUPS Mahal başarıyla güncellendi."
+            else:
+                # Eğer başarı mesajı yoksa HTML içindeki hata mesajlarını ayıklamaya çalış
+                error_soup = BeautifulSoup(final_html, 'html.parser')
+                error_msg = error_soup.find(['p', 'div'], class_=re.compile(r'error|warning', re.I))
+                msg = error_msg.get_text().strip() if error_msg else "CUPS onay sayfasında başarı mesajı görülemedi."
+                return False, f"HATA: {msg}"
             
         except Exception as e:
             CUPS_LATEST_STATUS = f"HATA: {str(e)}"
