@@ -58,67 +58,46 @@ class CUPSHelper:
 
     @classmethod
     def update_location(cls, printer_name, new_location, target_ip=None):
+        """Dinamik Rota Algoritması: Başarı mesajı görene kadar formu takip eder."""
         global CUPS_LATEST_STATUS
         try:
-            CUPS_LATEST_STATUS = f"Yazıcı aranıyor: {target_ip or printer_name}..."
-            
-            # Yazıcı sayfasını bul ve SID çek
+            # 1. SID Çek
             printer_url = f"{cls.BASE_URL}/printers/{printer_name}"
             res = cls._run_curl(printer_url, referer=f"{cls.BASE_URL}/printers/")
             sid = cls._extract_sid(res)
-            print(f"DEBUG: Initial SID for {printer_name}: {sid}")
             
-            # ADIM 3: Modify Printer Giriş (Kesin Tetikleyici)
-            CUPS_LATEST_STATUS = "Adım 3: Modify Printer tetikleniyor..."
-            init_url = f"{cls.BASE_URL}/admin/"
-            # CUPS 2.2.x büyük harf OP ve administration parametrelerini sever
-            payload = {
-                "org.cups.sid": sid,
-                "OP": "modify-printer",
-                "printer_name": printer_name,
-                "administration": "modify-printer"
-            }
-            print(f"DEBUG: Adım 3 POST payload: {payload}")
-            res = cls._run_curl(init_url, data=payload, referer=printer_url)
+            # 2. Sihirbazı Başlat
+            CUPS_LATEST_STATUS = "Sihirbaz başlatılıyor..."
+            curr_url = f"{cls.BASE_URL}/admin/"
+            payload = {"org.cups.sid": sid, "OP": "modify-printer", "printer_name": printer_name, "administration": "modify-printer"}
+            curr_res = cls._run_curl(curr_url, data=payload, referer=printer_url)
             
-            # SİHİRBAZ ADIMLARI (4, 5, 6, 7)
-            steps = [
-                ("Adım 4", "Bağlantı türü onaylanıyor...", None),
-                ("Adım 5", "Cihaz adresi onaylanıyor...", None),
-                ("Adım 6", f"Mahal '{new_location}' yazılıyor...", {"PRINTER_LOCATION": new_location}),
-                ("Adım 7", "Ayarlar kaydediliyor...", "modify printer")
-            ]
-            
-            curr_res, curr_url = res, init_url
-            final_html = ""
-            for s_name, s_msg, s_override in steps:
-                CUPS_LATEST_STATUS = s_msg
-                btn = "modify printer" if s_name == "Adım 7" else "continue"
-                
-                res_obj, err = cls._process_wizard_step(curr_res, curr_url, s_name, s_override, btn)
-                
-                if err: return False, err
-                if res_obj is None or not isinstance(res_obj, dict):
-                    return False, f"HATA: {s_name} aşamasında geçersiz yanıt objesi alındı."
-                
-                curr_res = res_obj.get("html", "")
-                curr_url = res_obj.get("url", "")
-                final_html = curr_res # Son dönen HTML'i sakla
-                
-                if not curr_res:
-                    return False, f"HATA: {s_name} aşamasında HTML içeriği alınamadı."
+            # 3. Dinamik Döngü (Max 10 Adım)
+            for i in range(4, 12):
+                if any(word in curr_res.lower() for word in ["successfully", "başarıyla", "updated"]):
+                    CUPS_LATEST_STATUS = "Tamamlandı: Başarıyla güncellendi."
+                    return True, "CUPS Mahal başarıyla güncellendi."
 
-            # GÜVENLİK: İşlem gerçekten başarılı oldu mu?
-            success_keywords = ["successfully", "başarıyla", "updated", "kaydedildi", "değiştirildi"]
-            if any(word in final_html.lower() for word in success_keywords):
-                CUPS_LATEST_STATUS = "Tamamlandı: Başarıyla güncellendi."
-                return True, "CUPS Mahal başarıyla güncellendi."
-            else:
-                # Eğer başarı mesajı yoksa HTML içindeki hata mesajlarını ayıklamaya çalış
-                error_soup = BeautifulSoup(final_html, 'html.parser')
-                error_msg = error_soup.find(['p', 'div'], class_=re.compile(r'error|warning', re.I))
-                msg = error_msg.get_text().strip() if error_msg else "CUPS onay sayfasında başarı mesajı görülemedi."
-                return False, f"HATA: {msg}"
+                step_name = f"Adım {i}"
+                # Formda PRINTER_LOCATION varsa ve bizimkine eşit değilse override et
+                overrides = {}
+                if 'name="PRINTER_LOCATION"' in curr_res:
+                    overrides["PRINTER_LOCATION"] = new_location
+                    CUPS_LATEST_STATUS = f"{step_name}: Mahal bilgisi yazılıyor..."
+                else:
+                    CUPS_LATEST_STATUS = f"{step_name}: İlerleniyor..."
+
+                # Buton tespiti: Önce 'Modify Printer' ara, yoksa 'Continue'
+                btn_target = "continue"
+                if 'value="Modify Printer"' in curr_res: btn_target = "Modify Printer"
+                
+                res_obj, err = cls._process_wizard_step(curr_res, curr_url, step_name, overrides, btn_target)
+                if err: return False, err
+                
+                curr_res = res_obj["html"]
+                curr_url = res_obj["url"]
+
+            return False, "HATA: Maksimum adım sayısına ulaşıldı ama başarı mesajı alınamadı."
             
         except Exception as e:
             CUPS_LATEST_STATUS = f"HATA: {str(e)}"
