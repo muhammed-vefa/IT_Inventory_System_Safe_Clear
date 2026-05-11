@@ -62,29 +62,24 @@ class CUPSHelper:
         try:
             CUPS_LATEST_STATUS = f"Yazıcı aranıyor: {target_ip or printer_name}..."
             
-            # Yazıcı sayfasını bul
+            # Yazıcı sayfasını bul ve SID çek
             printer_url = f"{cls.BASE_URL}/printers/{printer_name}"
             res = cls._run_curl(printer_url, referer=f"{cls.BASE_URL}/printers/")
+            sid = cls._extract_sid(res)
+            print(f"DEBUG: Initial SID for {printer_name}: {sid}")
             
-            # İsim doğrulaması
-            if printer_name.lower() not in res.lower() and target_ip:
-                found_name = cls.get_printer_name_by_ip(target_ip)
-                if found_name:
-                    printer_name = found_name
-                    printer_url = f"{cls.BASE_URL}/printers/{printer_name}"
-            CUPS_LATEST_STATUS = f"Başlatıldı: {printer_name} ({target_ip})"
-            
-            # ADIM 1 & 2: Bulma ve Doğrulama
-            printers_page = cls._run_curl(f"{cls.BASE_URL}/printers/")
-            if target_ip not in printers_page:
-                return False, f"HATA: {target_ip} bulunamadı."
-            
-            # ADIM 3: Modify Printer Giriş
+            # ADIM 3: Modify Printer Giriş (Kesin Tetikleyici)
             CUPS_LATEST_STATUS = "Adım 3: Modify Printer tetikleniyor..."
             init_url = f"{cls.BASE_URL}/admin/"
-            payload = {"op": "modify-printer", "printer_name": printer_name}
-            print(f"DEBUG: Adım 3 payload type: {type(payload)}")
-            res = cls._run_curl(init_url, data=payload, referer=f"{cls.BASE_URL}/printers/")
+            # CUPS 2.2.x büyük harf OP ve administration parametrelerini sever
+            payload = {
+                "org.cups.sid": sid,
+                "OP": "modify-printer",
+                "printer_name": printer_name,
+                "administration": "modify-printer"
+            }
+            print(f"DEBUG: Adım 3 POST payload: {payload}")
+            res = cls._run_curl(init_url, data=payload, referer=printer_url)
             
             # SİHİRBAZ ADIMLARI (4, 5, 6, 7)
             steps = [
