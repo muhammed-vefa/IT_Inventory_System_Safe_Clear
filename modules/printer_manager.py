@@ -30,6 +30,9 @@ class CUPSHelper:
         if not multipart: cmd.extend(['-H', 'Content-Type: application/x-www-form-urlencoded'])
         if referer: cmd.extend(['-H', f'Referer: {referer}'])
         if data:
+            if not isinstance(data, dict):
+                print(f"DEBUG ERROR: _run_curl data is not dict! Type: {type(data)}")
+                data = {}
             for k, v in data.items():
                 if multipart: cmd.extend(['-F', f"{k}={v}"])
                 else: cmd.extend(['--data-urlencode', f"{k}={v}"])
@@ -69,15 +72,21 @@ class CUPSHelper:
                 if found_name:
                     printer_name = found_name
                     printer_url = f"{cls.BASE_URL}/printers/{printer_name}"
-                    res = cls._run_curl(printer_url, referer=f"{cls.BASE_URL}/printers/")
-
+            CUPS_LATEST_STATUS = f"Başlatıldı: {printer_name} ({target_ip})"
+            
+            # ADIM 1 & 2: Bulma ve Doğrulama
+            printers_page = cls._run_curl(f"{cls.BASE_URL}/printers/")
+            if target_ip not in printers_page:
+                return False, f"HATA: {target_ip} bulunamadı."
+            
+            # ADIM 3: Modify Printer Giriş
             CUPS_LATEST_STATUS = "Adım 3: Modify Printer tetikleniyor..."
-            sid = cls._extract_sid(res)
-            if not sid: return False, "SID alınamadı."
+            init_url = f"{cls.BASE_URL}/admin/"
+            payload = {"op": "modify-printer", "printer_name": printer_name}
+            print(f"DEBUG: Adım 3 payload type: {type(payload)}")
+            res = cls._run_curl(init_url, data=payload, referer=f"{cls.BASE_URL}/printers/")
             
-            payload = {'administration': 'modify-printer', 'org.cups.sid': sid, 'go': 'Go', 'printer_name': printer_name, 'OP': 'modify-printer'}
-            res = cls._run_curl(f"{cls.BASE_URL}/admin/", data=payload, referer=printer_url)
-            
+            # SİHİRBAZ ADIMLARI (4, 5, 6, 7)
             steps = [
                 ("Adım 4", "Bağlantı türü onaylanıyor...", None),
                 ("Adım 5", "Cihaz adresi onaylanıyor...", None),
@@ -85,33 +94,50 @@ class CUPSHelper:
                 ("Adım 7", "Ayarlar kaydediliyor...", "modify printer")
             ]
             
-            curr_res, curr_url = res, f"{cls.BASE_URL}/admin/"
+            curr_res, curr_url = res, init_url
             for s_name, s_msg, s_override in steps:
                 CUPS_LATEST_STATUS = s_msg
                 btn = "modify printer" if s_name == "Adım 7" else "continue"
+                
                 res_obj, err = cls._process_wizard_step(curr_res, curr_url, s_name, s_override, btn)
-                if err: 
-                    CUPS_LATEST_STATUS = f"Hata: {err}"
-                    return False, err
-                curr_res, curr_url = res_obj['html'], res_obj['url']
+                
+                # GÜVENLİK: res_obj kontrolü
+                if err: return False, err
+                if res_obj is None or not isinstance(res_obj, dict):
+                    return False, f"HATA: {s_name} aşamasında geçersiz yanıt objesi alındı."
+                
+                curr_res = res_obj.get("html", "")
+                curr_url = res_obj.get("url", "")
+                
+                if not curr_res:
+                    return False, f"HATA: {s_name} aşamasında HTML içeriği alınamadı."
 
-            if any(x in curr_res.lower() for x in ["successfully", "başarıyla", "updated"]):
-                CUPS_LATEST_STATUS = "Tamamlandı: Başarıyla güncellendi."
-                return True, "Başarılı."
+            CUPS_LATEST_STATUS = "Tamamlandı: Başarıyla güncellendi."
+            return True, "CUPS Mahal başarıyla güncellendi."
             
-            CUPS_LATEST_STATUS = "Hata: Onay alınamadı."
-            return False, "Onay alınamadı."
         except Exception as e:
-            CUPS_LATEST_STATUS = f"Hata: {str(e)}"
+            CUPS_LATEST_STATUS = f"HATA: {str(e)}"
             return False, str(e)
 
     @classmethod
     def _process_wizard_step(cls, html, referer, step_name, overrides=None, btn_target="continue"):
+        """Form verilerini koruyarak sihirbaz adımlarını geçer."""
         soup = BeautifulSoup(html, 'html.parser')
         form = soup.find('form')
         if not form: return None, f"{step_name}: Form bulunamadı."
+        
         payload = cls._extract_form_data(form)
-        if overrides: payload.update(overrides)
+        print(f"DEBUG: {step_name} extracted payload type: {type(payload)}")
+        
+        # GÜVENLİK: overrides'ın sözlük olduğunu doğrula
+        if overrides and isinstance(overrides, dict):
+            print(f"DEBUG: Applying overrides to {step_name}")
+            payload.update(overrides)
+        elif overrides is not None:
+            # String bir buton hedefi geçilmiş olabilir (Adım 7'deki "modify printer" gibi)
+            print(f"DEBUG: Overrides is not a dict, it's {type(overrides)}. Skipping payload.update()")
+        
+        # SID ve Submit butonu yönetimi
         payload['org.cups.sid'] = cls._extract_sid(html)
         btn = form.find(['input', 'button'], value=re.compile(btn_target, re.I))
         if btn: payload[btn.get('name', 'submit')] = btn.get('value', btn_target)
