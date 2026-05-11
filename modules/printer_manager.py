@@ -153,27 +153,32 @@ class CUPSHelper:
                 btn_target = "Continue"
                 overrides = {}
 
-                # HASSAS FORM ELEMANI KONTROLÜ (Kenar çubuğundaki metinlere aldanmaz)
+                # KATI FORM ELEMANI KONTROLÜ (Menüdeki metinlerden etkilenmez)
                 if 'name="SELECT_MAKE"' in curr_res:
-                    print(f"DEBUG: {step_name} - Marka/Üretici seçim sayfası...")
+                    print(f"DEBUG: {step_name} - Marka/Üretici seçimi sayfası...")
                     btn_target = "Continue"
-                elif 'name="PPD_NAME"' in curr_res or "Modify Printer" in curr_res:
-                    print(f"DEBUG: {step_name} - Model/Sürücü onay sayfası, kaydediliyor...")
+                elif 'name="PPD_NAME"' in curr_res:
+                    print(f"DEBUG: {step_name} - Son onay sayfası (Model), kaydediliyor...")
                     btn_target = "Modify Printer"
                 elif 'name="PRINTER_LOCATION"' in curr_res:
                     print(f"DEBUG: {step_name} - Mahal sayfası tespit edildi. Mahal '{new_location}' yazılıyor...")
                     overrides["PRINTER_LOCATION"] = new_location
                     btn_target = "Continue"
-                elif "Current Connection:" in curr_res:
-                    print(f"DEBUG: {step_name} - Bağlantı onaylanıyor...")
+                elif 'name="DEVICE_URI"' in curr_res:
+                    print(f"DEBUG: {step_name} - Bağlantı/Protokol aşaması onaylanıyor...")
                     btn_target = "Continue"
                 elif "modified successfully" in curr_res.lower():
                     CUPS_LATEST_STATUS = "Tamamlandı: Başarıyla güncellendi."
                     print(f"DEBUG SUCCESS: İşlem başarıyla bitti.")
                     return True, "CUPS Mahal başarıyla güncellendi."
                 else:
-                    print(f"DEBUG: {step_name} - Sayfa tam tanınamadı ({title}), 'Continue' ile denemeye devam.")
-                    btn_target = "Continue"
+                    # Formdaki butonlara bakarak Modify Printer var mı kontrol et
+                    if 'value="Modify Printer"' in curr_res:
+                        btn_target = "Modify Printer"
+                        print(f"DEBUG: {step_name} - Form içinde Modify Printer butonu bulundu.")
+                    else:
+                        print(f"DEBUG: {step_name} - Sayfa tam tanınamadı, 'Continue' ile denenecek.")
+                        btn_target = "Continue"
 
                 res_obj, err = cls._process_wizard_step(curr_res, curr_url, step_name, overrides, btn_target)
                 if err: return False, err
