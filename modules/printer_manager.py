@@ -149,11 +149,20 @@ class CUPSHelper:
                     overrides["PRINTER_LOCATION"] = new_location
                     print(f"DEBUG: {step_name} - Mahal '{new_location}' olarak ayarlanıyor.")
                 
+                # Mevcut butonları formdan çek (Karar aşaması için)
+                soup = BeautifulSoup(curr_res, 'html.parser')
+                form = soup.find('form')
+                buttons = form.find_all(['input', 'button'], type=re.compile(r'submit|button', re.I)) if form else []
+                btn_list = [str(b.get('value', '')) for b in buttons]
+                
                 # KRİTİK BUTON TESPİTİ
                 btn_target = "Continue"
-                if "Modify" in curr_res:
-                    btn_target = "Modify Printer"
-                    print(f"DEBUG: {step_name} - 'Modify' kelimesi bulundu, hedef buton: Modify Printer")
+                # Eğer buton listesinde "Modify" geçen bir buton varsa hedef o olmalı
+                for b_val in btn_list:
+                    if "Modify" in b_val:
+                        btn_target = b_val
+                        print(f"DEBUG: {step_name} - Onay butonu tespit edildi: {btn_target}")
+                        break
                 
                 res_obj, err = cls._process_wizard_step(curr_res, curr_url, step_name, overrides, btn_target)
                 if err: return False, err
