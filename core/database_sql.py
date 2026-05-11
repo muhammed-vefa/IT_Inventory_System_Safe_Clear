@@ -62,7 +62,7 @@ class DictRow:
         return key in self._dict
 
     def __iter__(self):
-        return iter(self._values)
+        return iter(self._dict.items())
 
     def __len__(self):
         return len(self._values)
