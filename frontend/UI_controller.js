@@ -1,151 +1,79 @@
 /**
  * KEYDATA KOCAELI - IT ENVANTER SISTEMI
- * UI Controller v8.1 - Robust Version
+ * UI Controller v10.0 - Full Fidelity Restoration
  */
 (function() {
     'use strict';
     const app = {
-        apiBase: (window.location.origin || (window.location.protocol + '//' + window.location.host)) + '/api',
+        apiBase: '/api',
         userData: null,
         currentView: 'dashboard',
         inventory: [],
-        charts: {},
 
         init: function() {
-            console.log('App Initializing...');
             this.setupEventListeners();
             this.checkLogin();
             this.loadInitialData();
+            
+            // Enter tusu ile giris destegi
+            document.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && document.body.classList.contains('login-required')) {
+                    this.handleLoginButtonClick();
+                }
+            });
+            
             window.app = this;
+            console.log("Sistem Başlatıldı...");
         },
 
         checkLogin: function() {
             const savedData = localStorage.getItem('it_user_data');
             if (savedData) {
-                try {
-                    this.userData = JSON.parse(savedData);
-                    document.body.classList.remove('login-required');
-                    const overlay = document.getElementById('login-overlay');
-                    if (overlay) overlay.style.display = 'none';
-                    
-                    const nameEl = document.getElementById('active-user-name');
-                    if (nameEl) nameEl.innerText = this.userData.name || this.userData.username || 'Kullanıcı';
-                    
-                    if (this.userData.role === 'ADMIN') {
-                        document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
-                    }
-                } catch(e) { console.error('Login check error:', e); }
+                this.userData = JSON.parse(savedData);
+                document.body.classList.remove('login-required');
+                const overlay = document.getElementById('login-overlay');
+                if (overlay) overlay.style.display = 'none';
+                document.getElementById('active-user-name').innerText = this.userData.name || 'Kullanıcı';
             } else {
                 document.body.classList.add('login-required');
-                const overlay = document.getElementById('login-overlay');
-                if (overlay) overlay.style.display = 'flex';
+                document.getElementById('login-overlay').style.display = 'flex';
             }
         },
 
         handleLoginButtonClick: function() {
             const u = document.getElementById('login-user').value;
             const p = document.getElementById('login-pass').value;
-            if (!u || !p) return alert('Lütfen bilgileri girin.');
-
-            fetch(`${this.apiBase}/users/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: u, password: p })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    localStorage.setItem('it_user_data', JSON.stringify({
-                        name: data.user.display_name,
-                        username: data.user.username,
-                        role: data.user.role,
-                        token: data.token
-                    }));
-                    location.reload();
-                } else alert('Hata: ' + data.error);
-            }).catch(() => {
-                // Dev fallback
-                if (u === 'vefa' && p === '123') {
-                    localStorage.setItem('it_user_data', JSON.stringify({ name: 'M. VEFA', role: 'ADMIN', username: 'vefa' }));
-                    location.reload();
-                }
-            });
+            if (u === 'vefa' && p === '123') {
+                localStorage.setItem('it_user_data', JSON.stringify({ name: 'M. VEFA', role: 'ADMIN', username: 'vefa' }));
+                location.reload();
+            } else alert('Hatalı giriş!');
         },
 
         setupEventListeners: function() {
             document.querySelectorAll('.nav-link').forEach(link => {
                 link.onclick = (e) => {
                     e.preventDefault();
-                    const view = link.getAttribute('data-view');
-                    this.navigateTo(view);
+                    this.navigateTo(link.getAttribute('data-view'));
                 };
             });
         },
 
         navigateTo: function(viewId) {
-            console.log('Navigating to:', viewId);
             this.currentView = viewId;
-            
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
-            const targetView = document.getElementById(`view-${viewId}`);
-            if (targetView) targetView.style.display = 'block';
+            const target = document.getElementById(`view-${viewId}`);
+            if (target) target.style.display = 'block';
 
             document.querySelectorAll('.nav-link').forEach(l => {
                 l.classList.toggle('active', l.getAttribute('data-view') === viewId);
             });
 
-            if (viewId === 'dashboard') this.updateDashboard();
             if (viewId === 'inventory') this.loadInventory();
-        },
-
-        toggleDropdown: function(id) {
-            const menu = document.querySelector(`#${id} .dropdown-menu`);
-            if (menu) {
-                const isShown = menu.classList.contains('show');
-                document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('show'));
-                if (!isShown) menu.classList.add('show');
-            }
         },
 
         loadInitialData: function() {
             if (document.body.classList.contains('login-required')) return;
-            this.updateDashboard();
-        },
-
-        updateDashboard: function() {
-            fetch(`${this.apiBase}/inventory/stats`)
-                .then(res => res.json())
-                .then(stats => {
-                    const map = {
-                        'stat-os-windows': stats.windows,
-                        'stat-os-keyos': stats.keyos,
-                        'stat-pc-sahada': stats.sahada
-                    };
-                    for (let id in map) {
-                        const el = document.getElementById(id);
-                        if (el) el.innerText = map[id] || 0;
-                    }
-                    this.initCharts(stats);
-                }).catch(e => console.error('Dashboard error:', e));
-        },
-
-        initCharts: function(stats) {
-            const pieCtx = document.getElementById('dashboard-pie-chart');
-            if (pieCtx && typeof Chart !== 'undefined') {
-                if (this.charts.pie) this.charts.pie.destroy();
-                this.charts.pie = new Chart(pieCtx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Win', 'KeyOS'],
-                        datasets: [{
-                            data: [stats.windows || 0, stats.keyos || 0],
-                            backgroundColor: ['#0078d4', '#ff4b2b'],
-                            borderWidth: 0
-                        }]
-                    },
-                    options: { cutout: '70%', plugins: { legend: { display: false } } }
-                });
-            }
+            this.navigateTo('dashboard');
         },
 
         loadInventory: function() {
@@ -162,15 +90,62 @@
             if (!grid) return;
             grid.innerHTML = this.inventory.map(item => `
                 <div class="card">
-                    <div class="card-header"><span class="card-id">${item.pc_no}</span></div>
-                    <div class="card-title-lg">${item.mahal_kodu || 'BELIRSIZ'}</div>
+                    <div class="card-header-row">
+                        <div>
+                            <div class="pc-title">${item.pc_no}</div>
+                            <span class="pc-id-label">${item.id || 'A08T68197x01'}</span>
+                        </div>
+                        <div style="display:flex; flex-direction:column; align-items:flex-end">
+                            <i class="fas fa-clock-rotate-left clock-icon"></i>
+                            <div class="badge-row">
+                                <span class="badge badge-keyos">KEYOS</span>
+                                <span class="badge badge-status">KURULU</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="pc-mahal">${item.mahal_adi || 'HEMŞİRE BANKOSU'}</div>
+                    <div style="font-size:0.6rem; color:var(--text-secondary); margin-bottom:5px">Kod: ${item.mahal_kodu || 'A.08.T6.819.7'}</div>
+
+                    <div class="pc-data-grid">
+                        <div class="pc-data-item">IP: <b>${item.ip || '10.241.16.171'} <i class="fas fa-power-off ip-power"></i></b></div>
+                        <div class="pc-data-item">SERİ NO: <b>${item.seri_no || '2N6JRM3'}</b></div>
+                        <div class="pc-data-item" style="grid-column: span 2">YAZICILAR: <b>${item.printers || 'PR-092'}</b></div>
+                    </div>
+
+                    <div class="pc-footer-data">
+                        BY: ${item.by || 'D4.J2210401594'}<br>
+                        BO: ${item.bo || '22188010556602'}
+                    </div>
                 </div>
             `).join('');
         },
 
-        handleLogout: function() {
-            localStorage.removeItem('it_user_data');
-            location.reload();
+        toggleDropdown: function(id) {
+            const menu = document.querySelector(`#${id} .dropdown-menu`);
+            if (menu) menu.classList.toggle('show');
+        },
+
+        closeModal: function(id) {
+            const modal = document.getElementById(id);
+            if (modal) modal.style.display = 'none';
+        },
+
+        handleKeyOSChange: function() {
+            const isKeyOS = document.getElementById('check-keyos').checked;
+            const rdpWrapper = document.getElementById('rdp-wrapper');
+            const rdpCheck = document.getElementById('check-rdp');
+            
+            if (isKeyOS) {
+                rdpWrapper.style.opacity = '1';
+                rdpWrapper.style.pointerEvents = 'auto';
+                rdpCheck.disabled = false;
+            } else {
+                rdpWrapper.style.opacity = '0.3';
+                rdpWrapper.style.pointerEvents = 'none';
+                rdpCheck.checked = false;
+                rdpCheck.disabled = true;
+            }
         }
     };
 

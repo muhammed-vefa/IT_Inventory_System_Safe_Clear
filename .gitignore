@@ -21,16 +21,20 @@ wheels/
 .installed.cfg
 *.egg
 
-# Database & Sensitive Data
-database/*.xlsx
-database/*.db
+# Database & Logs
 .env
+logs/
+*.log
 uploads/
 temp/
 safe_temp/
+database/*.db-journal
+database/*.db-wal
 
-# IDE
+# IDE & OS
 .vscode/
 .idea/
 *.swp
 *.swo
+.DS_Store
+Thumbs.db

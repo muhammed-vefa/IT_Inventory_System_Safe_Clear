@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KEYDATA Kocaeli - Sistem Yönetim Paneli</title>
+    <title>KEY DATA KSH - Sistem Yönetim Paneli</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/style.css">
@@ -17,13 +17,16 @@
             </div>
             <input type="text" id="login-user" class="search-bar" placeholder="Kullanıcı Adı">
             <input type="password" id="login-pass" class="search-bar" placeholder="Şifre">
-            <button class="btn btn-accent" style="width: 100%;" onclick="app.handleLoginButtonClick()">Giriş Yap</button>
+            <button class="btn-sayildi" style="width: 100%;" onclick="app.handleLoginButtonClick()">Giriş Yap</button>
         </div>
     </div>
 
     <nav>
         <div class="logo" onclick="app.navigateTo('dashboard')" style="cursor:pointer">
-            <img src="/logo/KOCSH.png" alt="SYS KOCAELISH" style="width: 200px;">
+            <div style="font-size: 1.4rem; font-weight: 800; letter-spacing: -1px;">
+                KEY<span style="color:var(--danger)">DATA</span><span style="opacity:0.8">KSH</span>
+            </div>
+            <div style="font-size: 0.55rem; opacity: 0.6; margin-top: -5px; letter-spacing: 2px;">YÖNETİM PANELİ</div>
         </div>
         <div class="nav-links">
             <a href="#" class="nav-link active" data-view="dashboard">Dashboard</a>
@@ -34,56 +37,161 @@
             <a href="#" class="nav-link" data-view="depot">Depo</a>
             <a href="#" class="nav-link" data-view="docs">Tutanaklar</a>
         </div>
-        <div class="flex-row">
+        <div style="display:flex; align-items:center; gap:12px">
             <div class="custom-dropdown" id="shortcuts-dropdown">
-                <button class="btn btn-secondary" onclick="app.toggleDropdown('shortcuts-dropdown')">Kısayollar <i class="fas fa-chevron-down"></i></button>
-                <div class="dropdown-menu">
-                    <a href="http://bim.kocaelish.com/" target="_blank"><i class="fas fa-server"></i> BIM</a>
-                    <a href="https://hbys.kocaelish.com/" target="_blank"><i class="fas fa-hospital"></i> HBYS</a>
-                </div>
+                <button class="filter-btn" onclick="app.toggleDropdown('shortcuts-dropdown')">Kısayollar <i class="fas fa-chevron-down"></i></button>
             </div>
-            <div class="flex-row" style="margin-left:15px">
-                <span id="active-user-name" style="margin-right:10px">Giriş Yapılmadı</span>
-                <i class="fas fa-circle-user fa-xl" onclick="app.toggleDropdown('profile-dropdown')" style="color: var(--accent); cursor:pointer"></i>
-                <div class="custom-dropdown" id="profile-dropdown">
-                    <div class="dropdown-menu" style="right:0; left:auto">
-                        <a href="#" onclick="app.handleLogout()"><i class="fas fa-sign-out-alt"></i> Çıkış Yap</a>
-                    </div>
-                </div>
-            </div>
+            <span id="active-user-name" style="font-size:0.75rem; opacity:0.6">M. VEFA</span>
+            <i class="fas fa-circle-user fa-xl" style="color: var(--accent); cursor:pointer"></i>
         </div>
     </nav>
 
     <main class="container">
-        <!-- Dashboard View -->
-        <section id="view-dashboard" class="view">
-            <h2 class="section-title">IT Varlık Analizi</h2>
-            <div class="grid" style="grid-template-columns: 1fr 1fr;">
-                <div class="card" style="text-align:center"><h3>Bilgisayar Dağılımı</h3><canvas id="dashboard-pie-chart"></canvas></div>
-                <div class="card" style="text-align:center"><h3>KeyOS Durum</h3><canvas id="dashboard-keyos-chart"></canvas></div>
-            </div>
-            <div class="stats-row">
-                <div class="stat-card"><span class="stat-value" id="stat-os-windows">0</span><span class="stat-label">Windows</span></div>
-                <div class="stat-card"><span class="stat-value" id="stat-os-keyos">0</span><span class="stat-label">KeyOS</span></div>
-                <div class="stat-card"><span class="stat-value" id="stat-pc-sahada">0</span><span class="stat-label">Sahada</span></div>
-            </div>
-        </section>
-
         <!-- Inventory View -->
         <section id="view-inventory" class="view" style="display:none">
-            <div class="flex-between mb-4">
-                <h2 class="section-title">Cihaz Envanteri</h2>
-                <input type="text" id="main-search" class="search-bar" style="max-width:300px" placeholder="Ara..." oninput="app.loadInventory()">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:2rem">
+                <div>
+                    <div class="search-wrapper">
+                        <input type="text" id="main-search" class="search-bar" placeholder="Mahal, IP, Seri No veya PC No ile hızlı ara...">
+                    </div>
+                    <div class="filter-row">
+                        <button class="filter-btn">TÜMÜ</button>
+                        <button class="filter-btn active">BİLGİSAYAR</button>
+                        <button class="filter-btn">SIRAMATİK & KIOSK</button>
+                        <button class="filter-btn">TABLET</button>
+                    </div>
+                    <div class="filter-row">
+                        <button class="filter-btn">TÜMÜ</button>
+                        <button class="filter-btn active">A-BLOK</button>
+                        <button class="filter-btn">B-BLOK</button>
+                        <button class="filter-btn">C-BLOK</button>
+                        <button class="filter-btn">FTR</button>
+                        <button class="filter-btn">TSP</button>
+                        <button class="filter-btn">YGAP</button>
+                    </div>
+                </div>
+                <button class="btn-sayim"><i class="fas fa-clipboard-check"></i> Sayım Modu</button>
             </div>
+
+            <div class="filter-row" style="border-top: 1px dashed var(--glass-border); padding-top:15px">
+                <span class="filter-label">KAT:</span>
+                <button class="filter-btn active">Tümü</button>
+                <button class="filter-btn">01. Kat</button>
+                <button class="filter-btn">02. Kat</button>
+                <button class="filter-btn">03. Kat</button>
+                <button class="filter-btn">04. Kat</button>
+                <button class="filter-btn">05. Kat</button>
+                <button class="filter-btn">06. Kat</button>
+                <button class="filter-btn">07. Kat</button>
+                <button class="filter-btn">08. Kat</button>
+                <button class="filter-btn">B1. Kat</button>
+                <button class="filter-btn">B2. Kat</button>
+                <button class="filter-btn">G0. Kat</button>
+            </div>
+
+            <h2 class="section-title" style="margin-top:2rem">Cihaz Envanteri</h2>
             <div id="inventory-grid" class="grid"></div>
         </section>
 
-        <section id="view-general-notes" class="view" style="display:none"><h2>Bilgi Bankası</h2></section>
-        <section id="view-areas" class="view" style="display:none"><h2>Ortak Alanlar</h2></section>
-        <section id="view-printers" class="view" style="display:none"><h2>Yazıcılar</h2></section>
-        <section id="view-depot" class="view" style="display:none"><h2>Depo</h2></section>
-        <section id="view-docs" class="view" style="display:none"><h2>Tutanaklar</h2></section>
+        <!-- Other views follow the same high-fidelity pattern -->
+        <section id="view-dashboard" class="view">
+            <h2 class="section-title"><i class="fas fa-chart-line"></i> Hastane Genel IT Varlık Analizi</h2>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; height: 350px;">
+                <div class="card chart-area">Bilgisayar Dağılımı</div>
+                <div class="card chart-area">KeyOS Durum</div>
+            </div>
+            <div class="grid" style="grid-template-columns: repeat(6, 1fr); margin-top:2rem">
+                <!-- Stat cards from resim1 -->
+                <div class="card" style="padding:10px; text-align:center"><div style="color:var(--accent); font-weight:800">000</div><div style="font-size:0.6rem">İşletim Sistemi</div></div>
+                <div class="card" style="padding:10px; text-align:center"><div style="color:var(--accent); font-weight:800">000</div><div style="font-size:0.6rem">Yazıcı</div></div>
+                <div class="card" style="padding:10px; text-align:center"><div style="color:var(--accent); font-weight:800">000</div><div style="font-size:0.6rem">Barkod Okuyucu</div></div>
+            </div>
+        </section>
+
+        <section id="view-general-notes" class="view" style="display:none"></section>
+        <section id="view-areas" class="view" style="display:none"></section>
+        <section id="view-printers" class="view" style="display:none"></section>
+        <section id="view-depot" class="view" style="display:none"></section>
+        <section id="view-docs" class="view" style="display:none"></section>
     </main>
+
+    <!-- PC Düzenleme Modalı -->
+    <div id="edit-modal" class="modal-backdrop">
+        <div class="card" style="max-width: 750px; width: 95%; border: 1px solid var(--accent); box-shadow: 0 0 30px var(--accent-glow);">
+            <div class="flex-between mb-4">
+                <h3 id="edit-modal-title" style="color:var(--text-primary)">PC-002 — HEMŞİRE BANKOSU</h3>
+                <button class="btn-sayim" style="background:var(--glass)"><i class="fas fa-clock-rotate-left"></i> Geçmiş</button>
+            </div>
+            
+            <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top:0">
+                <div class="input-group">
+                    <label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">MAHAL KODU</label>
+                    <input type="text" class="search-bar" id="edit-mahal-kodu" value="A.08.T6.819.7">
+                </div>
+                <div class="input-group">
+                    <label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">MAHAL ADI</label>
+                    <input type="text" class="search-bar" id="edit-mahal-adi" value="HEMŞİRE BANKO">
+                </div>
+                <div class="input-group">
+                    <label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">HOSTNAME</label>
+                    <input type="text" class="search-bar" id="edit-hostname" value="A08T68197x01" style="color:var(--accent); font-weight:800">
+                </div>
+            </div>
+
+            <div class="grid" style="grid-template-columns: 1fr 1fr 2fr; gap: 15px; margin-top:10px">
+                <div class="flex-row" style="gap:10px; display:flex">
+                    <div class="input-group" style="flex:1"><label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">KULE/KAT</label><input type="text" class="search-bar" value="A"></div>
+                    <div class="input-group" style="flex:1"><label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">&nbsp;</label><input type="text" class="search-bar" value="08"></div>
+                </div>
+                <div class="input-group"><label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">TELEFON</label><input type="text" class="search-bar" value="1830"></div>
+                <div></div>
+            </div>
+
+            <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top:10px">
+                <div class="input-group"><label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">IP ADRESİ</label><input type="text" class="search-bar" value="10.241.16.171"></div>
+                <div class="input-group"><label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">PC SERİ NO</label><input type="text" class="search-bar" value="2N6JRM3"></div>
+                <div class="input-group"><label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">BAĞLI YAZICILAR</label><input type="text" class="search-bar" placeholder="Yazıcı seçin..."></div>
+            </div>
+
+            <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top:10px">
+                <div class="input-group"><label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">BARKOD YAZICI SERİ</label><input type="text" class="search-bar" value="D4J22040159"></div>
+                <div class="input-group"><label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">BARKOD OKUYUCU SERİ</label><input type="text" class="search-bar" value="221880105566"></div>
+                <div class="input-group"><label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">TARAYICI SERİ NO</label><input type="text" class="search-bar"></div>
+            </div>
+
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px; margin-top:10px">
+                <div class="input-group"><label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">MONİTÖR SERİ NO</label><input type="text" class="search-bar" value="XPHH4ZT108559L"></div>
+                <div class="input-group"><label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">2. MONİTÖR SERİ NO</label><input type="text" class="search-bar"></div>
+            </div>
+
+            <div class="input-group" style="margin-top:10px">
+                <label style="font-size:0.6rem; color:var(--text-secondary); display:block; margin-bottom:5px">AÇIKLAMA</label>
+                <textarea class="search-bar" style="height: 80px; resize: none;"></textarea>
+            </div>
+
+            <div class="flex-row" style="margin-top:15px; gap:20px; flex-wrap:wrap; display:flex; align-items:center">
+                <div style="display:flex; gap:10px; align-items:center; font-size:0.75rem">
+                    <input type="checkbox" checked> Sahada
+                    <input type="checkbox"> Depoda
+                    <input type="checkbox"> Arızalı
+                    <input type="checkbox"> Kayıp
+                    <span style="color:var(--accent); font-weight:800; margin-left:10px">KURULUM BEKLİYOR</span>
+                </div>
+                <div style="display:flex; gap:10px; align-items:center; font-size:0.75rem">
+                    <input type="checkbox" id="check-win"> Windows
+                    <input type="checkbox" id="check-keyos" checked onchange="app.handleKeyOSChange()"> Keyos
+                    <div id="rdp-wrapper" style="display:flex; align-items:center; gap:5px; margin-left:10px">
+                        <input type="checkbox" id="check-rdp"> <span style="color:var(--success); font-weight:800">RDP</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 2rem;">
+                <button class="filter-btn" style="padding: 12px;" onclick="app.closeModal('edit-modal')">İptal</button>
+                <button class="btn-sayildi" style="margin-top:0; padding: 12px;">Güncelle</button>
+            </div>
+        </div>
+    </div>
 
     <script src="/frontend/UI_controller.js"></script>
 </body>

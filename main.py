@@ -52,16 +52,18 @@ app.register_blueprint(service_manager_bp, url_prefix='/api/service')
 app.register_blueprint(bim_service_bp, url_prefix='/api/bim')
 app.register_blueprint(keyos_service_bp, url_prefix='/api/keyos')
 
-# --- Ana Yonlendirme (Restorasyon) ---
+# --- Ana Yonlendirme (SPA Destekli) ---
 @app.route('/')
 def index():
     return send_from_directory(BASE_DIR, 'index.html')
 
-# Her seyi yakalayan ve BASE_DIR'den servis eden catch-all
 @app.route('/<path:path>')
 def serve_static(path):
-    if os.path.exists(os.path.join(BASE_DIR, path)):
+    # Eger istenen dosya fiziksel olarak varsa onu gonder (CSS, JS, Logo vb.)
+    file_path = os.path.join(BASE_DIR, path)
+    if os.path.isfile(file_path):
         return send_from_directory(BASE_DIR, path)
+    # Yoksa index.html gonder (Frontend router devralir)
     return send_from_directory(BASE_DIR, 'index.html')
 
 if __name__ == '__main__':
