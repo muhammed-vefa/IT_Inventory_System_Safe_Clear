@@ -4,36 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KEYDATA Kocaeli - Sistem Yönetim Paneli</title>
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Main CSS -->
-    <link rel="stylesheet" href="style.css">
-    <!-- Chart.js -->
+    <link rel="stylesheet" href="/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="login-required">
-    <!-- LOGIN OVERLAY -->
     <div id="login-overlay" class="modal-backdrop">
         <div class="card" style="max-width: 400px; width: 90%; text-align: center;">
             <div class="logo mb-4">
                 <img src="/logo/KOCSH.png" alt="SYS KOCAELISH" style="width: 200px; margin: 0 auto 20px;">
             </div>
-            <p class="text-secondary mb-4">Lütfen yetkili kimlik bilgilerinizle giriş yapın.</p>
             <input type="text" id="login-user" class="search-bar" placeholder="Kullanıcı Adı">
             <input type="password" id="login-pass" class="search-bar" placeholder="Şifre">
-            <button class="btn btn-accent" style="width: 100%;" onclick="app.handleLoginButtonClick()">Sisteme Giriş Yap</button>
+            <button class="btn btn-accent" style="width: 100%;" onclick="app.handleLoginButtonClick()">Giriş Yap</button>
         </div>
     </div>
 
-    <div class="bg-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-    </div>
-
     <nav>
-        <div class="logo" style="cursor: pointer;" onclick="app.navigateTo('dashboard')">
+        <div class="logo" onclick="app.navigateTo('dashboard')" style="cursor:pointer">
             <img src="/logo/KOCSH.png" alt="SYS KOCAELISH" style="width: 200px;">
         </div>
         <div class="nav-links">
@@ -47,23 +36,18 @@
         </div>
         <div class="flex-row">
             <div class="custom-dropdown" id="shortcuts-dropdown">
-                <button class="btn btn-secondary" onclick="app.toggleDropdown('shortcuts-dropdown')">
-                    Kısayollar <i class="fas fa-chevron-down"></i>
-                </button>
+                <button class="btn btn-secondary" onclick="app.toggleDropdown('shortcuts-dropdown')">Kısayollar <i class="fas fa-chevron-down"></i></button>
                 <div class="dropdown-menu">
-                    <a href="http://bim.kocaelish.com/" target="_blank"><i class="fas fa-server"></i> BİM</a>
-                    <a href="https://mym.kocaelish.com/" target="_blank"><i class="fas fa-clipboard-list"></i> MYM</a>
+                    <a href="http://bim.kocaelish.com/" target="_blank"><i class="fas fa-server"></i> BIM</a>
                     <a href="https://hbys.kocaelish.com/" target="_blank"><i class="fas fa-hospital"></i> HBYS</a>
-                    <a href="https://keyosmgt.kocaelish.com/" target="_blank"><i class="fas fa-shield-halved"></i> KEYOS</a>
                 </div>
             </div>
-            <div class="flex-row" style="margin-left: 10px;">
-                <span id="active-user-name" style="font-size: 0.8rem; opacity: 0.7;">Giriş Yapılmadı</span>
+            <div class="flex-row" style="margin-left:15px">
+                <span id="active-user-name" style="margin-right:10px">Giriş Yapılmadı</span>
+                <i class="fas fa-circle-user fa-xl" onclick="app.toggleDropdown('profile-dropdown')" style="color: var(--accent); cursor:pointer"></i>
                 <div class="custom-dropdown" id="profile-dropdown">
-                    <i class="fas fa-circle-user fa-xl dropdown-trigger" onclick="app.toggleDropdown('profile-dropdown')" style="color: var(--accent);"></i>
-                    <div class="dropdown-menu">
-                        <a href="#" onclick="app.syncAllDatabases()"><i class="fas fa-sync"></i> Tümünü Senkronize Et</a>
-                        <a href="#" onclick="app.handleLogout()" style="color: #ff4b2b;"><i class="fas fa-right-from-bracket"></i> Çıkış Yap</a>
+                    <div class="dropdown-menu" style="right:0; left:auto">
+                        <a href="#" onclick="app.handleLogout()"><i class="fas fa-sign-out-alt"></i> Çıkış Yap</a>
                     </div>
                 </div>
             </div>
@@ -71,60 +55,36 @@
     </nav>
 
     <main class="container">
-        <!-- DASHBOARD VIEW -->
+        <!-- Dashboard View -->
         <section id="view-dashboard" class="view">
-            <h2 class="section-title"><i class="fas fa-chart-line"></i> Hastane Genel IT Varlık Analizi</h2>
-            
+            <h2 class="section-title">IT Varlık Analizi</h2>
             <div class="grid" style="grid-template-columns: 1fr 1fr;">
-                <div class="card" style="text-align: center;">
-                    <h3 class="mb-4">Bilgisayar Dağılımı</h3>
-                    <canvas id="dashboard-pie-chart"></canvas>
-                </div>
-                <div class="card" style="text-align: center;">
-                    <h3 class="mb-4">KeyOS Durum</h3>
-                    <canvas id="dashboard-keyos-chart"></canvas>
-                </div>
+                <div class="card" style="text-align:center"><h3>Bilgisayar Dağılımı</h3><canvas id="dashboard-pie-chart"></canvas></div>
+                <div class="card" style="text-align:center"><h3>KeyOS Durum</h3><canvas id="dashboard-keyos-chart"></canvas></div>
             </div>
-
             <div class="stats-row">
-                <div class="stat-card">
-                    <div style="display: flex; gap: 10px; justify-content: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span class="stat-value" id="stat-os-windows" style="color: #0078d4;">0</span>
-                        <span class="stat-value" id="stat-os-keyos" style="color: #ff4b2b;">0</span>
-                    </div>
-                    <span class="stat-label">İŞLETİM SİSTEMİ</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-value" id="stat-pr-total">0</span>
-                    <span class="stat-label">YAZICI</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-value" id="stat-bo-total">0</span>
-                    <span class="stat-label">BARKOD OKUYUCU</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-value" id="stat-by-total">0</span>
-                    <span class="stat-label">BARKOD YAZICI</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-value" id="stat-tr-total">0</span>
-                    <span class="stat-label">TARAYICI</span>
-                </div>
+                <div class="stat-card"><span class="stat-value" id="stat-os-windows">0</span><span class="stat-label">Windows</span></div>
+                <div class="stat-card"><span class="stat-value" id="stat-os-keyos">0</span><span class="stat-label">KeyOS</span></div>
+                <div class="stat-card"><span class="stat-value" id="stat-pc-sahada">0</span><span class="stat-label">Sahada</span></div>
             </div>
         </section>
 
-        <!-- INVENTORY VIEW -->
-        <section id="view-inventory" class="view" style="display: none;">
+        <!-- Inventory View -->
+        <section id="view-inventory" class="view" style="display:none">
             <div class="flex-between mb-4">
-                <h2 class="section-title"><i class="fas fa-boxes-stacked"></i> Cihaz Envanteri</h2>
-                <div class="flex-row">
-                    <input type="text" id="main-search" class="search-bar" style="max-width: 300px; margin-bottom: 0;" placeholder="Ara..." oninput="app.searchInventory()">
-                </div>
+                <h2 class="section-title">Cihaz Envanteri</h2>
+                <input type="text" id="main-search" class="search-bar" style="max-width:300px" placeholder="Ara..." oninput="app.loadInventory()">
             </div>
-            <div class="grid" id="inventory-grid"></div>
+            <div id="inventory-grid" class="grid"></div>
         </section>
+
+        <section id="view-general-notes" class="view" style="display:none"><h2>Bilgi Bankası</h2></section>
+        <section id="view-areas" class="view" style="display:none"><h2>Ortak Alanlar</h2></section>
+        <section id="view-printers" class="view" style="display:none"><h2>Yazıcılar</h2></section>
+        <section id="view-depot" class="view" style="display:none"><h2>Depo</h2></section>
+        <section id="view-docs" class="view" style="display:none"><h2>Tutanaklar</h2></section>
     </main>
 
-    <script src="frontend/UI_controller.js"></script>
+    <script src="/frontend/UI_controller.js"></script>
 </body>
 </html>
