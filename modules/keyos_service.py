@@ -143,24 +143,32 @@ def get_keyos_session(username, password):
 @require_auth
 @limiter.limit("10 per minute")
 def check_device(serial):
-    """Seri no ile KeyOS'tan cihaz bilgilerini çeker."""
+    """Flask rotası: Seri no ile KeyOS'tan cihaz bilgilerini çeker."""
+    success, data = check_device_internal(serial)
+    if success:
+        return jsonify(data)
+    else:
+        status_code = 404 if "bulunamadı" in data.get("error", "").lower() else 500
+        return jsonify(data), status_code
+
+def check_device_internal(serial):
+    """Dahili Fonksiyon: Seri no ile KeyOS'tan cihaz bilgilerini çeker (Session destekli)."""
     session = get_keyos_session(os.getenv('KEYOS_USER'), os.getenv('KEYOS_PASS'))
     if not session:
-        return jsonify({"error": "KeyOS sistemine giriş yapılamadı."}), 503
+        return False, {"error": "KeyOS sistemine giriş yapılamadı."}
     
     try:
-        # Search for device
-        # The site might use a query param like ?search=... or we might need to scrape the table
-        # Based on subagent, searching is usually dynamic. We'll try searching via query param first
+        # Cihaz arama
         resp = session.get(f"{COMPUTERS_URL}?search={serial}", timeout=30, verify=False)
+        if resp.status_code != 200:
+            return False, {"error": f"KeyOS HTTP Hatası: {resp.status_code}"}
+            
         soup = BeautifulSoup(resp.text, 'html.parser')
-        
-        # Find the row with the serial
         table = soup.find('table')
         if not table:
-            return jsonify({"error": "Cihaz listesi tablosu bulunamadı."}), 404
+            return False, {"error": "Cihaz listesi tablosu bulunamadı."}
             
-        rows = table.find_all('tr')[1:] # Skip header
+        rows = table.find_all('tr')[1:]
         target_row = None
         for row in rows:
             if serial.upper() in row.get_text().upper():
@@ -168,32 +176,23 @@ def check_device(serial):
                 break
         
         if not target_row:
-            return jsonify({"error": "Cihaz KeyOS sisteminde bulunamadı."}), 404
+            return False, {"error": "Cihaz KeyOS sisteminde bulunamadı."}
             
         cols = target_row.find_all('td')
-        # Structure based on subagent:
-        # Col 0: Index/Checkbox
-        # Col 1: Hostname
-        # Col 2: Brand/Model
-        # Col 3: Serial
-        # Col 4: Version
-        # Col 5: Connected Printers
-        # Col 6: IP Address
-        
         hostname = cols[1].get_text(strip=True) if len(cols) > 1 else ""
         printers = cols[5].get_text(strip=True) if len(cols) > 5 else ""
         ip_address = cols[6].get_text(strip=True) if len(cols) > 6 else ""
         
-        return jsonify({
+        return True, {
             "success": True,
             "hostname": hostname,
             "ip": ip_address,
             "printers": printers,
             "serial": serial
-        })
+        }
         
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return False, {"error": str(e)}
 
 @keyos_service_bp.route('/update', methods=['POST'])
 @require_admin

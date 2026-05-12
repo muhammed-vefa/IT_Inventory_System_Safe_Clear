@@ -6,7 +6,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
     from core.database_sql import get_db_connection
-    from main import sync_excel_to_db
+    from main import sync_excel_to_db_internal as sync_excel_to_db
     print("Veritabanı bağlantısı kuruluyor...")
     
     conn = get_db_connection()

@@ -1,15 +1,13 @@
 @echo off
-title IT Inventory System - Sunucu
-echo ══════════════════════════════════════════════════════
-echo        IT INVENTORY SYSTEM BASLATILIYOR
-echo ══════════════════════════════════════════════════════
+title IT ENVANTER SSTEM - ÇALITIRICI
+echo Sistem baslatiliyor...
+
+start python main.py
+echo Flask Uygulamasi baslatildi (Port 5000).
+
+start python backup_manager.py
+echo Otomatik Yedekleme Sistemi baslatildi (15 dk aralikla).
+
 echo.
-echo [1/2] Bagimliliklar kontrol ediliyor...
-python -m pip install -r requirements.txt --quiet
-echo [2/2] Ana uygulama baslatiliyor...
-echo.
-python main.py
-echo.
-echo ══════════════════════════════════════════════════════
-echo [UYARI] Uygulama kapandi veya bir hata olustu.
+echo Sistem calisiyor. Kapatmak icin bu pencereyi kapatin.
 pause

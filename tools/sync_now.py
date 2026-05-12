@@ -5,7 +5,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from main import sync_excel_to_db
+    from main import sync_excel_to_db_internal as sync_excel_to_db
     from core.database_sql import init_db
     
     print("--- IT ENVANTER SENKRONIZASYON SERVISI (DESKTOP) ---")
