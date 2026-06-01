@@ -1,3 +1,4 @@
+from core.utils import normalize_row
 from flask import Blueprint, jsonify, request
 from core.database_sql import get_db_connection
 
@@ -8,7 +9,8 @@ def get_all():
     conn = get_db_connection()
     if not conn: return jsonify([])
     cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT mahal_kodu FROM inventory")
-    results = [row[0] for row in cursor.fetchall() if row[0]]
+    cursor.execute("SELECT * FROM mahal_list ORDER BY location_code ASC")
+    columns = [column[0] for column in cursor.description]
+    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
     conn.close()
     return jsonify(results)

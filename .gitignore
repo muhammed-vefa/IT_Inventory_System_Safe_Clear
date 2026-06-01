@@ -1,40 +1,26 @@
-# Python artifacts
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Database & Logs
+# System Environment Files
 .env
-logs/
-*.log
-uploads/
-temp/
-safe_temp/
-database/*.db-journal
-database/*.db-wal
+.env.example
 
-# IDE & OS
+# Local Database & Excel Files
+*.db
+*.sqlite
+database/database.db
+database/inventory.db
+database/SQL_Server_Export_Final.xlsx
+database/~$SQL_Server_Export_Final.xlsx
+
+# Logs, Cache & Uploads
+logs/
+uploads/
+*.log
+__pycache__/
+*.pyc
+
+# Temporary & Local Developer Folders
 .vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
+temp/
+scratch/
+backups/
+*.pdf
+system_locks/

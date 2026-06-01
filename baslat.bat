@@ -1,23 +1,11 @@
 @echo off
-title IT ENVANTER SİSTEMİ - ANA SUNUCU
-echo ===================================================
-echo   KEYDATA IT ENVANTER SISTEMI BASLATILIYOR
-echo ===================================================
-echo.
+:: Batch dosyasinin bulundugu dizine (klasore) otomatik gecis yap
+cd /d "%~dp0"
 
-:: 1. Yedekleme Sistemini Gizli/Kucuk Pencerede Baslat
-echo [+] Otomatik Yedekleme Servisi baslatiliyor...
-start "IT_YEDEKLEME" /min python backup_manager.py
+:: Eger sistem zaten aciksa onceki calisan port 5000 surecini kapat
+FOR /F "tokens=5" %%a IN ('netstat -aon ^| find ":5000" ^| find "LISTENING"') DO (
+    taskkill /F /PID %%a >nul 2>&1
+)
 
-:: 2. Tarayiciyi birazdan acilacak sekilde ayarla
-echo [+] Web Arayuzu hazirlaniyor...
-timeout /t 2 >nul
-start http://localhost:5000
-
-:: 3. Ana Uygulamayi (Flask) bu pencerede baslat
-echo [+] Flask Sunucusu (Port 5000) AKTIF ediliyor...
-echo [!] Bu pencereyi kapatirsaniz site erisime kapanir.
-echo.
-python main.py
-
-pause
+:: Masaustu arayuzunu (GUI) baslat ve bu siyah ekrani hemen kapat
+start "" pythonw tools\gui_launcher.py
