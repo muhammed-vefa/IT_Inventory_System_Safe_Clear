@@ -1,6 +1,6 @@
 HAK SAHİPLİĞİ VE KULLANIM NOTU
 
-Bu yazılım, Geliştirici Personel tarafından kurum içi kullanım amacıyla geliştirilmiştir.
+Bu yazılım, Canan Yıldız tarafından kurum içi kullanım amacıyla geliştirilmiştir.
 
 Yazılımın amacı; kurum içindeki teknik takip, envanter yönetimi, kayıt düzeni, raporlama ve iş süreçlerinin daha düzenli yürütülmesine katkı sağlamaktır.
 

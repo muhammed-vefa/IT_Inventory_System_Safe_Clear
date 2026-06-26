@@ -21,7 +21,7 @@ with open('frontend/UI_controller.js', 'r', encoding='utf-8') as f:
     text = f.read()
 
 replacements = {
-    'MURAT COKUN': 'Yetkili Kişi 1',
+    'MURAT COKUN': 'Ahmet Yılmaz',
     'PINAR ENDOAN': 'PINAR ERDOĞAN',
     'deiiklik': 'değişiklik',
     'istediinize': 'istediğinize',

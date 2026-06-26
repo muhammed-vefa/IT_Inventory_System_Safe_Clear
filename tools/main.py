@@ -214,7 +214,7 @@ def get_config():
     import os
     domain = os.getenv("HOSPITAL_DOMAIN", "ornek-kurum.com")
     return jsonify({
-        "hospital_name": os.getenv("HOSPITAL_NAME", "Örnek Kurum Adı"),
+        "hospital_name": os.getenv("HOSPITAL_NAME", "Örnektepe Devlet Hastanesi"),
         "hospital_domain": domain,
         "links": {
             "bim": os.getenv("LINK_BIM", f"http://bim.{domain}/"),

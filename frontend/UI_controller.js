@@ -6207,7 +6207,7 @@ rm -f "$C"; rmdir "$M" 2>/dev/null`;
             }
             if (type === 'hasar-tespit') {
                 const bSorumlu = document.getElementById('ht-birim-sorumlusu');
-                if (bSorumlu) bSorumlu.value = 'Yetkili Kişi 1';
+                if (bSorumlu) bSorumlu.value = 'Ahmet Yılmaz';
             }
         } else {
             // Generic fallback for placeholders
