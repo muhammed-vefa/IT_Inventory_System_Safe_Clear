@@ -76,16 +76,38 @@ def sync_to_google_sheets(data_rows, sheet_name="Envanter"):
         for row in data_rows:
             values.append([str(row.get(h, '')) for h in headers])
         
-        # Sayfayı temizle ve yaz
-        range_name = f"{sheet_name}!A1"
-        
+        # Sayfa (Sekme) var mı diye kontrol et, yoksa otomatik oluştur
+        try:
+            spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+            sheet_exists = any(sheet['properties']['title'] == sheet_name for sheet in spreadsheet.get('sheets', []))
+            
+            if not sheet_exists:
+                # Sayfa yoksa otomatik olarak AddSheet isteği gönder
+                request_body = {
+                    'requests': [{
+                        'addSheet': {
+                            'properties': {
+                                'title': sheet_name
+                            }
+                        }
+                    }]
+                }
+                service.spreadsheets().batchUpdate(
+                    spreadsheetId=spreadsheet_id,
+                    body=request_body
+                ).execute()
+                print(f"Google Sync: '{sheet_name}' adlı yeni sekme otomatik oluşturuldu.")
+        except Exception as e:
+            print(f"Google Sync: Sekme kontrol/oluşturma hatası: {e}")
+
         # Önce temizle
         service.spreadsheets().values().clear(
             spreadsheetId=spreadsheet_id,
-            range=f"{sheet_name}!A:ZZ"
+            range=f"'{sheet_name}'!A:ZZ"
         ).execute()
         
         # Sonra yaz
+        range_name = f"'{sheet_name}'!A1"
         body = {'values': values}
         service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,

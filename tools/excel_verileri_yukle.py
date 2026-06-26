@@ -287,6 +287,8 @@ def load_excel_to_sql():
             insert_count = 0
             error_count = 0
 
+            has_id = 'id' in matched_cols
+            
             placeholders = ','.join(['?' for _ in matched_cols])
             col_names = ','.join([f'[{c}]' for c in matched_cols])
             insert_sql = f"INSERT INTO [{table_name}] ({col_names}) VALUES ({placeholders})"
@@ -325,23 +327,20 @@ def load_excel_to_sql():
                         
                         if val is None or val_str in ('', 'NONE', 'NULL', '-'):
                             val = None
-                        elif header in ('acquisition_date', 'sent_date', 'return_date'):
-                            # Tarih Kolonu Donusturucu
+                        elif header in ('acquisition_date', 'sent_date', 'return_date', 'created_at', 'last_edit_date', 'last_login'):
                             val = parse_excel_date(val)
                         else:
-                            # Sifre Kriptolama
                             if table_name == 'users' and header == 'password_hash':
                                 if val and not str(val).startswith(('pbkdf2:', 'scrypt:', 'bcrypt:')):
                                     val = generate_password_hash(str(val))
 
-                            # Boolean/BIT Donusturucu
                             is_bit_col = header in ('on_field', 'warehouse', 'is_faulty', 'without_location', 'pending_installation', 'windows', 'keyos', 'rdp', 'is_deleted', 'in_service', 'hostname_mismatch', 'requires_user', 'has_substitute')
                             if is_bit_col:
-                                if val_str in ('ON FIELD', 'SAHADA', 'EVET', '1', 'TRUE', 'VAR', 'AKTIF', 'VERILDI'):
+                                if val_str in ('ON FIELD', 'SAHADA', 'EVET', '1', 'TRUE', 'VAR', 'AKTIF', 'VERILDI', 'DOGRU', 'DOĞRU'):
                                     val = 1 if (header == 'on_field' or not val_str in ('ON FIELD', 'SAHADA')) else 0
                                     if val_str in ('ON FIELD', 'SAHADA'): val = 1 if header == 'on_field' else 0
                                     else: val = 1
-                                elif val_str in ('WAREHOUSE', 'DEPO', 'ARIZALI', 'IS FAULTY', 'BOZUK', 'KAYIP', 'MAHALSIZ', 'WITHOUT LOCATION', 'HAYIR', '0', 'FALSE', 'YOK', 'PASIF', 'VERILMEDI'):
+                                elif val_str in ('WAREHOUSE', 'DEPO', 'ARIZALI', 'IS FAULTY', 'BOZUK', 'KAYIP', 'MAHALSIZ', 'WITHOUT LOCATION', 'HAYIR', '0', 'FALSE', 'YOK', 'PASIF', 'VERILMEDI', 'YANLIS', 'YANLIŞ'):
                                     if val_str in ('WAREHOUSE', 'DEPO'): val = 1 if header == 'warehouse' else 0
                                     elif val_str in ('ARIZALI', 'IS FAULTY', 'BOZUK'): val = 1 if header == 'is_faulty' else 0
                                     elif val_str in ('KAYIP', 'MAHALSIZ', 'WITHOUT LOCATION'): val = 1 if header == 'without_location' else 0
@@ -355,7 +354,6 @@ def load_excel_to_sql():
                     if all(v is None for v in values):
                         continue
 
-                    # Servis kayıtları için boş kayıtları atlama mantığı (alınan tarih, gittiği tarih ve arıza açıklaması yoksa atla)
                     if table_name in ('printer_service', 'printer_service_history'):
                         has_real_data = False
                         for col_name in ('acquisition_date', 'sent_date', 'return_date', 'fault_description'):
@@ -367,7 +365,6 @@ def load_excel_to_sql():
                         if not has_real_data:
                             continue
 
-                    # SKIP Logic
                     unique_col = None
                     if table_name == 'users': unique_col = 'username'
                     elif table_name == 'pcs': unique_col = 'pc_serial'
@@ -379,7 +376,6 @@ def load_excel_to_sql():
                     elif table_name in ('technical_notes', 'closure_notes', 'troubleshooting_notes'): unique_col = 'title'
                     elif table_name == 'depot_items': unique_col = 'name'
 
-                    # Özel Kısıtlama: Yazıcıların Seri No veya Mac adresi yoksa atla
                     if table_name == 'printers':
                         s_idx = matched_cols.index('serial_no') if 'serial_no' in matched_cols else -1
                         m_idx = matched_cols.index('mac') if 'mac' in matched_cols else -1
@@ -387,8 +383,7 @@ def load_excel_to_sql():
                         m_val = str(values[m_idx]).strip() if m_idx != -1 and values[m_idx] is not None else ''
                         
                         if s_val in ('', 'NONE', 'NULL', '-') and m_val in ('', 'NONE', 'NULL', '-'):
-                            skipped_records.append(f"Yazıcılar: Seri No ve Mac Adresi ikisi birden eksik olduğu için eklenmedi.")
-                            continue
+                            pass
                         else:
                             query = "SELECT COUNT(*) FROM [printers] WHERE (is_deleted = 0 OR is_deleted IS NULL)"
                             params = []
@@ -408,14 +403,37 @@ def load_excel_to_sql():
                         u_idx = matched_cols.index(unique_col)
                         u_val = values[u_idx]
                         if u_val and str(u_val).strip() not in ('', 'NONE', 'NULL', '-'):
-                            # is_deleted_clause'u dinamik ekle
                             is_deleted_clause = " AND (is_deleted = 0 OR is_deleted IS NULL)" if table_name != 'users' else ""
                             cursor.execute(f"SELECT COUNT(*) FROM [{table_name}] WHERE TRIM(UPPER([{unique_col}])) = TRIM(UPPER(?)){is_deleted_clause}", (u_val,))
                             if cursor.fetchone()[0] > 0:
                                 skipped_records.append(f"{table_name}: '{u_val}' ({unique_col}) zaten var, eklenmedi.")
                                 continue
 
-                    cursor.execute(insert_sql, values)
+                    # INSERT CALISTIR (IDENTITY_INSERT DESTEGI ILE)
+                    if has_id:
+                        try:
+                            cursor.execute(f"SET IDENTITY_INSERT [{table_name}] ON")
+                            cursor.execute(insert_sql, values)
+                            cursor.execute(f"SET IDENTITY_INSERT [{table_name}] OFF")
+                        except Exception as insert_e:
+                            try:
+                                cursor.execute(f"SET IDENTITY_INSERT [{table_name}] OFF")
+                            except Exception as set_identity_off_ex:
+                                print(f"[Excel Load Identity Off Error] {set_identity_off_ex}")
+                            
+                            # ID eklerken hata olduysa (belki ID identity degildir), ID'siz normal ekleme yapalim:
+                            insert_dict = dict(zip(matched_cols, values))
+                            if 'id' in insert_dict:
+                                del insert_dict['id']
+                            fallback_cols = list(insert_dict.keys())
+                            fallback_vals = list(insert_dict.values())
+                            fb_placeholders = ','.join(['?' for _ in fallback_cols])
+                            fb_col_names = ','.join([f'[{c}]' for c in fallback_cols])
+                            fb_sql = f"INSERT INTO [{table_name}] ({fb_col_names}) VALUES ({fb_placeholders})"
+                            cursor.execute(fb_sql, fallback_vals)
+                    else:
+                        cursor.execute(insert_sql, values)
+                        
                     insert_count += 1
                 except Exception as e:
                     error_count += 1

@@ -30,31 +30,60 @@ def normalize_row(row):
     """
     if not isinstance(row, dict):
         return row
+
+    # Ensure all keys are checked case-insensitively
+    key_map = {k.lower(): k for k in row.keys()}
+
+    # --- Clean "0" and "0.0" serial values ---
+    serial_fields = [
+        'pc_serial', 'by_serial', 'bo_serial', 'scanner_serial', 'monitor_serial', 'monitor2_serial',
+        'serial_no', 'seri', 'by_seri', 'bo_seri', 'tarayici_seri', 'monitor_seri', 'monitor2_seri'
+    ]
+    for field in serial_fields:
+        actual_key = key_map.get(field.lower())
+        if actual_key and row[actual_key] is not None:
+            s = str(row[actual_key]).strip()
+            if s in ('0', '0.0', '0,0'):
+                row[actual_key] = ''
         
     # --- Date Formatting ---
     date_fields = ["created_at", "sent_date", "return_date", "acquisition_date", "archive_date", "deleted_at", "last_counted_at"]
-    datetime_fields = ["last_login", "last_activity", "last_edit_date"]
+    datetime_fields = ["last_login", "last_activity", "last_edit_date", "timestamp"]
     
     for field in date_fields:
-        val = row.get(field)
-        if isinstance(val, datetime.datetime):
-            row[field] = val.strftime("%d.%m.%Y")
+        actual_key = key_map.get(field.lower())
+        if actual_key:
+            val = row[actual_key]
+            if isinstance(val, datetime.datetime):
+                row[actual_key] = val.strftime("%d.%m.%Y")
             
     for field in datetime_fields:
-        val = row.get(field)
-        if isinstance(val, datetime.datetime):
-            row[field] = val.strftime("%d.%m.%Y %H:%M")
-        elif isinstance(val, str):
-            try:
-                # Try to parse English formats like 'May 22 2026 10:35AM'
-                dt = datetime.datetime.strptime(val, "%b %d %Y %I:%M%p")
-                row[field] = dt.strftime("%d.%m.%Y %H:%M")
-            except:
-                try:
-                    dt = datetime.datetime.strptime(val, "%Y-%m-%d %H:%M:%S")
-                    row[field] = dt.strftime("%d.%m.%Y %H:%M")
-                except Exception as inner_e:
-                    print(f"[Date Parse Warning] Could not parse date {val}: {inner_e}")
+        actual_key = key_map.get(field.lower())
+        if actual_key:
+            val = row[actual_key]
+            if isinstance(val, datetime.datetime):
+                row[actual_key] = val.strftime("%d.%m.%Y %H:%M")
+            elif isinstance(val, str):
+                parsed = False
+                for fmt in [
+                    "%b %d %Y %I:%M%p",
+                    "%Y-%m-%d %H:%M:%S",
+                    "%Y-%m-%d %H:%M:%S.%f",
+                    "%Y-%m-%dT%H:%M:%S",
+                    "%Y-%m-%dT%H:%M:%S.%f",
+                    "%a, %d %b %Y %H:%M:%S %Z",
+                    "%a, %d %b %Y %H:%M:%S GMT",
+                    "%d.%m.%Y %H:%M"
+                ]:
+                    try:
+                        dt = datetime.datetime.strptime(val, fmt)
+                        row[actual_key] = dt.strftime("%d.%m.%Y %H:%M")
+                        parsed = True
+                        break
+                    except ValueError:
+                        continue
+                if not parsed:
+                    print(f"[Date Parse Warning] Could not parse datetime string: {val}")
 
     # --- Faulty Status Normalization ---
     val1 = row.get("is_faulty")

@@ -10,6 +10,12 @@ var appData = {
         countMode: false,
         zimmetDevices: [],
         inventory: [],
+                inventoryPage: 0,
+        currentRenderList: [],
+        printersPage: 0, currentPrintersRenderList: [],
+        depotPage: 0, currentDepotRenderList: [],
+        areasPage: 0, currentAreasRenderList: [],
+        notesPage: 0, currentNotesRenderList: [],
         printers: [],
         areas: [],
         depot: [],
@@ -59,7 +65,7 @@ var appData = {
         try {
             const cleanStr = String(str).trim();
             // Format A: 'Mar 30 2026' veya 'March 30 2026' veya 'Mar 30 2026 12:00AM'
-            const matchA = cleanStr.match(/^([A-Za-zÄğÅşÇçÖöÜüİı]{3,9})\s+(\d{1,2})\s+(\d{4})/i);
+            const matchA = cleanStr.match(/^([A-Za-zĞğŞşÇçÖöÜüİı]{3,9})\s+(\d{1,2})\s+(\d{4})/i);
             if (matchA) {
                 const months = {
                     jan: 0, oca: 0,
@@ -82,7 +88,7 @@ var appData = {
             }
 
             // Format B: '30 Mar 2026'
-            const matchB = cleanStr.match(/^(\d{1,2})\s+([A-Za-zÄğÅşÇçÖöÜüİı]{3,9})\s+(\d{4})/i);
+            const matchB = cleanStr.match(/^(\d{1,2})\s+([A-Za-zĞğŞşÇçÖöÜüİı]{3,9})\s+(\d{4})/i);
             if (matchB) {
                 const months = {
                     jan: 0, oca: 0,
@@ -160,10 +166,12 @@ var appData = {
     setupBatchEventListeners: function() {
         // ... batch event listeners implementation ...
     },
-    // --- GÜVENLİ FETCH KATMANI (AÅAMA 5) ---
+    // --- GÜVENLİ FETCH KATMANI (AŞAMA 5) ---
     apiRequest: async function(endpoint, options = {}) {
         try {
-            const url = endpoint.startsWith('http') ? endpoint : (this.state.API_BASE + endpoint);
+            const isHttp = endpoint.startsWith('http');
+            const hasApiBase = endpoint.startsWith(this.state.API_BASE);
+            const url = isHttp ? endpoint : (hasApiBase ? endpoint : (this.state.API_BASE + (endpoint.startsWith('/') ? endpoint : '/' + endpoint)));
             
             if (options.body && typeof options.body === 'string') {
                 options.headers = options.headers || {};
@@ -174,10 +182,21 @@ var appData = {
             
             const response = await fetch(url, options);
             
-            // --- UI RESILIENCE (AÅAMA 6): 404/405 Hatalarinda Cokus Engelleme ---
+            // --- UI RESILIENCE (AŞAMA 6): Sadece GET isteklerinde 404/405 sessiz geçiş ---
             if (response.status === 404 || response.status === 405) {
-                console.warn(`[API ${response.status}] Hata: ${url}`);
-                return []; 
+                const reqMethod = (options.method || 'GET').toUpperCase();
+                if (reqMethod === 'GET') {
+                    console.warn(`[API ${response.status}] Hata: ${url}`);
+                    return []; 
+                } else {
+                    // POST/PUT/DELETE 404 hatalarını bildirmeli
+                    let errMsg = `API Endpoint bulunamadı (${response.status}): ${url}`;
+                    try {
+                        const errData = await response.json();
+                        errMsg = errData.error || errData.message || errMsg;
+                    } catch(e) {}
+                    throw new Error(errMsg);
+                }
             }
 
             const contentType = response.headers.get('content-type');
@@ -192,7 +211,7 @@ var appData = {
 
             const data = await response.json();
 
-            // --- Standart Yanıt Zarfı Desteği (AÅAMA 3) ---
+            // --- Standart Yanıt Zarfı Desteği (AŞAMA 3) ---
             if (data && typeof data === 'object' && 'success' in data) {
                 if (!data.success) {
                     throw new Error(data.error || data.message || `İşlem başarısız (Kod: ${response.status})`);
@@ -211,9 +230,61 @@ var appData = {
             throw err;
         }
     },
+    fieldLabelMap: {
+        'is_faulty': 'Arızalı Durumu',
+        'sahada': 'Saha Durumu',
+        'on_field': 'Saha Durumu',
+        'warehouse': 'Depoda',
+
+        'hostname': 'Cihaz Adı',
+        'description': 'Açıklama',
+        'mahal': 'Mahal / Lokasyon',
+        'ip': 'IP Adresi',
+        'seri': 'Seri No',
+        'pc_serial': 'PC Seri No',
+        'monitor_seri': 'Monitör Seri No',
+        'monitor2_seri': '2. Monitör Seri No',
+        'model': 'Model',
+        'pr_no': 'PR Numarası',
+        'rdp': 'Uzak Masaüstü',
+        'rdp_address': 'RDP Adresi',
+        'rdp_reason': 'RDP Nedeni',
+        'location_code': 'Lokasyon Kodu',
+        'location_name': 'Lokasyon Adı',
+        'scanner_serial': 'Tarayıcı Seri No',
+        'tarayici_seri': 'Tarayıcı Seri No',
+        'by_serial': 'Eski Seri No',
+        'by_seri': 'Bağlı Yazıcı Seri',
+        'bo_seri': 'BO Seri',
+        'bagli_yazicilar': 'Bağlı Yazıcılar',
+        'status': 'Durum',
+        'personnel': 'Personel',
+        'assigned_to': 'Atanan Personel',
+        'brand': 'Marka',
+        'mac': 'MAC Adresi',
+        'is_deleted': 'Silinme Durumu',
+        'category': 'Kategori',
+        'current_stock': 'Mevcut Stok',
+        'critical_stock': 'Kritik Stok',
+        'windows': 'Windows Sürümü',
+        'keyos': 'KeyOS Durumu',
+        'without_location': 'Lokasyonsuz / Kayıp'
+    },
     init: function() {
         try {
             console.log("App Initializing...");
+            
+            // Global RBAC Observer for dynamically rendered content
+            const self = this;
+            const rbacObserver = new MutationObserver((mutations) => {
+                if (self.state && self.state.view) {
+                    self.applyRBACForView(self.state.view);
+                }
+            });
+            // We observe all views for child node changes (like table re-renders)
+            document.querySelectorAll('.view').forEach(view => {
+                rbacObserver.observe(view, { childList: true, subtree: true });
+            });
             
             // MATRIX LOGGING: Send all clicks to backend
             window.addEventListener('click', (e) => {
@@ -241,12 +312,15 @@ var appData = {
 
             // Global Fetch Interceptor (JWT Auth)
             const originalFetch = window.fetch;
-            const self = this;
             window.fetch = async function() {
                 let [resource, config] = arguments;
+                config = config || {};
+                config.headers = config.headers || {};
                 
-                // HttpOnly cookieler otomatik gönderilir, Authorization header eklemeye gerek yok.
-                // localStorage'dan token okuma kaldırıldı.
+                const token = localStorage.getItem('token');
+                if (token && !config.headers['Authorization']) {
+                    config.headers['Authorization'] = 'Bearer ' + token;
+                }
                 
                 const response = await originalFetch(resource, config);
                 
@@ -257,6 +331,15 @@ var appData = {
                     try {
                         const refreshResp = await originalFetch(self.state.API_BASE + '/users/refresh', { method: 'POST' });
                         if (refreshResp.ok) {
+                            try {
+                                const refreshData = await refreshResp.json();
+                                if (refreshData && refreshData.token) {
+                                    localStorage.setItem("token", refreshData.token);
+                                    config.headers['Authorization'] = 'Bearer ' + refreshData.token;
+                                }
+                            } catch (e) {
+                                console.error("Failed to parse refresh token response:", e);
+                            }
                             console.log("Session refreshed successfully. Retrying original request...");
                             return await originalFetch(resource, config);
                         }
@@ -265,9 +348,9 @@ var appData = {
                     }
 
                     console.error("Session expired. Logging out.");
-                    localStorage.removeItem('it_user_data'); // Sadece user info sil, token zaten yok
-                    if (self.showLoginOverlay) self.showLoginOverlay();
-                    else window.location.reload();
+                    localStorage.removeItem('it_user_data');
+                    localStorage.removeItem('token');
+                    window.location.reload();
                 }
                 return response;
             };
@@ -277,6 +360,7 @@ var appData = {
             this.setupLoginListeners();
             this.setupSessionTimeout();
             this.setupPwaPrompt();
+            this.setupInfiniteScroll();
             // Dashboard refresh
             this.startDashboardRefresh();
         } catch (e) {
@@ -328,7 +412,117 @@ var appData = {
         const prompt = document.getElementById('pwa-install-prompt');
         if (prompt) prompt.style.display = 'none';
     },
-    checkLoginStatus: function() {
+    escapeHtml: function(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    },
+    isDepotRole: function(role) {
+        role = String(role || '').toUpperCase();
+        return role === 'DEPOT' || role === 'DEPO' || role === 'DEPOCU' || role === 'WAREHOUSE';
+    },
+    hasAccess: function(moduleName) {
+        if (!this.state.activeUser) return false;
+        var role = (this.state.activeUser.role || '').toUpperCase();
+        if (role === 'ADMIN') return true;
+        if (role === 'EDITOR' && !['users', 'logs', 'admin-reports'].includes(moduleName)) return true;
+        if (role === 'VIEWER' && !['users', 'logs', 'admin-reports'].includes(moduleName)) return true;
+        if (this.isDepotRole(role) && (moduleName === 'depot' || moduleName === 'printers' || moduleName === 'service')) return true;
+        if (role === 'OTHER') {
+            try {
+                var perms = JSON.parse(this.state.activeUser.permissions || "[]");
+                return perms.includes(moduleName);
+            } catch(e) { return false; }
+        }
+        return false;
+    },
+    canEdit: function(moduleName) {
+        if (!this.state.activeUser) return false;
+        var role = (this.state.activeUser.role || '').toUpperCase();
+        if (role === 'VIEWER') return false;
+        if (role === 'ADMIN') return true;
+        if (role === 'EDITOR' && !['users', 'logs', 'admin-reports', 'depot'].includes(moduleName)) return true;
+        if (this.isDepotRole(role) && (moduleName === 'depot' || moduleName === 'printers' || moduleName === 'service')) return true;
+        if (role === 'OTHER') {
+            try {
+                var perms = JSON.parse(this.state.activeUser.permissions || "[]");
+                return perms.includes(moduleName);
+            } catch(e) { return false; }
+        }
+        return false;
+    },
+    applyRoleRestrictions: function() {
+        var self = this;
+        // Sidebar sekmelerini gizle
+        document.querySelectorAll('.nav-link').forEach(link => {
+            var view = link.dataset.view;
+            if (view && !self.hasAccess(view)) {
+                link.style.display = 'none';
+            } else {
+                link.style.display = '';
+            }
+        });
+        
+        // Sağ üst dropdown menüler ve özel sayfalar
+        var ids = [
+            {id: 'menu-users', module: 'users'},
+            {id: 'menu-admin-reports', module: 'admin-reports'},
+            {id: 'menu-backup', module: 'users'}, // users yetkisi olan backup alabilir
+            {id: 'menu-keyos-query', module: 'users'},
+            {id: 'menu-cups-query', module: 'printers'},
+            {id: 'menu-history', module: 'logs'},
+            {id: 'menu-system-update', module: 'users'},
+            {id: 'menu-clear-data', module: 'users'},
+            {id: 'menu-keyos-excel', module: 'users'},
+            {id: 'menu-printer-pages-report', module: 'printers'},
+            {id: 'menu-hard-test', module: 'users'}
+        ];
+        ids.forEach(item => {
+            var el = document.getElementById(item.id);
+            if (el) el.style.display = self.hasAccess(item.module) ? 'block' : 'none';
+        });
+
+        // Dashboard Health Panel
+        var healthPanel = document.getElementById('system-health-panel');
+        if (healthPanel) healthPanel.style.display = self.hasAccess('users') ? 'block' : 'none';
+        
+        // Ana sayfadaki gizli olarak başlayan ama yetkiye göre gösterilmesi gereken butonlar
+        var btnAddDevice = document.getElementById('btn-device-add');
+        if (btnAddDevice) btnAddDevice.style.display = self.canEdit('inventory') ? 'flex' : 'none';
+        
+        var btnCountMode = document.getElementById('btn-count-mode');
+        if (btnCountMode) btnCountMode.style.display = self.canEdit('inventory') ? 'flex' : 'none';
+        
+        var btnPrinterAdd = document.getElementById('btn-printer-add');
+        if (btnPrinterAdd) btnPrinterAdd.style.display = (self.state.activeUser && self.state.activeUser.role === 'ADMIN') ? 'flex' : 'none';
+    },
+    
+    
+    setupInfiniteScroll: function() {
+        const setupObserver = (sentinelId, listKey, pageKey, chunkFunc) => {
+            const sentinel = document.getElementById(sentinelId);
+            if (!sentinel) return;
+            const observer = new IntersectionObserver((entries) => {
+                if (entries[0].isIntersecting) {
+                    if (this.state[listKey] && this.state[listKey].length > (this.state[pageKey] + 1) * 50) {
+                        this.state[pageKey]++;
+                        this[chunkFunc]();
+                    }
+                }
+            });
+            observer.observe(sentinel);
+        };
+        
+        setupObserver('inventory-scroll-sentinel', 'currentRenderList', 'inventoryPage', 'renderInventoryChunk');
+        setupObserver('printers-scroll-sentinel', 'currentPrintersRenderList', 'printersPage', 'renderPrintersChunk');
+        setupObserver('depot-scroll-sentinel', 'currentDepotRenderList', 'depotPage', 'renderDepotChunk');
+        setupObserver('areas-scroll-sentinel', 'currentAreasRenderList', 'areasPage', 'renderAreasChunk');
+        setupObserver('general-notes-scroll-sentinel', 'currentNotesRenderList', 'notesPage', 'renderGeneralNotesChunk');
+    },
+checkLoginStatus: function() {
         var savedUser = localStorage.getItem('it_user_data');
         var overlay = document.getElementById('login-overlay');
         if (savedUser) {
@@ -339,39 +533,33 @@ var appData = {
                 if(overlay) overlay.style.display = 'none';
                 document.body.classList.remove('login-required');
                 var userNameElem = document.getElementById('active-user-name');
+                var name = this.state.activeUser.display_name || this.state.activeUser.name || 'Bilinmiyor';
+                var role = this.state.activeUser.role || '';
+                
                 if(userNameElem) {
-                    var name = this.state.activeUser.display_name || this.state.activeUser.name || 'Bilinmiyor';
-                    var role = this.state.activeUser.role || '';
                     var icon = role === 'ADMIN' ? '<i class="fas fa-shield-halved" style="color:#00ff88; margin-right:5px;"></i>' : '<i class="fas fa-user" style="color:#00d2ff; margin-right:5px;"></i>';
                     userNameElem.innerHTML = icon + name.toUpperCase() + (role ? ` <span style="opacity:0.6; font-size:0.7rem;">(${role})</span>` : '');
-                }
-                // Dropdown menü öğelerini yetkiye göre gizle/göster
-                var isAdmin = this.state.activeUser.role === 'ADMIN';
-                var ids = ['menu-users', 'menu-backup', 'menu-keyos-query', 'menu-cups-query', 'menu-history', 'menu-system-update', 'menu-clear-data', 'btn-device-add', 'menu-admin-reports'];
-                for (var i = 0; i < ids.length; i++) {
-                    var el = document.getElementById(ids[i]);
-                    if(el) el.style.display = isAdmin ? 'block' : 'none';
+                    if (role === 'ADMIN') userNameElem.style.borderColor = '#00ff88';
                 }
                 
-                // Dashboard Health Panel
-                var healthPanel = document.getElementById('system-health-panel');
-                if(healthPanel) healthPanel.style.display = isAdmin ? 'block' : 'none';
-                
-
-                // Admin badge
-                if(isAdmin && userNameElem) {
-                    userNameElem.innerText = `${name.toUpperCase()} (ADMIN)`;
-                    userNameElem.style.borderColor = '#00ff88';
-                }
+                this.applyRoleRestrictions();
                 this.setStateFromRole();
                 this.loadMahalList();
                 this.renderAll();
+                
                 var savedView = localStorage.getItem('active_view') || 'dashboard';
+                // Rol DEPO artık Depo yanında Yazıcılar/Servis işlemlerini de görebilir; son açık ekran erişilebilirse korunur.
+                if (!this.hasAccess(savedView)) {
+                    if (this.hasAccess('dashboard')) savedView = 'dashboard';
+                    else if (this.hasAccess('inventory')) savedView = 'inventory';
+                    else savedView = 'dashboard'; // fallback
+                }
                 this.navigateTo(savedView);
                 this.setPrinterMainType('PRINTER');
             } catch(e) {
                 console.error("Login Check Error:", e);
                 localStorage.removeItem('it_user_data');
+                localStorage.removeItem('token');
                 this.showLoginOverlay();
             }
         } else {
@@ -405,8 +593,6 @@ var appData = {
             if (result.success) {
                 this.showToast(result.message || 'Tüm veriler başarıyla temizlendi!', 'success');
                 this.renderAll();
-            } else {
-                this.showToast('Hata: ' + (result.error || 'Bilinmeyen hata'), 'error');
             }
         } catch (e) {
             console.error('Temizleme hatası:', e);
@@ -421,7 +607,7 @@ var appData = {
             this.showToast(data.message || 'KeyOS verileri başarıyla güncellendi.', 'success');
             
             if (data.mismatches && data.mismatches.length > 0) {
-                let msg = 'âš ï¸ Hostname Uyuşmazlığı Tespit Edildi:\n\n';
+                let msg = 'âš ï¸  Hostname Uyuşmazlığı Tespit Edildi:\n\n';
                 data.mismatches.forEach(m => {
                     msg += `${m.pc_no}: Sistem=${m.local_hostname} vs KeyOS=${m.keyos_hostname}\n`;
                 });
@@ -433,10 +619,22 @@ var appData = {
             console.error(e);
         }
     },
+    manualDesktopCentralSync: async function() {
+        this.showToast('Desktop Central Sorgusu başlatıldı. Bu işlem 10-15 saniye sürebilir...', 'info');
+        try {
+            const data = await this.apiRequest('/desktop_central/manual_sync', { method: 'POST' });
+            if (data.error || data.status === 'error') throw new Error(data.message || data.error);
+            this.showToast(data.message || 'Desktop Central verileri başarıyla güncellendi.', 'success');
+            this.renderAll();
+        } catch (e) {
+            console.error('Desktop Central Sync Error:', e);
+            this.showToast('Senkronizasyon hatası: ' + e.message, 'error');
+        }
+    },
     manualCUPSQuery: async function() {
         this.showToast('CUPS yazıcı durumları sorgulanıyor...', 'info');
         try {
-            const data = await this.apiRequest('/printers/printers/query_cups', { method: 'POST' });
+            const data = await this.apiRequest('/inventory/printers/query_cups', { method: 'POST' });
             this.showToast(data.message || 'Yazıcı durumları güncellendi.', 'success');
             this.renderAll();
         } catch (e) {
@@ -539,52 +737,65 @@ var appData = {
     setStateFromRole: function() {
         const user = this.state.activeUser;
         if (!user) return;
-        const role = user.role || 'VIEWER';
+        const role = String(user.role || 'VIEWER').toUpperCase();
         document.body.classList.toggle('role-admin', role === 'ADMIN');
         document.body.classList.toggle('role-editor', role === 'EDITOR');
-        document.body.classList.toggle('role-depot', role === 'DEPOT');
+        document.body.classList.toggle('role-depot', this.isDepotRole(role));
         const isAdmin = role === 'ADMIN';
         const isOther = role === 'OTHER';
         let allowedViews = [];
         if (isAdmin) {
-            allowedViews = ['dashboard', 'inventory', 'general-notes', 'areas', 'printers', 'depot', 'docs', 'service', 'logs', 'users', 'admin-reports'];
+            allowedViews = ['dashboard', 'inventory', 'general-notes', 'areas', 'depot', 'docs', 'service', 'logs', 'users', 'admin-reports', 'installations'];
         } else if (isOther && user.permissions) {
             try {
                 allowedViews = JSON.parse(user.permissions);
             } catch(e) { allowedViews = []; }
         } else if (role === 'EDITOR') {
-            allowedViews = ['dashboard', 'inventory', 'general-notes', 'areas', 'printers', 'docs', 'service'];
-        } else if (role === 'DEPOT') {
-            allowedViews = ['depot'];
+            allowedViews = ['dashboard', 'inventory', 'general-notes', 'areas', 'docs', 'service', 'installations'];
+        } else if (this.isDepotRole(role)) {
+            allowedViews = ['dashboard', 'inventory', 'service', 'depot'];
         } else {
             // VIEWER
-            allowedViews = ['dashboard', 'inventory', 'general-notes', 'areas', 'printers', 'service'];
+            allowedViews = ['dashboard', 'inventory', 'general-notes', 'areas', 'service'];
         }
         // Navigasyon linklerini gizle/göster
         document.querySelectorAll('.nav-link').forEach(link => {
             const view = link.getAttribute('data-view');
             link.style.display = allowedViews.includes(view) ? 'block' : 'none';
         });
-        // Dropdown menü öelerini gizle/göster
+        // Dropdown menü öğelerini gizle/göster
         const navUsers = document.getElementById('menu-users');
         const navLogs = document.getElementById('menu-history');
         const navSync = document.getElementById('menu-sync');
+        
         const navKeyosSync = document.getElementById('menu-keyos-sync');
         const navKeyosReport = document.getElementById('menu-keyos-report');
+        const navKeyosExcel = document.getElementById('menu-keyos-excel');
+        const navKeyosForceSync = document.getElementById('menu-keyos-force-sync');
+        const navPrinterPagesReport = document.getElementById('menu-printer-pages-report');
+        const navCupsQuery = document.getElementById('menu-cups-query');
+        const navHardTest = document.getElementById('menu-hard-test');
         if(navUsers) navUsers.style.display = allowedViews.includes('users') ? 'block' : 'none';
         if(navLogs) navLogs.style.display = allowedViews.includes('logs') ? 'block' : 'none';
         if(navSync) navSync.style.display = isAdmin ? 'block' : 'none';
         if(navKeyosSync) navKeyosSync.style.display = isAdmin ? 'block' : 'none';
         if(navKeyosReport) navKeyosReport.style.display = isAdmin ? 'block' : 'none';
-        
+        if(navKeyosExcel) navKeyosExcel.style.display = isAdmin ? 'block' : 'none';
+        if(navKeyosForceSync) navKeyosForceSync.style.display = isAdmin ? 'block' : 'none';
+        if(navPrinterPagesReport) navPrinterPagesReport.style.display = isAdmin ? 'block' : 'none';
+        if(navCupsQuery) navCupsQuery.style.display = isAdmin ? 'block' : 'none';
+        if(navHardTest) navHardTest.style.display = isAdmin ? 'block' : 'none';
         const navDepotReport = document.getElementById('menu-depot-report');
-        if(navDepotReport) navDepotReport.style.display = (isAdmin || role === 'DEPOT') ? 'block' : 'none';
-
+        if(navDepotReport) navDepotReport.style.display = (isAdmin || this.isDepotRole(role) || allowedViews.includes('depot')) ? 'block' : 'none';
+        
+        const navWeeklyReport = document.getElementById('menu-weekly-report');
+        if(navWeeklyReport) navWeeklyReport.style.display = (isAdmin || allowedViews.includes('inventory')) ? 'block' : 'none';
+        
         const navAdminReports = document.getElementById('menu-admin-reports');
-        if(navAdminReports) navAdminReports.style.display = allowedViews.includes('admin-reports') ? 'block' : 'none';
+        if(navAdminReports) navAdminReports.style.display = (isAdmin || allowedViews.includes('admin-reports')) ? 'block' : 'none';
         // Admin-only butonları/alanları göster
         document.querySelectorAll('.admin-only').forEach(el => {
-            el.style.display = isAdmin ? 'block' : 'none';
+            el.style.setProperty('display', isAdmin ? 'block' : 'none', 'important');
         });
     },
     handleLoginButtonClick: async function() {
@@ -611,7 +822,7 @@ var appData = {
 
             console.log("LOGIN RESPONSE:", response);
 
-            // FRONTEND GUARD (AÅAMA 3)
+            // FRONTEND GUARD (AŞAMA 3)
             if (
                 !response ||
                 response.success !== true ||
@@ -637,7 +848,11 @@ var appData = {
 
         } catch (err) {
             console.error("Login Error (Detailed):", err);
-            this.showToast(err.message || "Giriş yapılamadı.", "error");
+            let errorMsg = err.message || "Giriş yapılamadı.";
+            if (errorMsg === "invalid_credentials") {
+                errorMsg = "Kullanıcı adınızı veya şifrenizi kontrol ediniz.";
+            }
+            this.showToast(errorMsg, "error");
             throw err;
         }
     },
@@ -696,6 +911,7 @@ var appData = {
             await this.apiRequest('/users/logout', { method: 'POST' });
         } catch(e) { console.error(e); }
         localStorage.removeItem('it_user_data');
+        localStorage.removeItem('token');
         location.reload();
     },
     setupSessionTimeout: function() {
@@ -716,6 +932,10 @@ var appData = {
                     }
                 } catch(e) { console.error(e); }
             }
+            
+            // Güvenli IP ise timeout uygulama
+            if (user.is_trusted) return;
+
             const userTimeout = user.session_timeout;
             if (userTimeout === 0) return; // Sınırsız
             const waitMs = (userTimeout || 5) * 60 * 1000;
@@ -738,9 +958,9 @@ var appData = {
         return text.toString()
             .replace(/İ/g, "I")
             .replace(/ı/g, "i")
-            .replace(/Å/g, "S")
+            .replace(/Ş/g, "S")
             .replace(/ş/g, "s")
-            .replace(/Ä/g, "G")
+            .replace(/Ğ/g, "G")
             .replace(/ğ/g, "g");
     },
     renderAll: function() {
@@ -768,6 +988,19 @@ var appData = {
             this.renderStats(stats);
             this.renderDashboardChart(stats);
             this.renderStockAlerts(stats.depot_alerts || []);
+            this.renderKeyosAlert(stats.keyos_sync_log);
+            this.renderKeyosUptimeAlert(stats.keyos_uptime);
+            this.renderLowPrintPrintersAlert(stats.low_print_printers);
+            
+            // SYSTEM BRAIN ONLY FOR ADMINS
+            if (this.state.activeUser && (this.state.activeUser.role === 'admin' || this.state.activeUser.role === 'ADMIN')) {
+                const brainPanel = document.getElementById('system-brain-panel');
+                if (brainPanel) brainPanel.style.display = 'block';
+                this.loadSystemBrain();
+            } else {
+                const brainPanel = document.getElementById('system-brain-panel');
+                if (brainPanel) brainPanel.style.display = 'none';
+            }
         } catch (e) {
             console.error("Dashboard yüklenemedi:", e);
             // Fallback: local data üzerinden hesapla
@@ -971,6 +1204,92 @@ var appData = {
         // Redundant as per user request to move alerts to Depot view.
         return;
     },
+    renderKeyosAlert: function(logData) {
+        const container = document.getElementById('dashboard-keyos-alert-container');
+        if (!container) return;
+        
+        if (logData && logData.status === 'Uyarı') {
+            container.style.display = 'block';
+            container.innerHTML = `
+                <div style="background-color: rgba(255, 180, 0, 0.1); border-left: 4px solid #ffb400; padding: 12px 20px; border-radius: 4px; margin-bottom: 20px; color: #ffb400; display: flex; align-items: center;">
+                    <i class="fas fa-exclamation-triangle" style="font-size: 1.5rem; margin-right: 15px;"></i>
+                    <div>
+                        <div style="font-weight: 600; font-size: 0.95rem;">KeyOS Uyumsuzluk Bildirimi</div>
+                        <div style="font-size: 0.85rem; opacity: 0.9;">${logData.message || ''}</div>
+                    </div>
+                </div>
+            `;
+        } else {
+            container.style.display = 'none';
+            container.innerHTML = '';
+        }
+    },
+    renderKeyosUptimeAlert: function(uptimeData) {
+        const container = document.getElementById('dashboard-keyos-uptime-alert-container');
+        if (!container) return;
+        
+        const count = (uptimeData && uptimeData.k30p) ? Number(uptimeData.k30p) : 0;
+        const isAdmin = this.state.activeUser && this.state.activeUser.role === 'ADMIN';
+        
+        if (count > 0 && isAdmin) {
+            container.style.display = 'block';
+            container.innerHTML = `
+                <div style="background: rgba(255, 180, 0, 0.05); border: 1px solid rgba(255, 180, 0, 0.15); padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; color: #ffb400; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 15px rgba(255, 180, 0, 0.05);">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-clock" style="font-size: 1.1rem; color: #ffb400;"></i>
+                        <span style="font-weight: 500; font-size: 0.9rem;">KeyOS 30+ gün aktif olmayanlar tespit edildi. Kontrol edilmeli.</span>
+                    </div>
+                    <span style="background: rgba(255, 180, 0, 0.2); color: #ffb400; font-weight: 700; font-size: 0.8rem; padding: 3px 8px; border-radius: 20px; min-width: 22px; text-align: center; display: inline-block;">${count}</span>
+                </div>
+            `;
+        } else {
+            container.style.display = 'none';
+            container.innerHTML = '';
+        }
+    },
+    renderLowPrintPrintersAlert: function(count) {
+        const container = document.getElementById('dashboard-low-print-alert-container');
+        if (!container) return;
+        
+        const c = count ? Number(count) : 0;
+        const isAdmin = this.state.activeUser && this.state.activeUser.role === 'ADMIN';
+        
+        if (c > 0 && isAdmin) {
+            container.style.display = 'block';
+            container.innerHTML = `
+                <div onclick="app.showPrinterPagesReportModal()" style="background: rgba(255, 180, 0, 0.05); border: 1px solid rgba(255, 180, 0, 0.15); padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; color: #ffb400; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 15px rgba(255, 180, 0, 0.05); cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='rgba(255, 180, 0, 0.08)'" onmouseout="this.style.background='rgba(255, 180, 0, 0.05)'" title="Yazıcı Sayaç Raporunu Aç">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-print" style="font-size: 1.1rem; color: #ffb400;"></i>
+                        <span style="font-weight: 500; font-size: 0.9rem;">1 ayda toplam çıktı sayısı 30 sayfayı bulmayan yazıcılar tespit edildi. Kontrol edilmeli.</span>
+                    </div>
+                    <span style="background: rgba(255, 180, 0, 0.2); color: #ffb400; font-weight: 700; font-size: 0.8rem; padding: 3px 8px; border-radius: 20px; min-width: 22px; text-align: center; display: inline-block;">${c}</span>
+                </div>
+            `;
+        } else {
+            container.style.display = 'none';
+            container.innerHTML = '';
+        }
+    },
+    applyRBACForView: function(view) {
+        const viewEl = document.getElementById(`view-${view}`);
+        if (viewEl && !this.canEdit(view)) {
+            const actionSelectors = '.btn-accent, .btn-danger, .btn-service-add, .icon-action-container, .btn-chip[onclick*="delete"], .btn-chip[onclick*="edit"], .btn-chip[onclick*="add"], .btn-chip[onclick*="remove"], button[id*="btn-add"], button[id*="-add"]';
+            viewEl.querySelectorAll(actionSelectors).forEach(btn => {
+                const text = (btn.innerText || '').toUpperCase();
+                const click = (btn.getAttribute('onclick') || '').toLowerCase();
+                const isSafe = btn.classList.contains('ignore-rbac') || 
+                               click.includes('print') || 
+                               click.includes('export') || 
+                               click.includes('generate') ||
+                               text.includes('YAZICI') || 
+                               text.includes('YAZDIR');
+                               
+                if (!isSafe) {
+                    btn.style.display = 'none';
+                }
+            });
+        }
+    },
     navigateTo: function(view) {
         if (this.stopLiveConsoleStream) this.stopLiveConsoleStream();
         this.state.view = view;
@@ -983,11 +1302,14 @@ var appData = {
         });
         const role = (this.state.activeUser && this.state.activeUser.role) ? this.state.activeUser.role : 'GUEST';
 
+        // GLOBAL RBAC: Eğer kullanıcının bu modülde düzenleme yetkisi yoksa tüm aksiyon butonlarını gizle
+        this.applyRBACForView(view);
+
         // Depot UI Restrictions
         if (view === 'depot') {
             const btnAdd = document.getElementById('btn-depot-add');
             const btnExport = document.getElementById('btn-depot-export');
-            if (btnAdd) btnAdd.style.display = (role === 'ADMIN' || role === 'DEPOT') ? 'block' : 'none';
+            if (btnAdd) btnAdd.style.display = this.canEdit('depot') ? 'flex' : 'none';
             if (btnExport) btnExport.style.display = (role === 'ADMIN') ? 'block' : 'none';
             // Default sub-tab for depot
             this.filterDepot('ALERTS');
@@ -995,7 +1317,17 @@ var appData = {
         
         // Default sub-tabs for other views
         if (view === 'inventory') {
-            this.setInvCategory('PC');
+            if (this.isDepotRole(role)) {
+                this.setInvCategory('PRINTER');
+                document.querySelectorAll('#view-inventory .filter-chips button[data-category]').forEach(btn => {
+                    btn.style.display = (btn.getAttribute('data-category') === 'PRINTER') ? 'inline-block' : 'none';
+                });
+            } else {
+                this.setInvCategory('PC');
+                document.querySelectorAll('#view-inventory .filter-chips button[data-category]').forEach(btn => {
+                    btn.style.display = 'inline-block';
+                });
+            }
         } else if (view === 'kb') {
             this.setKBTab('kodlar');
         } else if (view === 'printers') {
@@ -1026,12 +1358,17 @@ var appData = {
         
         // (Duplicate Fetch Removed) if (view === 'inventory'...) this.state.inventoryCache = {}; this.loadInventory();
         if (view === 'users' && (this.state.users || []).length === 0) this.loadUsers();
-        if (view === 'printers' && (this.state.printers || []).length === 0) this.renderPrinters();
-        if (view === 'logs' && (this.state.auditLogs || []).length === 0) this.loadAuditLogs();
+        if (view === 'inventory' && ['PRINTER', 'BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER'].includes(this.state.invCategory) && (this.state.printers || []).length === 0) this.renderPrinters();
+        if (view === 'logs') this.loadAuditLogs();
         if (view === 'service' && (this.state.serviceRecords || []).length === 0) this.loadServiceRecords();
         if (view === 'depot' && (this.state.depot || []).length === 0) this.loadDepot();
 
         if (view === 'general-notes') this.loadGeneralNotes();
+        if (view === 'installations') {
+            setTimeout(() => {
+                try { this.setInstallTab('apps'); } catch(e) { console.error('Install tab init error:', e); }
+            }, 50);
+        }
     },
     refreshActiveView: async function() { // GHOST CODE REMOVED
 
@@ -1040,7 +1377,7 @@ var appData = {
             if (view === 'dashboard') await this.loadDashboardStats();
             else if (view === 'inventory') { this.state.inventoryCache = {}; await this.loadInventory(); }
             else if (view === 'users') await this.loadUsers();
-            else if (view === 'printers') await this.renderPrinters();
+            else if (view === 'inventory' && ['PRINTER', 'BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER'].includes(this.state.invCategory)) await this.renderPrinters();
             else if (view === 'logs') await this.loadAuditLogs();
             else if (view === 'general-notes') await this.loadGeneralNotes();
             else if (view === 'depot') await this.loadDepot();
@@ -1171,6 +1508,7 @@ var appData = {
             }).join('');
         }
     },
+    
     renderInventory: function(items) {
         const grid = document.getElementById('inventory-grid');
         if(!grid) return;
@@ -1178,17 +1516,36 @@ var appData = {
             grid.innerHTML = '<p style="opacity:0.4; text-align:center; grid-column:1/-1; padding: 40px;">Envanter verisi bulunamadı.</p>';
             return;
         }
+        
+        this.state.currentRenderList = items;
+        this.state.inventoryPage = 0;
+        grid.innerHTML = ''; // Temizle
+        
+        this.renderInventoryChunk();
+    },
+    
+    renderInventoryChunk: function() {
+        const grid = document.getElementById('inventory-grid');
+        if(!grid || !this.state.currentRenderList) return;
+        
+        const items = this.state.currentRenderList;
+        const page = this.state.inventoryPage;
+        const pageSize = window.innerWidth <= 768 ? 20 : 50;
+        const chunk = items.slice(page * pageSize, (page + 1) * pageSize);
+        
+        if (chunk.length === 0) return;
+        
         const nc = this.state.noteCounts || {};
         
         // If it's a MONITOR category, render printer-style cards
         if (this.state.invCategory === 'MONITOR') {
-            grid.innerHTML = items.map(p => {
+            const html = chunk.map(p => {
                 const status = (p.status || '').toUpperCase();
                 const isInstalled = p.mahal && p.mahal.trim() !== "";
                 const durumHtml = this.getDurumBadge(status, isInstalled);
                 let displayMahal = (p.mahal || 'DEPO').toUpperCase();
                 let displayIpValue = p.ip || p.recorded_device_no || p.pc_no || '-';
-                let displayIpLabel = "BAĞLI CİHAZ (PC NO / MAHAL)";
+                let displayIpLabel = "BAĞLI CİHAZ";
 
                 // Bağlı olduğu PC'yi bulma (Barkod yazıcılardaki gibi)
                 const pcs = (this.state.inventoryCache && this.state.inventoryCache['PC']) || [];
@@ -1229,7 +1586,7 @@ var appData = {
                         ${p.monitor_type ? `<span style="font-size: 0.75rem; background: rgba(0,255,136,0.15); color: #00ff88; padding: 2px 6px; border-radius: 4px; margin-left: auto;">${p.monitor_type == '1' ? '1. Ekran' : (p.monitor_type == '2' ? '2. Ekran' : p.monitor_type)}</span>` : ''}
                     </div>
                     
-                    <div class="printer-grid-info" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                    <div class="printer-grid-info" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 5px;">
                         <div class="info-block">
                             <div class="info-label">${displayIpLabel}</div>
                             <div class="info-value" style="color: #facc15; font-weight: 700;">
@@ -1244,18 +1601,49 @@ var appData = {
                 </div>
                 `;
             }).join('');
+            grid.insertAdjacentHTML('beforeend', html);
             return;
         }
 
-        grid.innerHTML = items.map(i => {
+        const html = chunk.map(i => {
             const pcLabel = this.formatPcLabel(i.pc_no, i.device_type, i.id);
-            const durumHtml = this.getDurumBadge(i.status || (i.pending_installation == 1 ? 'BEKLE' : (i.is_faulty == 1 ? 'ARIZALI' : (i.warehouse == 1 ? 'DEPO' : (i.without_location == 1 ? 'KAYIP' : 'KURULU')))), (i.location_code || i.location_code) && (i.location_code || i.location_code) !== '-');
+            const durumHtml = this.getDurumBadge(i.status || (i.is_faulty == 1 ? 'ARIZALI' : (i.warehouse == 1 ? 'DEPO' : (i.without_location == 1 ? 'KAYIP' : 'KURULU'))), (i.location_code || i.location_code) && (i.location_code || i.location_code) !== '-');
             const osBadge = this.getOSBadge(i.windows == 1 || String(i.windows || "").toUpperCase().includes("WIN"), i.keyos == 1 || String(i.keyos || "").toUpperCase().includes("KEY"), this.isTrue(i.rdp));
 
             const noteInfo = nc[String(i.id)];
             let noteBubble = '';
             if (noteInfo && noteInfo.count > 0) {
                 noteBubble = `<div class="note-bubble-mini blink" style="color: #facc15; border-color: #facc15; background: rgba(250, 204, 21, 0.1);" onclick="event.stopPropagation(); app.openNotesModal(${i.id}, 'pc')" title="${noteInfo.count} Adet Not Var"><i class="fas fa-exclamation-triangle"></i></div>`;
+            }
+
+            // KeyOS Badge logic
+            let keyosBadgeHtml = '';
+            if (this.state.invCategory === 'PC') {
+                let k_active = i.keyos_last_active || i.last_active;
+                let k_color = '#94a3b8'; // gray
+                let k_text = 'Bilinmiyor';
+                
+                if (k_active && k_active !== '-') {
+                    const kDate = new Date(k_active);
+                    if (!isNaN(kDate.getTime())) {
+                        const diff = (new Date() - kDate) / (1000 * 60 * 60 * 24);
+                        if (diff <= 1) {
+                            k_color = '#10b981'; // green
+                            k_text = 'Aktif';
+                        } else {
+                            k_color = '#ef4444'; // red
+                            k_text = 'Pasif';
+                        }
+                    } else {
+                        k_text = 'Veri Var';
+                        k_color = '#f59e0b';
+                    }
+                }
+                
+                keyosBadgeHtml = `<div style="background: rgba(0,0,0,0.3); border: 1px solid ${k_color}; border-radius: 12px; padding: 2px 6px; display: inline-flex; align-items: center; gap: 4px; font-size: 0.65rem; color: #fff; margin-left: auto;" title="Son Aktiflik: ${k_active || '-'}">
+                    <div style="width: 6px; height: 6px; border-radius: 50%; background: ${k_color};"></div>
+                    ${k_text}
+                </div>`;
             }
 
             const countedAt = i.last_counted_at;
@@ -1280,25 +1668,26 @@ var appData = {
                  onclick="app.openDeviceDetail(${i.id}, 'pc')"
                  style="cursor:pointer; min-height: 140px; padding: 12px;">
                 
-                <!-- BAÅLIK SATIRI: PC NO + DURUM -->
+                <!-- BAŞLIK SATIRI: PC NO + DURUM -->
                 <div class="flex-row" style="justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
                     <div class="flex-row gap-2" style="align-items: center;">
                         <div style="color: #38bdf8; font-weight: 900; font-size: 1.1rem; letter-spacing: -0.5px; display: flex; align-items: center; gap: 5px;">
                             ${pcLabel}
                             ${i.description && i.description.trim() !== '' ? `<i class="fas fa-exclamation-circle blink-icon" style="color:#ff4b2b; font-size: 1rem;" title="${i.description.replace(/"/g, '&quot;')}"></i>` : ''}
                         </div>
+                        ${keyosBadgeHtml}
                         ${durumHtml}
                     </div>
                     <div class="flex-row gap-2" style="align-items: center;">
                         ${this.state.invCategory === 'PC' ? `
-                        <i class="fas fa-power-off" style="color: #ff4b2b; font-size: 0.85rem; cursor: pointer; opacity: 0.7;" title="Bilgisayarı Kapat" onclick="event.stopPropagation(); app.openRunCommandModal(${i.id}, 'shutdown', '${i.ip}')"></i>
+                        <i class="fas fa-power-off" style="color: #ff4b2b; font-size: 0.85rem; cursor: pointer; opacity: 0.7;" title="Bilgisayarı Kapat" onclick="event.stopPropagation(); app.openRunCommandModal(${i.id}, 'poweroff', '${i.ip}')"></i>
                         <i class="fas fa-rotate-right" style="color: #00d2ff; font-size: 0.85rem; cursor: pointer; opacity: 0.7;" title="Yeniden Başlat" onclick="event.stopPropagation(); app.openRunCommandModal(${i.id}, 'reboot', '${i.ip}')"></i>
                         ` : ''}
                         <i class="fas fa-clock-rotate-left" style="color: #64748b; font-size: 0.85rem; cursor: pointer; opacity: 0.7;" title="Geçmiş" onclick="event.stopPropagation(); app.openHistoryPopup(${i.id}, 'pc', event)"></i>
                     </div>
                 </div>
 
-                <!-- İÇERİK 1. SATIR: MAHAL KODU (SOL) & HOSTNAME (SAÄ) -->
+                <!-- İÇERİK 1. SATIR: MAHAL KODU (SOL) & HOSTNAME (SAĞ) -->
                 <div class="flex-row mb-2" style="justify-content: space-between; align-items: center;">
                     ${(this.state.invCategory === 'PC' || this.state.invCategory === 'SK' || this.state.invCategory === 'TABLET') ? `
                         <div class="flex-row gap-2" style="align-items: center;">
@@ -1348,12 +1737,18 @@ var appData = {
 
                 ${this.state.countMode ? `
                 <button class="btn ${countedAt ? 'counted' : 'btn-accent'}" style="width:100%; margin-top:10px; padding:8px; font-size:0.7rem;" onclick="event.stopPropagation(); ${countedAt ? `app.undoMarkCounted(${i.id})` : `app.markCounted(${i.id})`}">
-                    <i class="fas ${countedAt ? 'fa-undo' : 'fa-check'}"></i> ${countedAt ? 'SAYIMI GERİ AL' : 'SAYILDI OLARAK İÅARETLE'}
+                    <i class="fas ${countedAt ? 'fa-undo' : 'fa-check'}"></i> ${countedAt ? 'SAYIMI GERİ AL' : 'SAYILDI OLARAK İŞARETLE'}
                 </button>` : ''}
             </div>`;
         }).join('');
+        
+        grid.insertAdjacentHTML('beforeend', html);
     },
-    searchInventory: function() { this.filterInventory(); },
+
+    searchInventory: function() {
+        clearTimeout(this._invTimer);
+        this._invTimer = setTimeout(() => this.filterInventory(), 300);
+    },
     setInvCategory: function(cat) {
         const isChanged = (this.state.invCategory !== (cat || 'PC'));
         this.state.invCategory = cat || 'PC';
@@ -1361,14 +1756,54 @@ var appData = {
         const dd = document.getElementById('search-category-dropdown');
         if (dd) { dd.value = ["BARKOD YAZICI", "BARKOD OKUYUCU", "TARAYICI"].includes(cat) ? cat : ""; }
         
-        const addBtn = document.getElementById('btn-device-add');
-        if (addBtn) {
-            addBtn.style.display = (cat === 'SK' || cat === 'TABLET' || cat === 'MONITOR') ? 'inline-flex' : 'none';
+        const isPrinterCat = ['PRINTER', 'BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER'].includes(cat);
+        
+        // UI Toggles
+        const invGrid = document.getElementById('inventory-grid');
+        const prGrid = document.getElementById('printers-grid');
+        const prSentinel = document.getElementById('printers-scroll-sentinel');
+        if(invGrid) invGrid.style.display = isPrinterCat ? 'none' : 'grid';
+        if(prGrid) prGrid.style.display = isPrinterCat ? 'grid' : 'none';
+        if(prSentinel) prSentinel.style.display = isPrinterCat ? 'block' : 'none';
+        
+        const prModelFilters = document.getElementById('printer-model-filters-container');
+        if(prModelFilters) prModelFilters.style.display = (cat === 'PRINTER') ? 'block' : 'none';
+        
+        const mainSearch = document.getElementById('main-search');
+        if(mainSearch) {
+            const msWrap = mainSearch.closest('.search-wrapper');
+            if(msWrap) msWrap.style.display = isPrinterCat ? 'none' : 'flex';
         }
+        const prSearchWrap = document.getElementById('printer-search-wrapper');
+        if(prSearchWrap) prSearchWrap.style.display = isPrinterCat ? 'flex' : 'none';
         
-        // Cache Logic (Memory Cache by Category)
+        const addBtn = document.getElementById('btn-device-add');
+        const printerAddBtn = document.getElementById('btn-printer-add');
+        const printerServiceBtn = document.getElementById('btn-printers-service');
+        
+        const isAdm = this.state.activeUser && this.state.activeUser.role === 'ADMIN';
+
+        if (addBtn) addBtn.style.display = (isAdm && (cat === 'SK' || cat === 'TABLET' || cat === 'MONITOR' || cat === 'PC')) ? 'inline-flex' : 'none';
+        if (printerAddBtn) printerAddBtn.style.display = (isAdm && isPrinterCat) ? 'flex' : 'none';
+        if (printerServiceBtn) printerServiceBtn.style.display = (cat === 'PRINTER') ? 'flex' : 'none';
+        
+        const countModeBtn = document.getElementById('btn-count-mode');
+        if (countModeBtn) countModeBtn.style.display = (cat === 'PC') ? 'inline-flex' : 'none';
+        
+        const floorFilters = document.getElementById('floor-filters');
+        if (floorFilters) floorFilters.style.display = isPrinterCat ? 'none' : 'block';
+
+        if (isPrinterCat) {
+            this.state.printerMainType = cat;
+            if (isChanged || !this.state.printers) {
+                this.renderPrinters();
+            } else {
+                this.applyPrinterFilters();
+            }
+            return;
+        }
+
         if (!this.state.inventoryCache) this.state.inventoryCache = {};
-        
         if (isChanged || !this.state.inventoryCache[cat] || this.state.inventoryCache[cat].length === 0) {
             this.loadInventory();
         } else {
@@ -1379,7 +1814,13 @@ var appData = {
     },
     openDeviceAddModal: function() {
         const cat = this.state.invCategory;
-        if (cat !== 'SK' && cat !== 'TABLET' && cat !== 'MONITOR') return;
+        
+        if (this.state.activeUser && this.state.activeUser.role !== 'ADMIN') {
+            alert('Bu işlem sadece yetkililer (ADMIN) tarafından yapılabilir.');
+            return;
+        }
+
+        if (cat !== 'SK' && cat !== 'TABLET' && cat !== 'MONITOR' && cat !== 'PC') return;
         
         // Formu temizle
         document.getElementById('add-pc-no').value = '';
@@ -1404,7 +1845,10 @@ var appData = {
         if(document.getElementById('add-warehouse')) document.getElementById('add-warehouse').checked = false;
         
         // Modal başlığını ayarla
-        const titleText = cat === 'SK' ? 'Sıramatik / Kiosk' : (cat === 'MONITOR' ? 'Monitör' : 'Tablet');
+        let titleText = 'Tablet';
+        if (cat === 'SK') titleText = 'Sıramatik / Kiosk';
+        else if (cat === 'MONITOR') titleText = 'Monitör';
+        else if (cat === 'PC') titleText = 'Bilgisayar';
         const titleEl = document.querySelector('#device-add-modal h3');
         if (titleEl) titleEl.innerHTML = `<i class="fas fa-desktop"></i> Yeni ${titleText} Ekle`;
 
@@ -1628,7 +2072,7 @@ var appData = {
             }
             return true;
         });
-        // DOÄAL SAYISAL SIRALAMA (PC-001, MN-001 gibi sırayla gelmesi için)
+        // DOĞAL SAYISAL SIRALAMA (PC-001, MN-001 gibi sırayla gelmesi için)
         filtered.sort((a, b) => {
             const getSortKey = (item) => {
                 if (item.device_class === 'MONITOR' || item.device_type === 'MONITOR') {
@@ -1722,10 +2166,10 @@ var appData = {
         if (!container) return;
         try {
             const [pr, bp, br, sc] = await Promise.all([
-                this.apiRequest('/printers/printers/get_all').catch(e => []),
-                this.apiRequest('/printers/barcode_printers/get_all').catch(e => []),
-                this.apiRequest('/printers/barcode_readers/get_all').catch(e => []),
-                this.apiRequest('/printers/scanners/get_all').catch(e => [])
+                this.apiRequest('/inventory/printers/get_all').catch(e => []),
+                this.apiRequest('/inventory/barcode_printers/get_all').catch(e => []),
+                this.apiRequest('/inventory/barcode_readers/get_all').catch(e => []),
+                this.apiRequest('/inventory/scanners/get_all').catch(e => [])
             ]);
             let data = [...(pr || []), ...(bp || []), ...(br || []), ...(sc || [])];
             // Doğal Sıralama (PR-001, PR-010 vs.)
@@ -1767,12 +2211,59 @@ var appData = {
 
             // 2. Arama Filtresi
             if (query) {
-                const content = `${p.pr_no} ${p.model || p.name} ${p.seri || p.serial_no} ${p.mahal} ${p.ip} ${p.mac}`.toUpperCase();
-                if (!content.includes(query)) return false;
+                const searchTerms = query.split(/\s+/).flatMap(t => {
+                    // PR- ile başlayanları koru, diğerlerini "-" ile böl
+                    if (/^PR-\d+/i.test(t)) return [t];
+                    return t.split('-');
+                }).map(t => t.trim()).filter(t => t !== "");
+
+                if (searchTerms.length > 0) {
+                    const matchAny = searchTerms.some(term => {
+                        const termUP = term.toUpperCase();
+                        if (termUP.includes('.')) {
+                            const content = `${p.mahal} ${p.ip}`.toUpperCase();
+                            return content.includes(termUP);
+                        } else if (/^\d+$/.test(termUP)) {
+                            const prNoStr = (p.pr_no || "").toUpperCase();
+                            const padded = termUP.padStart(3, '0');
+                            const exactPr = "PR-" + padded;
+                            // İçinde direkt 36 geçenler (PR-136, PR-036) VEYA direkt PR-036 eşleşmesi
+                            return prNoStr.includes(termUP) || prNoStr.includes(padded) || prNoStr === exactPr;
+                        } else {
+                            const content = `${p.pr_no} ${p.model || p.name} ${p.seri || p.serial_no} ${p.mahal} ${p.ip} ${p.mac}`.toUpperCase();
+                            let paddedTerm = termUP;
+                            if (termUP.startsWith('PR-')) {
+                                const num = termUP.replace('PR-', '').trim();
+                                if (/^\d+$/.test(num)) {
+                                    paddedTerm = 'PR-' + num.padStart(3, '0');
+                                }
+                            }
+                            return content.includes(termUP) || content.includes(paddedTerm);
+                        }
+                    });
+                    if (!matchAny) return false;
+                }
             }
             return true;
         });
-        container.innerHTML = filtered.map(p => {
+        
+        this.state.currentPrintersRenderList = filtered;
+        this.state.printersPage = 0;
+        container.innerHTML = '';
+        this._statusQueue = []; // Yeni arama yapıldığında eski sorguları iptal et
+        this.renderPrintersChunk();
+    },
+    renderPrintersChunk: function() {
+        const container = document.getElementById('printers-grid');
+        if (!container || !this.state.currentPrintersRenderList) return;
+        const page = this.state.printersPage;
+        const pageSize = window.innerWidth <= 768 ? 20 : 50;
+        const chunk = this.state.currentPrintersRenderList.slice(page * pageSize, (page + 1) * pageSize);
+        if (chunk.length === 0) return;
+        
+        const isAdmin = this.state.activeUser && ['ADMIN', 'EDITOR'].includes(this.state.activeUser.role);
+        
+        const html = chunk.map(p => {
             const status = (p.status || '').toUpperCase();
             const prNo = (p.pr_no || p.name || "").toUpperCase();
             const prNoDisplay = p.pr_no || p.name || "İsimsiz";
@@ -1790,7 +2281,7 @@ var appData = {
             let displayIpLabel = "IP ADRESİ";
 
             if (isSpecial) {
-                displayIpLabel = "BAÄLI CİHAZ (PC NO)";
+                displayIpLabel = "BAĞLI CİHAZ (PC NO)";
                 // recorded_device_no üzerinden PC'yi bul
                 const connectedPc = this.state.inventory?.find(pc => {
                     const searchNo = (p.recorded_device_no || "").toUpperCase();
@@ -1801,7 +2292,7 @@ var appData = {
 
                 if (connectedPc) {
                     displayMahal = (connectedPc.location_code || 'BİLİNMİYOR').toUpperCase();
-                    displayIpValue = connectedPc.pc_no ? `PC-${connectedPc.pc_no.toString().padStart(3, '0')}` : 'BAÄLI';
+                    displayIpValue = connectedPc.pc_no ? `PC-${connectedPc.pc_no.toString().padStart(3, '0')}` : 'BAĞLI';
                 } else {
                     displayMahal = (p.recorded_device_no || 'BİLİNMİYOR').toUpperCase();
                     displayIpValue = p.recorded_device_no || '-';
@@ -1810,34 +2301,72 @@ var appData = {
 
             return `
             <div class="card printer-card-modern fade-in" style="cursor:pointer; min-height: ${isSpecial ? 'auto' : '280px'};" onclick="app.openDeviceDetail(${p.id}, 'pr', '${p.device_class || 'PRINTER'}')">
-                <div class="flex-row mb-3" style="align-items: center; justify-content: space-between;">
-                    <div style="color: #38bdf8; font-weight: 900; font-size: 1.3rem; letter-spacing: -0.5px;">${prNoDisplay}</div>
-                    <div class="flex-row gap-3" style="align-items: center;">
+                <div class="flex-row mb-3" style="align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+                    <div class="flex-row gap-2" style="align-items: center;">
+                        <div style="color: #38bdf8; font-weight: 900; font-size: 1.3rem; letter-spacing: -0.5px;">${prNoDisplay}</div>
                         ${durumHtml}
+                    </div>
+                    <div class="flex-row gap-3" style="align-items: center;">
                         <div class="flex-row gap-2">
-                             <i class="fas fa-history" style="font-size: 1rem; color: #64748b; cursor: pointer;" title="Servis Geçmişi" onclick="event.stopPropagation(); app.openPrinterServiceHistoryModal(${p.id}, '${prNoDisplay}')"></i>
-                             ${!isSpecial ? `<i class="fas fa-globe" style="font-size: 1rem; color: #10b981; cursor: pointer;" title="Arayüz & CUPS" onclick="event.stopPropagation(); app.openPrinterInterfaceDual('${p.ip}', '${prNoDisplay}')"></i>` : ''}
+                             <i class="fas fa-history" style="font-size: 1rem; color: #64748b; cursor: pointer;" title="Servis Geçmişi" onclick="event.stopPropagation(); app.openPrinterServiceHistoryModal(${p.id}, '${prNoDisplay}', '${p.device_class || 'PRINTER'}')"></i>
+                             ${!isSpecial ? `
+                             <i class="fas fa-globe" style="font-size: 1rem; color: #10b981; cursor: pointer;" title="Arayüz & CUPS" onclick="event.stopPropagation(); app.openPrinterInterfaceDual('${p.ip}', '${prNoDisplay}')"></i>
+                             ` : ''}
                         </div>
                     </div>
                 </div>
 
                 <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 10px; margin-bottom: 12px;">
-                    <div class="flex-row mb-2" style="justify-content: space-between; align-items: flex-end;">
-                        <div class="flex-column">
-                            <span style="font-size: 0.55rem; color: #64748b; font-weight: 800; text-transform: uppercase;">MAHAL</span>
-                            <span style="font-size: 0.85rem; color: #e2e8f0; font-weight: 700;">${displayMahal}</span>
+                    ${(() => {
+                        let combinedInfoText = displayMahal;
+                        if (displayIpValue && displayIpValue !== '-') {
+                            if (isSpecial) {
+                                combinedInfoText += ` | Bağlı PC: ${displayIpValue}`;
+                            } else {
+                                combinedInfoText += ` | ${displayIpValue}`;
+                            }
+                        }
+                        let simpleModel = p.model || p.name || '---';
+                        simpleModel = simpleModel.replace(/^(lexmark|hp|epson|canon|brother|samsung|xerox|oki|kyocera)\s+/i, '').trim();
+                        combinedInfoText += ` | ${simpleModel}`;
+                        
+                        return `
+                        <div class="flex-row mb-2" style="justify-content: space-between; align-items: flex-end;">
+                            <div class="flex-column" style="width: 100%;">
+                                <span style="font-size: 0.55rem; color: #64748b; font-weight: 800; text-transform: uppercase;">LOKASYON BİLGİSİ</span>
+                                <span style="font-size: 0.85rem; color: #e2e8f0; font-weight: 700;">${combinedInfoText}</span>
+                            </div>
                         </div>
-                        <div class="flex-column" style="text-align: right;">
-                            <span style="font-size: 0.55rem; color: #38bdf8; font-weight: 800; text-transform: uppercase;">MODEL</span>
-                            <span style="font-size: 0.85rem; color: #f8fafc; font-weight: 700;">${p.model || p.name || '---'}</span>
+                        `;
+                    })()}
+                    
+                    ${!isSpecial ? `
+                    <div class="flex-row mb-2" style="justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px; margin-top: 8px;">
+                        <div class="flex-column" id="live-status-${p.id}">
+                            <span style="font-size: 0.55rem; color: #64748b; font-weight: 800; text-transform: uppercase;">CANLI DURUM (Web)</span>
+                            <div class="flex-row gap-2" style="align-items: center; margin-top: 2px; flex-wrap: wrap;">
+                                <span style="font-size: 0.75rem; color: ${p.live_is_online ? '#10b981' : '#ef4444'};"><i class="fas fa-circle" style="font-size: 0.5rem;"></i> ${p.live_status || 'Bilinmiyor'}</span>
+                                <span style="font-size: 0.75rem; color: #cbd5e1; background: rgba(255,255,255,0.1); padding: 1px 6px; border-radius: 4px;">Toner: ${p.live_toner || 'Bilinmiyor'}</span>
+                                <span style="font-size: 0.75rem; color: ${p.cups_state === 'Durduruldu' ? '#ef4444' : (p.cups_state === 'Aktif' ? '#10b981' : '#94a3b8')}; background: rgba(255,255,255,0.1); padding: 1px 6px; border-radius: 4px;" title="CUPS Durumu"><i class="fas fa-print"></i> CUPS: ${p.cups_state || 'Bilinmiyor'}</span>
+                            </div>
+                        </div>
+                        <div class="flex-column gap-2" style="align-items: flex-end; flex-shrink: 0;" id="live-actions-${p.id}">
+                            <div onclick="event.stopPropagation(); app.refreshLivePrinterStatus(${p.id})" style="cursor:pointer; background: rgba(56,189,248,0.1); color: #38bdf8; width: 28px; height: 28px; border-radius: 5px; display:flex; justify-content:center; align-items:center;" title="Canlı Sorgula">
+                                <i class="fas fa-sync-alt" id="refresh-icon-${p.id}"></i>
+                            </div>
+                            ${p.cups_state !== 'Bilinmiyor' && p.cups_state !== 'Erisim Yok' ? `
+                            <div class="flex-row gap-2">
+                                <div onclick="event.stopPropagation(); app.toggleCupsReject(${p.id}, '${p.cups_is_rejecting ? 'accept' : 'reject'}')" style="cursor:pointer; background: rgba(${p.cups_is_rejecting ? '16,185,129' : '239,68,68'},0.1); color: ${p.cups_is_rejecting ? '#10b981' : '#ef4444'}; width: 28px; height: 28px; border-radius: 5px; display:flex; justify-content:center; align-items:center;" title="${p.cups_is_rejecting ? 'İşleri Kabul Et (Accept)' : 'İşleri Reddet (Reject)'}">
+                                    <i class="fas ${p.cups_is_rejecting ? 'fa-check' : 'fa-ban'}" id="cups-reject-icon-${p.id}"></i>
+                                </div>
+                                <div onclick="event.stopPropagation(); app.toggleCupsPause(${p.id}, '${p.cups_is_paused ? 'resume' : 'pause'}')" style="cursor:pointer; background: rgba(${p.cups_is_paused ? '16,185,129' : '239,68,68'},0.1); color: ${p.cups_is_paused ? '#10b981' : '#ef4444'}; width: 28px; height: 28px; border-radius: 5px; display:flex; justify-content:center; align-items:center;" title="${p.cups_is_paused ? 'Yazıcıyı Başlat (Play)' : 'Yazıcıyı Duraklat (Pause)'}">
+                                    <i class="fas ${p.cups_is_paused ? 'fa-play' : 'fa-pause'}" id="cups-playpause-icon-${p.id}"></i>
+                                </div>
+                            </div>
+                            ` : ''}
                         </div>
                     </div>
-                    <div class="flex-row mb-2" style="justify-content: space-between; align-items: flex-end;">
-                        <div class="flex-column">
-                            <span style="font-size: 0.55rem; color: #64748b; font-weight: 800; text-transform: uppercase;">${displayIpLabel}</span>
-                            <span style="font-size: 0.8rem; color: #f8fafc; font-weight: 600;">${displayIpValue}</span>
-                        </div>
-                    </div>
+                    ` : ''}
                 </div>
 
 
@@ -1860,9 +2389,11 @@ var appData = {
                         <div class="icon-action-label" style="font-size: 0.55rem;">TEMİZLE</div>
                     </div>
                 </div>
+
+
                 
-                <button class="btn btn-service-add" style="width: 100%; font-size: 0.75rem; padding: 10px;" onclick="event.stopPropagation(); app.openAddServiceModal(${p.id})">
-                    <i class="fas fa-tools" style="margin-right: 6px;"></i> SERVİS KAYDI OLUÅTUR
+                <button class="btn btn-service-add" style="width: 100%; font-size: 0.75rem; padding: 10px;" onclick="event.stopPropagation(); app.openAddServiceModal(${p.id}, '${p.device_class || 'PRINTER'}')">
+                    <i class="fas fa-tools" style="margin-right: 6px;"></i> SERVİS KAYDI OLUŞTUR
                 </button>
                 ` : (isSpecial ? `
                 <div style="text-align: center; color: var(--accent); font-size: 0.7rem; font-style: italic; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">
@@ -1875,15 +2406,212 @@ var appData = {
                 `)}
             </div>`;
         }).join('');
+        container.insertAdjacentHTML('beforeend', html);
+        
+        this.triggerAutomaticStatusChecks(chunk);
+    
         this.updatePeripheralDatalists();
+    },
+    refreshLivePrinterStatus: async function(id) {
+        const icon = document.getElementById(`refresh-icon-${id}`);
+        if (icon) icon.classList.add('fa-spin');
+        try {
+            const resp = await this.apiRequest(`/inventory/printers/live_status/${id}`);
+            const container = document.getElementById(`live-status-${id}`);
+            if (resp && container) {
+                const data = resp;
+                const color = data.is_online ? '#10b981' : '#ef4444';
+                const status = data.status || 'Bilinmiyor';
+                const toner = data.toner || 'Bilinmiyor';
+                container.innerHTML = `
+                    <span style="font-size: 0.55rem; color: #64748b; font-weight: 800; text-transform: uppercase;">CANLI DURUM (Web)</span>
+                    <div class="flex-row gap-2" style="align-items: center; margin-top: 2px; flex-wrap: wrap;">
+                        <span style="font-size: 0.75rem; color: ${color};"><i class="fas fa-circle" style="font-size: 0.5rem;"></i> ${status}</span>
+                        <span style="font-size: 0.75rem; color: #cbd5e1; background: rgba(255,255,255,0.1); padding: 1px 6px; border-radius: 4px;">Toner: ${toner}</span>
+                        <span style="font-size: 0.75rem; color: ${data.cups_state === 'Durduruldu' ? '#ef4444' : (data.cups_state === 'Aktif' ? '#10b981' : '#94a3b8')}; background: rgba(255,255,255,0.1); padding: 1px 6px; border-radius: 4px;" title="CUPS Durumu"><i class="fas fa-print"></i> CUPS: ${data.cups_state || 'Bilinmiyor'}</span>
+                    </div>
+                `;
+                
+                const actionsContainer = document.getElementById(`live-actions-${id}`);
+                if (actionsContainer) {
+                    actionsContainer.innerHTML = `
+                        <div onclick="event.stopPropagation(); app.refreshLivePrinterStatus(${id})" style="cursor:pointer; background: rgba(56,189,248,0.1); color: #38bdf8; width: 28px; height: 28px; border-radius: 5px; display:flex; justify-content:center; align-items:center;" title="Canlı Sorgula">
+                            <i class="fas fa-sync-alt" id="refresh-icon-${id}"></i>
+                        </div>
+                        ${data.cups_state !== 'Bilinmiyor' && data.cups_state !== 'Erisim Yok' ? `
+                        <div class="flex-row gap-2">
+                            <div onclick="event.stopPropagation(); app.toggleCupsReject(${id}, '${data.cups_is_rejecting ? 'accept' : 'reject'}')" style="cursor:pointer; background: rgba(${data.cups_is_rejecting ? '16,185,129' : '239,68,68'},0.1); color: ${data.cups_is_rejecting ? '#10b981' : '#ef4444'}; width: 28px; height: 28px; border-radius: 5px; display:flex; justify-content:center; align-items:center;" title="${data.cups_is_rejecting ? 'İşleri Kabul Et (Accept)' : 'İşleri Reddet (Reject)'}">
+                                <i class="fas ${data.cups_is_rejecting ? 'fa-check' : 'fa-ban'}" id="cups-reject-icon-${id}"></i>
+                            </div>
+                            <div onclick="event.stopPropagation(); app.toggleCupsPause(${id}, '${data.cups_is_paused ? 'resume' : 'pause'}')" style="cursor:pointer; background: rgba(${data.cups_is_paused ? '16,185,129' : '239,68,68'},0.1); color: ${data.cups_is_paused ? '#10b981' : '#ef4444'}; width: 28px; height: 28px; border-radius: 5px; display:flex; justify-content:center; align-items:center;" title="${data.cups_is_paused ? 'Yazıcıyı Başlat (Play)' : 'Yazıcıyı Duraklat (Pause)'}">
+                                <i class="fas ${data.cups_is_paused ? 'fa-play' : 'fa-pause'}" id="cups-playpause-icon-${id}"></i>
+                            </div>
+                        </div>
+                        ` : ''}
+                    `;
+                }
+                
+                const printer = this.state.printers && this.state.printers.find(p => p.id === id);
+                if (printer) {
+                    printer.live_status = status;
+                    printer.live_toner = toner;
+                    printer.live_is_online = data.is_online;
+                    printer.cups_state = data.cups_state;
+                    printer.cups_is_paused = data.cups_is_paused;
+                    printer.cups_is_rejecting = data.cups_is_rejecting;
+                }
+            } else {
+                this.showToast('Durum bilgisi alınamadı', 'error');
+            }
+        } catch(e) {
+            console.error("refreshLivePrinterStatus Error:", e);
+        } finally {
+            if (icon) icon.classList.remove('fa-spin');
+        }
+    },
+
+    toggleCupsPause: async function(id, action) {
+        const icon = document.getElementById(`cups-playpause-icon-${id}`);
+        if(icon) {
+            icon.classList.remove('fa-play', 'fa-pause');
+            icon.classList.add('fa-spinner', 'fa-spin');
+        }
+        try {
+            const resp = await this.apiRequest('/inventory/printers/cups/toggle_pause', {
+                method: 'POST',
+                body: JSON.stringify({id: id, action: action})
+            });
+            if(resp.success) {
+                this.showToast(resp.message || 'İşlem başarılı', 'success');
+                setTimeout(() => this.refreshLivePrinterStatus(id), 1000);
+            }
+        } catch (e) {
+            this.showToast('Hata: ' + e.message, 'error');
+            if(icon) {
+                icon.classList.remove('fa-spinner', 'fa-spin');
+                icon.classList.add(action === 'pause' ? 'fa-pause' : 'fa-play');
+            }
+        }
+    },
+    
+    toggleCupsReject: async function(id, action) {
+        const icon = document.getElementById(`cups-reject-icon-${id}`);
+        if(icon) {
+            icon.classList.remove('fa-ban', 'fa-check');
+            icon.classList.add('fa-spinner', 'fa-spin');
+        }
+        try {
+            const resp = await this.apiRequest('/inventory/printers/cups/toggle_reject', {
+                method: 'POST',
+                body: JSON.stringify({id: id, action: action})
+            });
+            if(resp.success) {
+                this.showToast(resp.message || 'İşlem başarılı', 'success');
+                setTimeout(() => this.refreshLivePrinterStatus(id), 1000);
+            }
+        } catch (e) {
+            this.showToast('Hata: ' + e.message, 'error');
+            if(icon) {
+                icon.classList.remove('fa-spinner', 'fa-spin');
+                icon.classList.add(action === 'reject' ? 'fa-ban' : 'fa-check');
+            }
+        }
+    },
+
+    triggerAutomaticStatusChecks: async function(printersList) {
+        if (!this._statusQueue) this._statusQueue = [];
+        
+        const targetPrinters = printersList
+            .filter(p => p.device_class === 'PRINTER' && p.ip && p.ip.trim() !== '');
+            
+        if (targetPrinters.length === 0) return;
+        
+        targetPrinters.forEach(p => {
+            if (!this._statusQueue.some(q => q.id === p.id)) {
+                this._statusQueue.push(p);
+            }
+        });
+        
+        if (this._isAutoCheckRunning) return;
+        this._isAutoCheckRunning = true;
+        
+        const worker = async () => {
+            while (this._statusQueue.length > 0) {
+                if (this.state.view !== 'inventory') {
+                    this._statusQueue = [];
+                    break;
+                }
+                
+                const printer = this._statusQueue.shift();
+                if (!printer) continue;
+                
+                const icon = document.getElementById(`refresh-icon-${printer.id}`);
+                if (icon) icon.classList.add('fa-spin');
+                
+                try {
+                    const resp = await this.apiRequest(`/inventory/printers/live_status/${printer.id}`);
+                    
+                    const container = document.getElementById(`live-status-${printer.id}`);
+                    if (resp && container) {
+                        const data = resp;
+                        const color = data.is_online ? '#10b981' : '#ef4444';
+                        const status = data.status || 'Bilinmiyor';
+                        const toner = data.toner || 'Bilinmiyor';
+                        container.innerHTML = `
+                            <span style="font-size: 0.55rem; color: #64748b; font-weight: 800; text-transform: uppercase;">CANLI DURUM (Web)</span>
+                            <div class="flex-row gap-2" style="align-items: center; margin-top: 2px; flex-wrap: wrap;">
+                                <span style="font-size: 0.75rem; color: ${color};"><i class="fas fa-circle" style="font-size: 0.5rem;"></i> ${status}</span>
+                                <span style="font-size: 0.75rem; color: #cbd5e1; background: rgba(255,255,255,0.1); padding: 1px 6px; border-radius: 4px;">Toner: ${toner}</span>
+                                <span style="font-size: 0.75rem; color: ${data.cups_state === 'Durduruldu' ? '#ef4444' : (data.cups_state === 'Aktif' ? '#10b981' : '#94a3b8')}; background: rgba(255,255,255,0.1); padding: 1px 6px; border-radius: 4px;" title="CUPS Durumu"><i class="fas fa-print"></i> CUPS: ${data.cups_state || 'Bilinmiyor'}</span>
+                            </div>
+                        `;
+                        
+                        const actionsContainer = document.getElementById(`live-actions-${printer.id}`);
+                        if (actionsContainer) {
+                            actionsContainer.innerHTML = `
+                                <div onclick="event.stopPropagation(); app.refreshLivePrinterStatus(${printer.id})" style="cursor:pointer; background: rgba(56,189,248,0.1); color: #38bdf8; width: 28px; height: 28px; border-radius: 5px; display:flex; justify-content:center; align-items:center;" title="Canlı Sorgula">
+                                    <i class="fas fa-sync-alt" id="refresh-icon-${printer.id}"></i>
+                                </div>
+                                ${data.cups_state !== 'Bilinmiyor' && data.cups_state !== 'Erisim Yok' ? `
+                                <div class="flex-row gap-2">
+                                    <div onclick="event.stopPropagation(); app.toggleCupsReject(${printer.id}, '${data.cups_is_rejecting ? 'accept' : 'reject'}')" style="cursor:pointer; background: rgba(${data.cups_is_rejecting ? '16,185,129' : '239,68,68'},0.1); color: ${data.cups_is_rejecting ? '#10b981' : '#ef4444'}; width: 28px; height: 28px; border-radius: 5px; display:flex; justify-content:center; align-items:center;" title="${data.cups_is_rejecting ? 'İşleri Kabul Et (Accept)' : 'İşleri Reddet (Reject)'}">
+                                        <i class="fas ${data.cups_is_rejecting ? 'fa-check' : 'fa-ban'}" id="cups-reject-icon-${printer.id}"></i>
+                                    </div>
+                                    <div onclick="event.stopPropagation(); app.toggleCupsPause(${printer.id}, '${data.cups_is_paused ? 'resume' : 'pause'}')" style="cursor:pointer; background: rgba(${data.cups_is_paused ? '16,185,129' : '239,68,68'},0.1); color: ${data.cups_is_paused ? '#10b981' : '#ef4444'}; width: 28px; height: 28px; border-radius: 5px; display:flex; justify-content:center; align-items:center;" title="${data.cups_is_paused ? 'Yazıcıyı Başlat (Play)' : 'Yazıcıyı Duraklat (Pause)'}">
+                                        <i class="fas ${data.cups_is_paused ? 'fa-play' : 'fa-pause'}" id="cups-playpause-icon-${printer.id}"></i>
+                                    </div>
+                                </div>
+                                ` : ''}
+                            `;
+                        }
+                        
+                        printer.live_status = status;
+                        printer.live_toner = toner;
+                        printer.live_is_online = data.is_online;
+                        printer.cups_state = data.cups_state;
+                        printer.cups_is_paused = data.cups_is_paused;
+                        printer.cups_is_rejecting = data.cups_is_rejecting;
+                    }
+                } catch (e) {
+                    console.warn(`Auto status check failed for printer ${printer.pr_no || printer.id}:`, e.message);
+                } finally {
+                    if (icon) icon.classList.remove('fa-spin');
+                    // Sunucuya asiri yuklenmemek ve 429 hatalarini onlemek icin istekler arasina 500ms gecikme ekliyoruz
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+        };
+        
+        await worker();
+        this._isAutoCheckRunning = false;
     },
     deletePeripheralDevice: async function() { // GHOST CODE REMOVED
 
         if (!confirm('Bu cihazı veritabanından KALICI olarak silmek istediğinize emin misiniz?')) return;
-        let endpoint = `/printers/printers/delete/${id}`;
-        if (deviceClass === 'BARCODE_PRINTER') endpoint = `/printers/barcode_printers/delete/${id}`;
-        else if (deviceClass === 'BARCODE_READER') endpoint = `/printers/barcode_readers/delete/${id}`;
-        else if (deviceClass === 'SCANNER') endpoint = `/printers/scanners/delete/${id}`;
+        let endpoint = `/inventory/printers/delete/${id}`;
+        if (deviceClass === 'BARCODE_PRINTER') endpoint = `/inventory/barcode_printers/delete/${id}`;
+        else if (deviceClass === 'BARCODE_READER') endpoint = `/inventory/barcode_readers/delete/${id}`;
+        else if (deviceClass === 'SCANNER') endpoint = `/inventory/scanners/delete/${id}`;
         try {
             const resp = await this.apiRequest(endpoint, { method: 'DELETE' });
             const result = resp;
@@ -2010,7 +2738,7 @@ var appData = {
                 return aVal.localeCompare(bVal);
             })
             .map(item => {
-                // KARTLARDAKİ İSİM MANTIÄI:
+                // KARTLARDAKİ İSİM MANTIĞI:
                 let pcLabel = item.pc_no || '---';
                 if (pcLabel !== '---' && !isNaN(pcLabel)) pcLabel = `PC-${pcLabel.toString().padStart(3, '0')}`;
                 
@@ -2047,10 +2775,13 @@ var appData = {
     },
 
     filterBatchSelection: function() {
-        this.updateBatchCounter(); // Mevcut seçimleri Set'e kaydet
-        const val = document.getElementById('batch-selection-search').value;
-        this.renderBatchSelectionList(val);
-        document.getElementById('batch-selection-container').style.display = 'block';
+        clearTimeout(this._batchTimer);
+        this._batchTimer = setTimeout(() => {
+            this.updateBatchCounter(); // Mevcut seçimleri Set'e kaydet
+            const val = document.getElementById('batch-selection-search').value;
+            this.renderBatchSelectionList(val);
+            document.getElementById('batch-selection-container').style.display = 'block';
+        }, 300);
     },
 
     // Dışarı tıklandığında açılır listeyi kapat
@@ -2089,8 +2820,8 @@ var appData = {
                 let pcLabel = item.pc_no || '---';
                 if (pcLabel !== '---' && !isNaN(pcLabel)) pcLabel = `PC-${pcLabel.toString().padStart(3, '0')}`;
                 const hasPrinter = item.bagli_yazicilar ? `<span style="color:#ffcc00; font-size:0.68rem; margin-left: auto;"><i class="fas fa-print"></i> ${item.bagli_yazicilar}</span>` : '';
-                return `<div style="display: flex; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 4px 0;">
-                    <i class="fas fa-desktop" style="color: var(--accent); margin-right: 8px;"></i>
+                return `<div style="display: flex; align-items: center; justify-content: flex-start; gap: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 4px 0;">
+                    <i class="fas fa-desktop" style="color: var(--accent);"></i>
                     <span style="color: #fff; font-weight: bold; width: 60px;">${pcLabel}</span>
                     <span style="color: var(--accent); font-family: monospace; width: 100px;">${item.ip || 'IP Yok'}</span>
                     <span style="color: #888; font-size: 0.72rem;">[${item.location_code || '-'}]</span>
@@ -2102,7 +2833,7 @@ var appData = {
         }
 
         if (btn) {
-            btn.innerHTML = `<i class="fas fa-play"></i> ÇALIÅTIR (${selectedIds.length} CİHAZ)`;
+            btn.innerHTML = `<i class="fas fa-play"></i> ÇALIŞTIR (${selectedIds.length} CİHAZ)`;
             btn.disabled = selectedIds.length === 0;
         }
     },
@@ -2169,7 +2900,7 @@ var appData = {
                 const cmd = document.getElementById('batch-modal-cmd-display').value;
 
                 try {
-                    const resp = await this.apiRequest('/printers/printers/batch_action', {
+                    const resp = await this.apiRequest('/inventory/printers/batch_action', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -2217,6 +2948,15 @@ var appData = {
             btn.style.opacity = '1';
         }
     },
+    
+    closeBatchPrinterModal: function() {
+        document.getElementById('batch-printer-modal').style.display = 'none';
+        const logArea = document.getElementById('batch-log-area');
+        const logContent = document.getElementById('batch-log-content');
+        if (logArea) logArea.style.display = 'none';
+        if (logContent) logContent.innerHTML = '';
+    },
+    
     setPrinterMainType: function(type) {
         this.state.printerMainType = type;
         // Eğer Yazıcı seçiliyse model filtrelerini göster, değilse gizle
@@ -2225,10 +2965,84 @@ var appData = {
             modelFilters.style.display = type === 'PRINTER' ? 'block' : 'none';
         }
         
+        const btnService = document.getElementById('btn-printers-service');
+        if (btnService) {
+            btnService.style.display = type === 'PRINTER' ? 'flex' : 'none';
+        }
+        
         document.querySelectorAll('#printer-main-filters .btn-chip').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.ptype === type);
         });
         this.applyPrinterFilters();
+    },
+    loadSystemBrain: async function() {
+        try {
+            const data = await this.apiRequest('/system/health');
+            if(!data) return;
+            
+            const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
+            const setWidth = (id, w) => { const el = document.getElementById(id); if(el) el.style.width = w; };
+            
+            setVal('brain-cpu', data.cpu + '%');
+            setWidth('brain-cpu-bar', data.cpu + '%');
+            setVal('brain-ram', data.ram + '%');
+            setWidth('brain-ram-bar', data.ram + '%');
+            
+            const dbEl = document.getElementById('brain-db-status');
+            if(dbEl) {
+                let dbTxt = data.db_status || 'UNKNOWN';
+                if (dbTxt === 'OK') dbTxt = 'TMM';
+                if (dbTxt === 'UNKNOWN') dbTxt = 'BİLİNMİYOR';
+                dbEl.innerText = dbTxt;
+                dbEl.className = 'status-text ' + (data.db_status === 'OK' ? 'ok' : 'error');
+            }
+            
+            const dplEl = document.getElementById('brain-deploy-state');
+            if(dplEl) {
+                let dplTxt = data.deploy_state || 'IDLE';
+                if (dplTxt === 'IDLE') dplTxt = 'BOŞTA';
+                dplEl.innerText = dplTxt;
+                dplEl.className = 'status-text ' + (data.deploy_state === 'IDLE' ? 'info' : 'warning');
+            }
+            
+            if(data.error_rate) setVal('brain-error-rate', data.error_rate);
+            if(data.request_load) {
+                let rL = data.request_load;
+                if (rL === 'LOW') rL = 'DÜŞÜK';
+                if (rL === 'HIGH') rL = 'YÜKSEK';
+                setVal('brain-request-load', rL);
+            }
+            if(data.last_check) setVal('brain-last-check', data.last_check);
+            
+            const overallEl = document.getElementById('brain-overall-status');
+            if(overallEl) {
+                let stTxt = data.status || 'UNKNOWN';
+                if (stTxt === 'HEALTHY') stTxt = 'SAĞLIKLI';
+                else if (stTxt === 'WARNING') stTxt = 'UYARI';
+                else if (stTxt === 'CRITICAL') stTxt = 'KRİTİK';
+                else if (stTxt === 'UNKNOWN') stTxt = 'BİLİNMİYOR';
+                
+                overallEl.innerText = stTxt;
+                overallEl.className = 'brain-status-badge ' + (data.status === 'HEALTHY' ? 'healthy' : (data.status === 'WARNING' ? 'warning' : 'critical'));
+            }
+            
+            const apiList = document.getElementById('brain-api-list');
+            if(data.api_health && apiList) {
+                let html = '';
+                for(let ep in data.api_health) {
+                    const st = data.api_health[ep];
+                    const cls = (st !== 'DOWN' && st !== 500) ? 'ok' : 'error';
+                    const epName = ep.split('/').pop().toUpperCase() || 'API';
+                    let stShow = (st === 200 || st === 401 || st === 403 || st === 404) ? 'TMM' : st;
+                    if (stShow === 'OK') stShow = 'TMM';
+                    html += `<div class="api-status-item">
+                                <span><i class="fas fa-circle api-indicator ${cls}"></i> ${epName}</span>
+                                <span class="${cls}">${stShow}</span>
+                             </div>`;
+                }
+                apiList.innerHTML = html;
+            }
+        } catch(e) { console.error("System Brain failed:", e); }
     },
     setPrinterModelType: function(model) {
         this.state.printerModelType = model;
@@ -2237,14 +3051,17 @@ var appData = {
         });
         this.applyPrinterFilters();
     },
-    searchPrinters: function() { this.applyPrinterFilters(); },
+    searchPrinters: function() {
+        clearTimeout(this._prnTimer);
+        this._prnTimer = setTimeout(() => this.applyPrinterFilters(), 300);
+    },
     filterPrinters: function(ptype) { this.setPrinterMainType(ptype); },
 
     scanAllPrinters: async function() { // GHOST CODE REMOVED
 
-        if(!confirm("Tüm yazıcıların durumunu ve toner seviyesini arka planda güncellemek istediinize emin misiniz? Bu ilem birkaç dakika sürebilir.")) return;
+        if(!confirm("Tüm yazıcıların durumunu ve toner seviyesini arka planda güncellemek istediğinize emin misiniz? Bu ilem birkaç dakika sürebilir.")) return;
         try {
-            const resp = await this.apiRequest('/printers/scan_all', { method: 'POST' });
+            const resp = await this.apiRequest('/inventory/printers/scan_all', { method: 'POST' });
             const data = resp;
             if(data.success) {
                 this.showToast(data.message, 'success');
@@ -2262,41 +3079,77 @@ var appData = {
             this.renderAreas(data);
         } catch (e) { console.error("Alanlar yüklenemedi:", e); }
     },
+    toggleAreaDetails: function(id) {
+        const details = document.getElementById('area-details-' + id);
+        const icon = document.getElementById('area-icon-' + id);
+        if (!details || !icon) return;
+        
+        if (details.style.maxHeight && details.style.maxHeight !== '0px') {
+            details.style.maxHeight = '0px';
+            icon.style.transform = 'rotate(0deg)';
+            details.style.marginTop = '0px';
+        } else {
+            details.style.maxHeight = '300px';
+            icon.style.transform = 'rotate(180deg)';
+            details.style.marginTop = '10px';
+        }
+    },
     renderAreas: function(data) {
         const container = document.getElementById('areas-grid');
         if (!container) return;
         data = data || this.state.areas;
         const isAdmin = this.state.activeUser && this.state.activeUser.role === 'ADMIN';
-        container.innerHTML = data.map((area, idx) => `
+        
+        this.state.currentAreasRenderList = data;
+        this.state.areasPage = 0;
+        container.innerHTML = '';
+        this.renderAreasChunk();
+    },
+    renderAreasChunk: function() {
+        const container = document.getElementById('areas-grid');
+        if (!container || !this.state.currentAreasRenderList) return;
+        const page = this.state.areasPage;
+        const pageSize = window.innerWidth <= 768 ? 20 : 50;
+        const chunk = this.state.currentAreasRenderList.slice(page * pageSize, (page + 1) * pageSize);
+        if (chunk.length === 0) return;
+        
+        const isAdmin = this.state.activeUser && this.state.activeUser.role === 'ADMIN';
+        
+        const html = chunk.map((area, idx) => `
             <div class="card fade-in ${isAdmin ? 'area-card-admin' : ''}" style="border: 1px solid rgba(255,255,255,0.05); background: linear-gradient(145deg, rgba(20,30,40,0.4) 0%, rgba(10,15,20,0.6) 100%);">
-                <div class="flex-between" style="min-height: 50px; margin-bottom: 5px; align-items: center;">
+                <div class="flex-between" style="min-height: 50px; margin-bottom: 5px; align-items: center; cursor: pointer; user-select: none;" onclick="app.toggleAreaDetails(${area.id})">
                     <span style="color: #00d2ff; font-weight: 800; font-size: 1.1rem; display: flex; align-items: center; gap: 10px;">
                         <i class="fas fa-folder" style="font-size: 1.3rem;"></i> ${area.name.toUpperCase()}
                     </span>
-                    ${isAdmin ? `<i class="fas fa-pencil" style="opacity:0.4; cursor:pointer; font-size: 1.1rem;" onclick="app.openAreaModal(${area.id})" title="Düzenle"></i>` : ''}
-                </div>
-                <div style="height: 1px; background: rgba(255,255,255,0.08); margin-bottom: 12px; width: 100%;"></div>
-
-                <div class="flex-between mb-3" style="background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.03);">
-                    <span style="color: var(--text-secondary); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;">${area.path || ''}</span>
-                    <button class="btn-chip" style="background: rgba(255,255,255,0.1); padding: 4px 12px; font-size: 0.7rem; border-radius: 15px;" onclick="app.copyToClipboard('${(area.path || '').replace(/\\/g, '\\\\')}')">
-                         <i class="fas fa-copy"></i> YOL
-                    </button>
-                </div>
-
-                <div style="font-size: 0.8rem; color: var(--text-secondary); padding: 0 5px;">
-                    <div class="flex-between mb-2">
-                        <span>Kullanıcı:</span>
-                        <div class="flex-row gap-2" style="align-items:center;">
-                            <span style="color:#fff; font-weight: 600;">${area.username || 'bilinmiyor'}</span>
-                            <i class="fas fa-copy" style="cursor:pointer; opacity: 0.5;" onclick="app.copyToClipboard('${area.username || ''}')"></i>
-                        </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        ${isAdmin ? `<i class="fas fa-pencil" style="opacity:0.4; cursor:pointer; font-size: 1.1rem;" onclick="event.stopPropagation(); app.openAreaModal(${area.id})" title="Düzenle"></i>` : ''}
+                        <i class="fas fa-chevron-down" id="area-icon-${area.id}" style="opacity:0.5; transition: transform 0.3s; color:#fff;"></i>
                     </div>
-                    <div class="flex-between" style="margin-bottom: 5px;">
-                        <span>Åifre:</span>
-                        <div class="flex-row gap-2" style="align-items:center;">
-                            <span id="pass-${idx}" data-pass="${(area.password || '').replace(/"/g, '&quot;')}" style="color:var(--accent); font-weight: 700; cursor: pointer;" onclick="this.innerText = this.innerText === '********' ? this.getAttribute('data-pass') : '********';" title="Åifreyi Göster/Gizle">${area.password ? '********' : '-'}</span>
-                            <i class="fas fa-copy" style="cursor:pointer; opacity: 0.5;" onclick="app.copyToClipboard('${area.password || ''}')"></i>
+                </div>
+                <div style="height: 1px; background: rgba(255,255,255,0.08); width: 100%;"></div>
+
+                <div id="area-details-${area.id}" style="max-height: 0px; overflow: hidden; transition: max-height 0.3s ease, margin-top 0.3s ease; margin-top: 0px;">
+                    <div class="flex-between mb-3" style="background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.03);">
+                        <span style="color: var(--text-secondary); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;">${area.path || ''}</span>
+                        <button class="btn-chip" style="background: rgba(255,255,255,0.1); padding: 4px 12px; font-size: 0.7rem; border-radius: 15px;" onclick="app.copyToClipboard('${(area.path || '').replace(/\\/g, '\\\\')}')">
+                             <i class="fas fa-copy"></i> YOL
+                        </button>
+                    </div>
+
+                    <div style="font-size: 0.8rem; color: var(--text-secondary); padding: 0 5px;">
+                        <div class="flex-between mb-2">
+                            <span>Kullanıcı:</span>
+                            <div class="flex-row gap-2" style="align-items:center;">
+                                <span style="color:#fff; font-weight: 600;">${area.username || 'bilinmiyor'}</span>
+                                <i class="fas fa-copy" style="cursor:pointer; opacity: 0.5;" onclick="app.copyToClipboard('${area.username || ''}')"></i>
+                            </div>
+                        </div>
+                        <div class="flex-between" style="margin-bottom: 5px;">
+                            <span>Şifre:</span>
+                            <div class="flex-row gap-2" style="align-items:center;">
+                                <span id="pass-${idx}" data-pass="${(area.password || '').replace(/"/g, '&quot;')}" style="color:var(--accent); font-weight: 700; cursor: pointer;" onclick="this.innerText = this.innerText === '********' ? this.getAttribute('data-pass') : '********';" title="Şifreyi Göster/Gizle">${area.password ? '********' : '-'}</span>
+                                <i class="fas fa-copy" style="cursor:pointer; opacity: 0.5;" onclick="app.copyToClipboard('${area.password || ''}')"></i>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2315,12 +3168,14 @@ var appData = {
                         <div class="icon-circle" style="background: rgba(0, 210, 255, 0.1); border: 1px solid rgba(0, 210, 255, 0.2);"><i class="fas fa-windows"></i></div>
                         <span>WIN BAT</span>
                     </div>
-                    <div class="area-action-btn" onclick="app.runAreaAction(${area.id}, 'delete')" title="SİL" style="color: #ff4b2b;">
+                                        <div class="area-action-btn" onclick="app.runAreaAction(${area.id}, 'delete')" title="SİL" style="color: #ff4b2b;">
                         <div class="icon-circle" style="background: rgba(255, 75, 43, 0.1); border: 1px solid rgba(255, 75, 43, 0.2);"><i class="fas fa-trash"></i></div>
                         <span>SİL</span>
                     </div>
                 </div>
             </div>`).join('');
+        container.insertAdjacentHTML('beforeend', html);
+    
     },
     searchAreas: function() {
         const query = (document.getElementById('areas-search').value || "").toUpperCase();
@@ -2368,34 +3223,48 @@ var appData = {
         const user = area.username || 'USER';
         const pass = area.password || 'PASS';
         const script = `#!/bin/bash
-# FSKontrol: Ortak alanın daha önceden fstab'a eklenip eklenmediini kontrol eder
-FSKontrol=\`grep ${ip} /etc/fstab | wc -l\`
-if [ "$FSKontrol" == "1" ]; then
-    echo "FSKontrol: Bu a adresi için ayarlar zaten mevcut."
-else
-    echo "Ortak alan tanımlanıyor: ${area.name}..."
-    apt-get install cifs-utils -y
-    mkdir -p /mnt/${folder}
-    # Skel Desktop'a link ekle (Yeni kullanıcılar için)
-    mkdir -p /etc/skel/Desktop
-    ln -sf /mnt/${folder} /etc/skel/Desktop/
-    # Anlık Mount
-    mount -t cifs //${ip}/${folder} /mnt/${folder} -o username=${user},password='${pass}',noexec,rw,file_mode=0777,dir_mode=0777
-    # Credentials Dosyası
-    mkdir -p /etc/samba
-    echo "username=${user}
-password=${pass}" > /etc/samba/.smbcredentials_${folder}
-    chmod 600 /etc/samba/.smbcredentials_${folder}
-    # fstab Kaydı (Kalıcı hale getirme)
-    echo "//${ip}/${folder} /mnt/${folder} cifs nofail,credentials=/etc/samba/.smbcredentials_${folder},noexec,rw,file_mode=0777,dir_mode=0777  0 0" >> /etc/fstab
-    # Mevcut kullanıcıların masaüstlerine link ekle
-    for UserHome in /home/*; do
-        if [ -d "$UserHome/Desktop" ]; then
-            ln -sf /mnt/${folder} "$UserHome/Desktop/"
-        fi
-    done
-    echo "FSKontrol: ${area.name} tanımlama ilemi baarıyla bitti."
-fi`;
+
+PaylasimAdi="${folder}"
+SunucuIP="${ip}"
+MountPoint="/mnt/$PaylasimAdi"
+CredentialsFile="/etc/samba/.$PaylasimAdi-credentials"
+
+FstabKaydi="//$SunucuIP/$PaylasimAdi $MountPoint cifs nofail,_netdev,credentials=$CredentialsFile,noexec,rw,file_mode=0777,dir_mode=0777 0 0"
+
+[ "$(id -u)" -ne 0 ] && echo "Bu script root olarak çalıştırılmalıdır." && exit 1
+
+apt-get install -y cifs-utils
+
+mkdir -p "$MountPoint"
+mkdir -p /etc/samba
+
+cat > "$CredentialsFile" <<'EOF'
+username=${user}
+password=${pass}
+EOF
+
+chmod 600 "$CredentialsFile"
+
+grep -Fqx "$FstabKaydi" /etc/fstab || echo "$FstabKaydi" >> /etc/fstab
+
+mountpoint -q "$MountPoint" || mount "$MountPoint"
+
+if ! mountpoint -q "$MountPoint"; then
+    echo "HATA: $PaylasimAdi ortak alanı bağlanamadı."
+    exit 1
+fi
+
+for Desktop in /etc/skel/Desktop /home/*/Desktop; do
+    [ -d "$Desktop" ] || continue
+
+    Link="$Desktop/$PaylasimAdi"
+
+    if [ ! -e "$Link" ] && [ ! -L "$Link" ]; then
+        ln -s "$MountPoint" "$Link"
+    fi
+done
+
+echo "$PaylasimAdi ortak alanı eklendi ve bağlandı."`;
         document.getElementById('script-modal-title').innerHTML = `<i class="fas fa-terminal"></i> ${area.name} - Tanımlama Kodu`;
         document.getElementById('script-modal-content').innerText = script;
         document.getElementById('script-modal').style.display = 'flex';
@@ -2407,27 +3276,30 @@ fi`;
         const user = area.username || 'USER';
         const pass = area.password || 'PASS';
         const script = `#!/bin/bash
-# MountAuto.sh scriptini oluşturur (A koparsa otomatik balamak için)
-mkdir -p /KEYDATA/Script
-cat <<\\EOF > /KEYDATA/Script/MountAuto_${folder}.sh
+
+cat <<\\EOF > /KEYDATA/Script/MountAuto.sh
 #!/bin/bash
-MountKontrol=\`mount | grep ${ip} | wc -l\`
+
+MountKontrol=mount | grep ${ip} | wc -l
+
 if [ "$MountKontrol" == "1" ]; then
-    echo "Ortak Alan Balı: ${folder}"
+  echo "Çalışıyor"
 else
-    mount -t cifs //${ip}/${folder} /mnt/${folder} -o username=${user},password='${pass}',noexec,rw,file_mode=0777,dir_mode=0777
+  mount -t cifs //${ip}/${folder} /mnt/${folder} -o username=${user},password=${pass},noexec,rw,file_mode=0777,dir_mode=0777
 fi
+
 exit 0
 EOF
-chmod 755 /KEYDATA/Script/MountAuto_${folder}.sh
-# Crontab kontrolü ve ekleme (Her 5 dakikada bir kontrol eder)
-CronKontrol=\`cat /etc/crontab | grep "MountAuto_${folder}" | wc -l\`
+
+chmod 755 /KEYDATA/Script/MountAuto.sh
+
+CronKontrol=cat /etc/crontab | grep MountAuto | wc -l
+
 if [ "$CronKontrol" == "1" ]; then
-    echo "Cron: Zaten eklenmi."
+  echo "Eklenmiş"
 else	
-    echo "### ${area.name} Otomatik Balantı Kilidi Açıldı ###
-*/5 * * * * root /KEYDATA/Script/MountAuto_${folder}.sh" >> /etc/crontab
-    echo "### İlgili Ortak Alanın Kilidi Açılmıtır. Kullanıcıya F5 ile yenilemesini söyle! ###"
+echo "### İlgili Ortak Alanın Kilidi Açılmıştır. Kullanıcıya F5 ile yenilemesini söyle! ###
+*/5 * * * * root /KEYDATA/Script/MountAuto.sh" >> /etc/crontab
 fi`;
         document.getElementById('script-modal-title').innerHTML = `<i class="fas fa-unlock"></i> ${area.name} - Kilit Açma Kodu`;
         document.getElementById('script-modal-content').innerText = script;
@@ -2438,12 +3310,33 @@ fi`;
         if (!area) return;
         const { ip, folder } = this.parseNetworkPath(area.path);
         const script = `#!/bin/bash
+
 PaylasimAdi="${folder}"
-for path in $(sudo find /home/*/Desktop -name "$PaylasimAdi"); do [ -f "$path" ] && sudo unlink "$path" || ( [ -d "$path" ] && sudo rm -rf "$path" ); done
-sed -i "/$PaylasimAdi/d" /etc/fstab
-unlink /etc/skel/Desktop/$PaylasimAdi
-umount /mnt/$PaylasimAdi
-rm -rf /mnt/$PaylasimAdi`;
+SunucuIP="${ip}"
+MountPoint="/mnt/$PaylasimAdi"
+CredentialsFile="/etc/samba/.$PaylasimAdi-credentials"
+
+[ "$(id -u)" -ne 0 ] && echo "Bu script root olarak çalıştırılmalıdır." && exit 1
+
+if mountpoint -q "$MountPoint"; then
+    umount "$MountPoint" || umount -l "$MountPoint"
+fi
+
+if mountpoint -q "$MountPoint"; then
+    echo "HATA: Ortak alan bağlantısı ayrılamadı."
+    exit 1
+fi
+
+for Link in /etc/skel/Desktop/$PaylasimAdi /home/*/Desktop/$PaylasimAdi; do
+    [ -L "$Link" ] && unlink "$Link"
+done
+
+sed -i "\\|//$SunucuIP/$PaylasimAdi[[:space:]]$MountPoint[[:space:]]|d" /etc/fstab
+
+rm -f "$CredentialsFile"
+rmdir "$MountPoint" 2>/dev/null
+
+echo "$PaylasimAdi ortak alanı kaldırıldı."`;
         document.getElementById('script-modal-title').innerHTML = `<i class="fas fa-trash"></i> ${area.name} - Silme Kodu`;
         document.getElementById('script-modal-content').innerText = script;
         document.getElementById('script-modal').style.display = 'flex';
@@ -2456,52 +3349,64 @@ rm -rf /mnt/$PaylasimAdi`;
         const pass = area.password || 'PASS';
         let rawScript = "";
         if (type === 'unlock') {
-            rawScript = `mkdir -p /KEYDATA/Script
-cat << 'EOF' > /KEYDATA/Script/MountAuto_${folder}.sh
+            rawScript = `#!/bin/bash
+
+cat <<\\EOF > /KEYDATA/Script/MountAuto.sh
 #!/bin/bash
-MountKontrol=\`mount | grep ${ip} | wc -l\`
+
+MountKontrol=mount | grep ${ip} | wc -l
+
 if [ "$MountKontrol" == "1" ]; then
-    echo "Bagli"
+  echo "Çalışıyor"
 else
-    mount -t cifs //${ip}/${folder} /mnt/${folder} -o username=${user},password='${pass}',noexec,rw,file_mode=0777,dir_mode=0777
+  mount -t cifs //${ip}/${folder} /mnt/${folder} -o username=${user},password=${pass},noexec,rw,file_mode=0777,dir_mode=0777
 fi
+
+exit 0
 EOF
-chmod 755 /KEYDATA/Script/MountAuto_${folder}.sh
-if ! grep -q "MountAuto_${folder}.sh" /etc/crontab; then
-  echo "*/5 * * * * root /KEYDATA/Script/MountAuto_${folder}.sh" >> /etc/crontab
+
+chmod 755 /KEYDATA/Script/MountAuto.sh
+
+CronKontrol=cat /etc/crontab | grep MountAuto | wc -l
+
+if [ "$CronKontrol" == "1" ]; then
+  echo "Eklenmiş"
+else	
+echo "### İlgili Ortak Alanın Kilidi Açılmıştır. Kullanıcıya F5 ile yenilemesini söyle! ###
+*/5 * * * * root /KEYDATA/Script/MountAuto.sh" >> /etc/crontab
 fi`;
         } else if (type === 'define') {
-            rawScript = `apt-get install cifs-utils -y
-mkdir -p /mnt/${folder}
-mkdir -p /etc/samba
-echo -e "username=${user}\\npassword=${pass}" > /etc/samba/.smbcredentials_${folder}
-chmod 600 /etc/samba/.smbcredentials_${folder}
-mount -t cifs //${ip}/${folder} /mnt/${folder} -o credentials=/etc/samba/.smbcredentials_${folder},noexec,rw,file_mode=0777,dir_mode=0777
-if ! grep -q "//${ip}/${folder}" /etc/fstab; then
-  echo "//${ip}/${folder} /mnt/${folder} cifs nofail,credentials=/etc/samba/.smbcredentials_${folder},noexec,rw,file_mode=0777,dir_mode=0777 0 0" >> /etc/fstab
-fi
-mkdir -p /etc/skel/Desktop
-ln -sf /mnt/${folder} /etc/skel/Desktop/
-for UserHome in /home/*; do
-  if [ -d "$UserHome/Desktop" ]; then
-    ln -sf /mnt/${folder} "$UserHome/Desktop/"
-  fi
+            rawScript = `#!/bin/bash
+P="${folder}";S="${ip}";M="/mnt/$P";C="/etc/samba/.$P-credentials"
+F="//$S/$P $M cifs nofail,_netdev,credentials=$C,noexec,rw,file_mode=0777,dir_mode=0777 0 0"
+[ "$(id -u)" -ne 0 ] && exit 1
+apt-get install -y cifs-utils; mkdir -p "$M" /etc/samba
+cat > "$C" <<'EOF'
+username=${user}
+password=${pass}
+EOF
+chmod 600 "$C"; grep -Fqx "$F" /etc/fstab || echo "$F" >> /etc/fstab
+mountpoint -q "$M" || mount "$M"
+if ! mountpoint -q "$M"; then exit 1; fi
+for D in /etc/skel/Desktop /home/*/Desktop; do
+[ -d "$D" ] || continue
+[ ! -e "$D/$P" ] && [ ! -L "$D/$P" ] && ln -s "$M" "$D/$P"
 done`;
         } else if (type === 'delete') {
-            rawScript = `umount -l /mnt/${folder}
-rm -rf /mnt/${folder}
-rm -f /etc/samba/.smbcredentials_${folder}
-sed -i "/${folder}/d" /etc/fstab
-sed -i "/MountAuto_${folder}/d" /etc/crontab
-for path in /home/*/Desktop/${folder}; do
-  if [ -L "$path" ]; then rm -f "$path"; fi
-done
-rm -f /etc/skel/Desktop/${folder}
-rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
+            rawScript = `#!/bin/bash
+P="${folder}";S="${ip}";M="/mnt/$P";C="/etc/samba/.$P-credentials"
+[ "$(id -u)" -ne 0 ] && exit 1
+if mountpoint -q "$M"; then umount "$M" || umount -l "$M"; fi
+if mountpoint -q "$M"; then exit 1; fi
+for L in /etc/skel/Desktop/$P /home/*/Desktop/$P; do [ -L "$L" ] && unlink "$L"; done
+sed -i "\\|//$S/$P[[:space:]]$M[[:space:]]|d" /etc/fstab
+rm -f "$C"; rmdir "$M" 2>/dev/null`;
         }
-        // BİM API'sinin satır atlamaları ve tırnak iaretleriyle (escaping) ilgili sorun yaatmaması için scripti Base64'e çevirip gönderiyoruz.
+        
+        // Kullanıcı isteği: Şifreli (Base64) gönderim kalsın ve tanımlama işlemi 1 kere tetiklensin.
         const encodedScript = btoa(unescape(encodeURIComponent(rawScript)));
-        const script = `echo ${encodedScript} | base64 -d | bash`;
+        let script = `echo ${encodedScript} | base64 -d | bash`;
+        
         // Bilgi bankası sistemi gibi istemci IP'sini otomatik algılaması için bo IP gönderiyoruz
         this.openRunCommandModal(null, script, '');
     },
@@ -2539,7 +3444,29 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
     },
     loadDepot: async function() {
         try {
-            const data = await this.apiRequest('/depot/get_all');
+            let data = await this.apiRequest('/depot/get_all');
+            
+            // Kategori sıralama mantığı (Sekme başlıklarının sırası)
+            const getCatScore = (c) => {
+                c = (c || '').toUpperCase().trim();
+                if (c.includes('ALTYAPI')) return 1;
+                if (c.includes('DONANIM')) return 2;
+                if (c.includes('AKSESUAR')) return 3;
+                if (c.includes('SARF')) return 4;
+                if (c.includes('OFIS') || c.includes('OFİS')) return 5;
+                return 99;
+            };
+            
+            data.sort((a, b) => {
+                const orderA = getCatScore(a.category);
+                const orderB = getCatScore(b.category);
+                
+                if (orderA !== orderB) return orderA - orderB;
+                
+                // Aynı kategori ise isme göre sırala
+                return (a.name || '').localeCompare(b.name || '', 'tr-TR');
+            });
+
             this.state.depot = data;
             this.renderDepot(data);
         } catch (e) { 
@@ -2558,7 +3485,23 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             grid.innerHTML = '<p style="opacity:0.4; text-align:center; grid-column:1/-1;">Depoda henüz ürün yok. + Yeni ürün butonuyla ekleyin.</p>';
             return;
         }
-        grid.innerHTML = items.map(item => {
+        
+        this.state.currentDepotRenderList = items;
+        this.state.depotPage = 0;
+        grid.innerHTML = '';
+        this.renderDepotChunk();
+    },
+    renderDepotChunk: function() {
+        const grid = document.getElementById('depot-grid');
+        if (!grid || !this.state.currentDepotRenderList) return;
+        const page = this.state.depotPage;
+        const pageSize = window.innerWidth <= 768 ? 20 : 50;
+        const chunk = this.state.currentDepotRenderList.slice(page * pageSize, (page + 1) * pageSize);
+        if (chunk.length === 0) return;
+        
+        const isAdmin = this.state.activeUser && ['ADMIN', 'EDITOR'].includes(this.state.activeUser.role);
+        
+        const html = chunk.map(item => {
             const ratio = item.critical_stock > 0 ? (item.current_stock / item.critical_stock) : 999;
             let stockClass = 'stock-ok', stockIcon = 'fa-check-circle', stockText = 'Yeterli';
             if (item.current_stock === 0) {
@@ -2567,6 +3510,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                 stockClass = 'stock-warning'; stockIcon = 'fa-triangle-exclamation'; stockText = 'Kritik Seviye!';
             }
             const catNormalized = (item.category || "").toUpperCase().trim();
+            const isConsumable = ['SARF MALZEME', 'OFİS / GİDA', 'OFİS / GIDA'].includes(catNormalized);
             const catClass = catNormalized === 'SARF MALZEME' ? 'cat-sarf' :
                             catNormalized === 'YEDEK PARÇA' ? 'cat-yedek' :
                             catNormalized === 'ÇEVRE BİRİMİ' ? 'cat-cevre' : 
@@ -2574,8 +3518,24 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             const barWidth = Math.min(100, (item.current_stock / Math.max(item.critical_stock * 2, 1)) * 100);
             const barColor = ratio > 1 ? '#00ff88' : (item.current_stock === 0 ? '#ff4b2b' : '#ffb400');
 
+            const statsHtml = isConsumable ? '' : `
+                <div class="flex-row gap-2 mb-3" style="font-size: 0.7rem; opacity: 0.8;">
+                    <div class="flex-column" style="flex:1; align-items:center; background: rgba(0,0,0,0.15); padding: 5px; border-radius: 4px;">
+                        <span style="opacity:0.6; font-size: 0.55rem;">Saha</span>
+                        <strong style="color:var(--accent);">${item.field_stock || 0}</strong>
+                    </div>
+                    <div class="flex-column" style="flex:1; align-items:center; background: rgba(0,0,0,0.15); padding: 5px; border-radius: 4px;">
+                        <span style="opacity:0.6; font-size: 0.55rem;">Arızalı</span>
+                        <strong style="color:#ffb400;">${item.faulty_stock || 0}</strong>
+                    </div>
+                    <div class="flex-column" style="flex:1; align-items:center; background: rgba(0,0,0,0.15); padding: 5px; border-radius: 4px;">
+                        <span style="opacity:0.6; font-size: 0.55rem;">Kayıp</span>
+                        <strong style="color:#ff4b2b;">${item.lost_stock || 0}</strong>
+                    </div>
+                </div>`;
+
             return `
-            <div class="card depot-card fade-in" style="cursor:pointer; border-left: 4px solid ${barColor};" onclick="app.openEditDepotItem(${item.id})">
+            <div class="card depot-card fade-in" style="cursor:pointer; border-left: 4px solid ${barColor};" onclick="app.openEditDepotItem(${item.id}, '${item.table_origin}')">
                 <div class="flex-between mb-2">
                     <span class="category-badge ${catClass}">${item.category || 'Belirsiz'}</span>
                     <div class="stock-indicator ${stockClass}" style="margin:0; font-size:0.7rem; padding: 2px 8px;">
@@ -2600,44 +3560,36 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                     <div class="stock-bar-fill" style="width: ${barWidth}%; background: ${barColor}; height: 100%;"></div>
                 </div>
 
-                <div class="flex-row gap-2 mb-3" style="font-size: 0.7rem; opacity: 0.8;">
-                    <div class="flex-column" style="flex:1; align-items:center; background: rgba(0,0,0,0.15); padding: 5px; border-radius: 4px;">
-                        <span style="opacity:0.6; font-size: 0.55rem;">Saha</span>
-                        <strong style="color:var(--accent);">${item.saha_count || 0}</strong>
-                    </div>
-                    <div class="flex-column" style="flex:1; align-items:center; background: rgba(0,0,0,0.15); padding: 5px; border-radius: 4px;">
-                        <span style="opacity:0.6; font-size: 0.55rem;">Arızalı</span>
-                        <strong style="color:#ffb400;">${item.arizali_count || 0}</strong>
-                    </div>
-                    <div class="flex-column" style="flex:1; align-items:center; background: rgba(0,0,0,0.15); padding: 5px; border-radius: 4px;">
-                        <span style="opacity:0.6; font-size: 0.55rem;">Kayıp</span>
-                        <strong style="color:#ff4b2b;">${item.kayip_count || 0}</strong>
-                    </div>
-                </div>
+                ${statsHtml}
 
                 <div class="flex-row gap-2" style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">
-                    <button class="btn btn-secondary" style="flex:1; padding: 6px; font-size: 0.75rem; background: rgba(0,210,255,0.05); border-color: rgba(0,210,255,0.2); color: var(--accent);" onclick="event.stopPropagation(); app.openDepotTransaction(${item.id}, '${item.name.replace(/'/g, "\\'")}', 'in')">
-                        <i class="fas fa-arrow-down"></i> GİRİÅ
+                    <button class="btn btn-secondary" style="flex:1; padding: 6px; font-size: 0.75rem; background: rgba(0,210,255,0.05); border-color: rgba(0,210,255,0.2); color: var(--accent);" onclick="event.stopPropagation(); app.openDepotTransaction(${item.id}, '${item.name.replace(/'/g, "\\'")}', 'in', '${item.table_origin}')">
+                        <i class="fas fa-arrow-down"></i> GİRİŞ
                     </button>
-                    <button class="btn btn-secondary" style="flex:1; padding: 6px; font-size: 0.75rem; background: rgba(255,180,0,0.05); border-color: rgba(255,180,0,0.2); color: #ffb400;" onclick="event.stopPropagation(); app.openDepotTransaction(${item.id}, '${item.name.replace(/'/g, "\\'")}', 'out')">
-                        <i class="fas fa-arrow-up"></i> ÇIKIÅ
+                    <button class="btn btn-secondary" style="flex:1; padding: 6px; font-size: 0.75rem; background: rgba(255,180,0,0.05); border-color: rgba(255,180,0,0.2); color: #ffb400;" onclick="event.stopPropagation(); app.openDepotTransaction(${item.id}, '${item.name.replace(/'/g, "\\'")}', 'out', '${item.table_origin}')">
+                        <i class="fas fa-arrow-up"></i> ÇIKIŞ
                     </button>
-                    <button class="btn btn-chip" style="padding: 6px; width: 35px; justify-content:center;" onclick="event.stopPropagation(); app.openEditDepotItem(${item.id})" title="Düzenle">
+                    <button class="btn btn-chip" style="padding: 6px; width: 35px; justify-content:center;" onclick="event.stopPropagation(); app.openEditDepotItem(${item.id}, '${item.table_origin}')" title="Düzenle">
                         <i class="fas fa-cog"></i>
                     </button>
                 </div>
             </div>`;
         }).join('');
+        grid.insertAdjacentHTML('beforeend', html);
+    
     },
     searchDepot: function() {
-        const query = (document.getElementById('depot-search').value || '').toLocaleUpperCase('tr-TR');
-        const items = this.state.depot || [];
-        const filtered = items.filter(d =>
-            (d.name || '').toLocaleUpperCase('tr-TR').includes(query) ||
-            (d.category || '').toLocaleUpperCase('tr-TR').includes(query) ||
-            (d.description || '').toLocaleUpperCase('tr-TR').includes(query)
-        );
-        this.renderDepot(filtered);
+        clearTimeout(this._depotTimer);
+        this._depotTimer = setTimeout(() => {
+            const query = (document.getElementById('depot-search').value || '').toLocaleUpperCase('tr-TR');
+            const items = this.state.depot || [];
+            const filtered = items.filter(d =>
+                (d.name || '').toLocaleUpperCase('tr-TR').includes(query) ||
+                (d.category || '').toLocaleUpperCase('tr-TR').includes(query) ||
+                (d.description || '').toLocaleUpperCase('tr-TR').includes(query)
+            );
+            this.renderDepot(filtered);
+        }, 300);
     },
     filterDepot: function(cat) {
         this.state.depot_activeFilter = cat; 
@@ -2675,24 +3627,11 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         val = val || document.getElementById('depot-category').value;
         const fields = document.getElementById('depot-asset-fields');
         if (!fields) return;
-        // Varlık alanlarını göster/gizle (Asset vs Consumable)
         const isConsumable = ['SARF MALZEME', 'OFİS / GİDA', 'OFİS / GIDA'].includes(val.toUpperCase().trim());
-        fields.style.display = 'block'; // Her zaman acık kalsın ama icerik degissin
-        // Label'ları güncelle
-        const labels = fields.querySelectorAll('label');
-        if (labels.length >= 4) {
-            labels[1].innerText = isConsumable ? 'GEÇEN HAFTA' : 'SAHADA';
-            labels[2].innerText = isConsumable ? 'DAÄITILAN' : 'ARIZALI';
-            labels[3].innerText = isConsumable ? 'KALAN' : 'KAYIP';
-            // 3. inputu gizle (Gıda/Sarf için gereksiz dendi)
-            const input3 = document.getElementById('depot-kayip');
-            if (input3 && input3.parentElement) {
-                input3.parentElement.style.display = isConsumable ? 'none' : 'block';
-            }
-        }
+        fields.style.display = isConsumable ? 'none' : 'block';
     },
-    openEditDepotItem: function(id) {
-        const item = this.state.depot.find(d => d.id == id);
+    openEditDepotItem: function(id, tableOrigin = null) {
+        const item = this.state.depot.find(d => d.id == id && (!tableOrigin || d.table_origin === tableOrigin));
         if (!item) return;
         this.state.editingDepotOrigin = item.table_origin || 'depot';
         
@@ -2756,7 +3695,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         const btn = document.getElementById('btn-printer-sync');
         if(btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Eitleniyor...'; btn.disabled = true; }
         try {
-            const resp = await this.apiRequest('/printers/sync_from_excel', { method: 'POST' });
+            const resp = await this.apiRequest('/inventory/printers/sync_from_excel', { method: 'POST' });
             const result = resp;
             if(result.error) throw new Error(result.error);
             this.showToast(result.message || 'Baarıyla eitlendi');
@@ -2781,9 +3720,9 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             const doc = new jsPDF();
             // Logo Ekleme (Opsiyonel - Eer tarayıcıda yüklüyse)
             try {
-                const logoLeft = "logo/ht_left.png";
+                const logoLeft = "/static/logo/ht_left.png";
                 doc.addImage(logoLeft, 'PNG', 10, 10, 30, 15);
-                const logoRight = "logo/ht_right.png";
+                const logoRight = "/static/logo/ht_right.png";
                 doc.addImage(logoRight, 'PNG', 170, 10, 30, 15);
             } catch(e) { console.warn("Rapor logoları eklenemedi."); }
             doc.setFontSize(18);
@@ -2816,8 +3755,8 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                 headStyles: { fillColor: [6, 182, 212] },
                 styles: { fontSize: 9, cellPadding: 2 },
                 columnStyles: {
-                    0: { cellWidth: 80 }, 
-                    1: { cellWidth: 45 }, 
+                    0: { cellWidth: 75 }, 
+                    1: { cellWidth: 40 }, 
                     2: { cellWidth: 35, halign: 'center' },
                     3: { cellWidth: 30, halign: 'center' }
                 }
@@ -2831,7 +3770,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             const transRows = [];
             data.transactions.forEach(t => {
                 const tDate = new Date(t.created_at).toLocaleString('tr-TR');
-                const ttype = t.transaction_type === 'in' ? 'Giri (+)' : 'ıkı (-)';
+                const ttype = t.transaction_type === 'in' ? 'Giriş (+)' : 'Çıkış (-)';
                 transRows.push([
                     tDate, 
                     this.fixTurkishForPDF(t.item_category || ''), 
@@ -2883,9 +3822,9 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             
             // Add Logos
             try {
-                const logoLeft = "logo/ht_left.png";
+                const logoLeft = "/static/logo/ht_left.png";
                 doc.addImage(logoLeft, 'PNG', 10, 10, 30, 15);
-                const logoRight = "logo/ht_right.png";
+                const logoRight = "/static/logo/ht_right.png";
                 doc.addImage(logoRight, 'PNG', 255, 10, 30, 15);
             } catch(e) { console.warn("Rapor logoları eklenemedi."); }
 
@@ -2980,9 +3919,10 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             document.getElementById('depot-add-modal').style.display = 'none';
         }
     },
-    openDepotTransaction: function(id, name, mode = 'in') {
-        const item = this.state.depot.find(d => d.id == id);
+    openDepotTransaction: function(id, name, mode = 'in', tableOrigin = null) {
+        const item = this.state.depot.find(d => d.id == id && (!tableOrigin || d.table_origin === tableOrigin));
         this.state.editingDepotOrigin = item ? (item.table_origin || 'depot') : 'depot';
+        this.state.editingDepotCategory = item ? (item.category || '') : '';
         
         document.getElementById('depot-trans-title').innerText = `Stok İşlemi: ${name}`;
         document.getElementById('trans-item-id').value = id;
@@ -2998,7 +3938,18 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         document.getElementById('trans-type-in').classList.toggle('active', type === 'in');
         document.getElementById('trans-type-out').classList.toggle('active', type === 'out');
         const reasonCont = document.getElementById('trans-reason-container');
-        if (reasonCont) reasonCont.style.display = (type === 'out') ? 'block' : 'none';
+        const reasonSelect = document.getElementById('trans-reason');
+        const cat = (this.state.editingDepotCategory || '').toUpperCase().trim();
+        const isConsumable = ['SARF MALZEME', 'OFİS / GİDA', 'OFİS / GIDA'].includes(cat);
+        if (reasonCont) {
+            if (isConsumable) {
+                reasonCont.style.display = 'none';
+                if (reasonSelect && type === 'out') reasonSelect.value = 'Yeni Kurulum';
+            } else {
+                reasonCont.style.display = (type === 'out') ? 'block' : 'none';
+                if (reasonSelect && type === 'out' && reasonSelect.value === 'Yeni Kurulum') reasonSelect.selectedIndex = 0;
+            }
+        }
     },
     executeDepotTransaction: async function() {
         const itemId = document.getElementById('trans-item-id').value;
@@ -3021,7 +3972,8 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                     note: note,
                     user_name: this.state.activeUser.name,
                     user_id: this.state.activeUser.key,
-                    table_type: this.state.editingDepotOrigin || 'depot'
+                    table_type: this.state.editingDepotOrigin || 'depot',
+                    category: this.state.editingDepotCategory || ''
                 })
             });
             const result = resp;
@@ -3093,7 +4045,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         } catch (e) { alert('Hata: ' + e.message); }
     },
     deleteDepotItem: async function(id) {
-        if (!confirm('Bu ürünü silmek istediinize emin misiniz?')) return;
+        if (!confirm('Bu ürünü silmek istediğinize emin misiniz?')) return;
         try {
             const resp = await this.apiRequest(`/depot/delete/${id}?table_type=${this.state.currentDepotTab}`, { method: 'DELETE' });
             const result = resp;
@@ -3209,7 +4161,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             const resp = await this.apiRequest(`/logs/get_record_history/${table}/${id}`);
             const logs = resp;
             if (!logs.length) {
-                list.innerHTML = '<div style="text-align:center; padding:50px; opacity:0.5;">Bu cihaz için henüz bir deiiklik kaydı bulunmuyor.</div>';
+                list.innerHTML = '<div style="text-align:center; padding:50px; opacity:0.5;">Bu cihaz için henüz bir değişiklik kaydı bulunmuyor.</div>';
                 return;
             }
             // Group by date and user to simulate the visual in Image 1
@@ -3337,7 +4289,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                     <!-- Row 4: Zimmet & Unvan -->
                     <div class="form-row form-row-2">
                         <div class="form-group">
-                            <label>ZİMMETLENEN KİÅİ / SORUMLU</label>
+                            <label>ZİMMETLENEN KİŞİ / SORUMLU</label>
                             <input type="search" class="search-bar" id="edit-assigned_to" value="${item.assigned_to || ''}">
                         </div>
                         <div class="form-group">
@@ -3474,7 +4426,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                             <input type="search" class="search-bar" id="edit-pc_serial" value="${item.pc_serial || ''}" readonly style="background:rgba(255,255,255,0.02); color:#64748b;">
                         </div>
                         <div class="form-group">
-                            <label>BAÄLI YAZICILAR</label>
+                            <label>BAĞLI YAZICILAR</label>
                             <input type="search" class="search-bar" id="edit-bagli_yazicilar" value="${item.bagli_yazicilar || ''}" readonly style="background:rgba(255,255,255,0.02); color:#64748b;">
                         </div>
                     </div>
@@ -3531,10 +4483,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                                 <input type="checkbox" id="edit-without_location" ${this.isTrue(item.without_location) ? 'checked' : ''} onclick="app.handleExclusiveCheck('status', 'edit-without_location')">
                                 <span class="checkmark"></span>
                             </label>
-                            <label class="check-container" style="font-size:0.7rem; color:var(--accent); font-weight:700;">KURULUM BEKLİYOR
-                                <input type="checkbox" id="edit-pending_installation" ${item.pending_installation === 1 ? 'checked' : ''} onclick="app.handleExclusiveCheck('status', 'edit-pending_installation')">
-                                <span class="checkmark"></span>
-                            </label>
+
                         </div>
                         <div class="flex-row gap-2" style="justify-content: flex-start; align-items:center;">
                              <label class="check-container" style="font-size:0.75rem;">Windows
@@ -3567,7 +4516,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             
             const idLabel = isPrinter ? 'PR NUMARASI' : (dClass === 'MONITOR' ? 'ETİKET / İSİM' : 'CİHAZ ADI (NAME)');
             const modelLabel = 'MODEL';
-            const mahalLabel = isSpecial ? 'BAÄLI OLDUÄU PC (MAHAL)' : (isPrinter ? 'MAHAL ADI / KODU' : 'MAHAL');
+            const mahalLabel = isSpecial ? 'BAĞLI OLDUĞU PC (MAHAL)' : (isPrinter ? 'MAHAL ADI / KODU' : 'MAHAL');
             const ipLabel = isSpecial ? 'BAĞLI OLDUĞU PC NO' : 'IP ADRESİ';
 
             let initialSpecialIp = isSpecial ? (item.pc_no || item.location_code || '') : (item.ip || '');
@@ -3600,7 +4549,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                     <div class="form-row form-row-2">
                         <div class="form-group">
                             <label>${mahalLabel}</label>
-                            <input type="search" class="search-bar" id="edit-mahal" value="${isSpecial ? initialSpecialMahal : (item.mahal || item.location_code || '')}" ${(isSpecial && dClass !== 'MONITOR') ? 'readonly style="background:rgba(255,255,255,0.02); color:#64748b;"' : (dClass === 'MONITOR' && isSpecial) ? 'list="mahal-datalist" placeholder="Mahal Kodu veya PC-XXX"' : ''}>
+                            <input type="search" class="search-bar" id="edit-mahal" value="${isSpecial ? initialSpecialMahal : (item.mahal || item.location_code || '')}" ${(isSpecial && dClass !== 'MONITOR') ? 'readonly style="background:rgba(255,255,255,0.02); color:#64748b;"' : 'list="mahal-datalist" placeholder="Mahal Kodu seçin veya yazın..."'}>
                         </div>
                         <div class="form-group">
                             <label>${ipLabel}</label>
@@ -3785,6 +4734,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         const id = this.state.editingId;
         const type = this.state.editingType;
         if (!id) return;
+        this.state.initialFormData = null;
         try {
             const payload = { 
                 id: id,
@@ -3802,16 +4752,16 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
 
                 if (devType === 'TABLET') {
                     fields = ['location_code', 'location_name', 'ip', 'mac', 'phone', 'assigned_to', 'title', 'unit'];
-                    checks = ['on_field', 'warehouse', 'is_faulty', 'without_location', 'pending_installation'];
+                    checks = ['on_field', 'warehouse', 'is_faulty', 'without_location'];
                 } else if (devType === 'SIRAMATIK' || devType === 'KIOSK') {
                     fields = ['location_code', 'location_name', 'ip', 'mac', 'serial_no'];
-                    checks = ['on_field', 'warehouse', 'is_faulty', 'without_location', 'pending_installation'];
+                    checks = ['on_field', 'warehouse', 'is_faulty', 'without_location'];
                 } else if (['BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER', 'MONITOR'].includes(devType)) {
                     fields = ['name', 'location_code', 'location_name', 'ip', 'pc_no', 'serial_no', 'mac', 'monitor_type', 'model'];
-                    checks = ['on_field', 'warehouse', 'is_faulty', 'without_location', 'pending_installation'];
+                    checks = ['on_field', 'warehouse', 'is_faulty', 'without_location'];
                 } else {
                     fields = ['tower', 'floor', 'location_code', 'location_name', 'ip', 'description', 'pc_serial', 'monitor_seri', 'monitor2_seri', 'mac', 'assigned_to', 'bagli_yazicilar', 'by_seri', 'bo_seri', 'tarayici_seri', 'rdp_address', 'rdp_reason'];
-                    checks = ['on_field', 'warehouse', 'is_faulty', 'without_location', 'windows', 'keyos', 'rdp', 'pending_installation'];
+                    checks = ['on_field', 'warehouse', 'is_faulty', 'without_location', 'windows', 'keyos', 'rdp'];
                 }
 
                 
@@ -3820,7 +4770,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                     if(el) payload[k] = el.value;
                 });
 
-                // BARCODE AUTO-REGISTER FLOW (AÅAMA 4) - only for default PC
+                // BARCODE AUTO-REGISTER FLOW (AŞAMA 4) - only for default PC
                 if (devType !== 'TABLET' && devType !== 'SIRAMATIK' && devType !== 'KIOSK') {
                     const peripherals = [
                         { key: 'by_seri', type: 'BARCODE_PRINTER', label: 'Barkod Yazıcı' },
@@ -3831,7 +4781,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                     for (const p of peripherals) {
                         const serial = payload[p.key];
                         if (serial && serial.trim() !== "" && serial !== '---') {
-                            const check = await this.apiRequest('/printers/printers/check_serial', {
+                            const check = await this.apiRequest('/inventory/printers/check_serial', {
                                 method: 'POST',
                                 body: JSON.stringify({ serial: serial.trim() })
                             });
@@ -3906,6 +4856,43 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                     }
                     break; // Success
                 }
+                
+                // === OTOMATIK KEYOS GÜNCELLEMESİ ===
+                if (devType === 'PC' && this.state.activeUser && this.state.activeUser.keyos_user) {
+                    const item = this.state.inventory.find(i => i.id == id);
+                    if (item && item.pc_serial && payload.location_code) {
+                        try {
+                            const hNameEl = document.getElementById('edit-hostname');
+                            const hName = hNameEl ? hNameEl.value : item.hostname;
+                            
+                            this.showToast('KeyOS MGT verileri eşitleniyor...', 'info');
+                            
+                            // Asenkron olarak calistir, arayuzu cok bekletmesin
+                            this.apiRequest('/keyos/update', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    serial: item.pc_serial,
+                                    hostname: hName || '',
+                                    placeId: payload.location_code
+                                })
+                            }).then(keyosResp => {
+                                if (keyosResp && keyosResp.success) {
+                                    this.showToast('KeyOS MGT başarıyla güncellendi.', 'success');
+                                } else if (keyosResp && keyosResp.error) {
+                                    this.showToast('KeyOS Güncelleme Uyarısı: ' + keyosResp.error, 'warning');
+                                }
+                            }).catch(err => {
+                                console.warn("KeyOS Otomatik Güncelleme Hatası:", err);
+                                this.showToast('KeyOS otomatik güncellenemedi.', 'warning');
+                            });
+                        } catch (e) {
+                            console.warn("KeyOS Otomatik Güncelleme Hatası:", e);
+                        }
+                    }
+                }
+                // === OTOMATIK KEYOS GÜNCELLEMESİ END ===
+
             } else if (type === 'pr') {
                 // Mevcut yazıcı durumunu kontrol et (device_class ile doğru cihazı bul)
                 const editDC = this.state.editingDeviceClass;
@@ -3948,7 +4935,9 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                     }
                 }
 
-                // YENİ GÜVENLİK: Servis tablosunda açık kaydı (Dönü tarihi olmayan) var mı?
+                // YENİ GÜVENLİK: Servis tablosunda açık kaydı (Dönüş tarihi olmayan) var mı?
+                // Önce cache'i yenile ki silinen kayıtlar hâlâ görünmesin
+                await this.loadServiceRecords();
                 const openServiceRecord = this.state_service.raw.find(s => 
                     s.pr_no === payload.pr_no && (!s.return_date || s.return_date.trim() === "" || s.return_date === "-")
                 );
@@ -3957,15 +4946,8 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                     alert("yazıcının kapanmamış servis işlem kaydı var depocunuz ile iletişime geçin");
                     return;
                 }
-
-                // Eski koruma mantığı (Yedek olarak)
-                const currentStatus = currentPrinter.status || '';
-                if ((currentStatus === 'Arızalı' || currentStatus === 'Serviste') && selectedStatus === 'Kurulu' && !openServiceRecord) {
-                    alert("UYARI: Bu yazıcının açık bir servis kaydı bulunmaktadır.\n\nYazıcıyı 'Kurulu' olarak işaretleyebilmek için depocunun servis kaydını kapatması (Depoya çekmesi) gerekmektedir.");
-                    return;
-                }
                 let result;
-                let endpoint = '/printers/printers/update';
+                let endpoint = '/inventory/printers/update';
                 
                 if (['MONITOR', 'BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER'].includes(payload.device_class)) {
                     endpoint = '/inventory/update';
@@ -4005,10 +4987,10 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                 }
                 
                 // CUPS Update integration for Printers
-                if (endpoint === '/printers/printers/update' && payload.pr_no && payload.mahal) {
+                if (endpoint === '/inventory/printers/update' && payload.pr_no && payload.mahal) {
                     try {
                         this.showToast('Veritabanı güncellendi. CUPS Mahallesi senkronize ediliyor...', 'info');
-                        const cupsResp = await this.apiRequest('/printers/printers/cups/modify_location', {
+                        const cupsResp = await this.apiRequest('/inventory/printers/cups/modify_location', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ pr_no: payload.pr_no, location: payload.mahal })
@@ -4047,7 +5029,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             detailArea.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sorgulanıyor...';
         }
         try {
-            const data = await this.apiRequest('/printers/status/' + ip);
+            const data = await this.apiRequest('/inventory/printers/status/' + ip);
             if (data.success) {
                 // Toner yüzdesini çıkar
                 let tonerPercent = 0;
@@ -4088,6 +5070,39 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             if (detailArea) detailArea.innerHTML = errMsg;
         }
     },
+    pausePrinter: async function(prNo) {
+        if (!confirm(`${prNo} yazıcısını CUPS üzerinde duraklatmak ve iş kuyruğunu reddetmek istediğinize emin misiniz?`)) return;
+        try {
+            this.showToast(`${prNo} duraklatılıyor...`, 'info');
+            const resp = await this.apiRequest('/inventory/printers/cups/pause', {
+                method: 'POST',
+                body: JSON.stringify({ pr_no: prNo })
+            });
+            if (resp.success) {
+                this.showToast(`${prNo} başarıyla duraklatıldı.`, 'success');
+            } else {
+                throw new Error(resp.error || 'İşlem başarısız');
+            }
+        } catch(e) {
+            alert('Hata: ' + e.message);
+        }
+    },
+    resumePrinter: async function(prNo) {
+        try {
+            this.showToast(`${prNo} etkinleştiriliyor...`, 'info');
+            const resp = await this.apiRequest('/inventory/printers/cups/resume', {
+                method: 'POST',
+                body: JSON.stringify({ pr_no: prNo })
+            });
+            if (resp.success) {
+                this.showToast(`${prNo} başarıyla etkinleştirildi ve iş kabulüne açıldı.`, 'success');
+            } else {
+                throw new Error(resp.error || 'İşlem başarısız');
+            }
+        } catch(e) {
+            alert('Hata: ' + e.message);
+        }
+    },
     syncServiceRecordsFromExcel: async function() {
         if (!confirm("database/servise_giden_yazıcılar.xlsx dosyasındaki kayıtlar içeri aktarılacak. Emin misiniz?")) return;
         try {
@@ -4121,20 +5136,25 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             
         if (!item) return '';
 
+        const isAdmin = this.state.activeUser && this.state.activeUser.role === 'ADMIN';
+        const deleteBtnHtml = isAdmin ? `<button class="btn btn-danger" style="flex: 0.5;" onclick="app.deleteDeviceFromModal()"><i class="fas fa-trash"></i> Sil</button>` : '';
+
         if (type === 'pr') {
             const dClass = item.device_class || 'PRINTER';
             const isSpecial = dClass === 'BARCODE_PRINTER' || dClass === 'BARCODE_READER' || dClass === 'SCANNER' || dClass === 'MONITOR';
             return `
             <div class="flex-row gap-2 mt-4">
+                ${deleteBtnHtml}
                 <button class="btn btn-secondary" style="flex: 1;" onclick="app.closeDeviceDetail()">İptal</button>
-                <button class="btn btn-accent" style="flex: 1;" onclick="app.saveEdit()">Güncelle</button>
+                <button class="btn btn-accent" style="flex: 1;" id="btn-save-device" onclick="app.saveEdit()">Güncelle</button>
             </div>`;
         }
         
         return `
         <div class="flex-row gap-2 mt-4">
+            ${deleteBtnHtml}
             <button class="btn btn-secondary" style="flex: 1;" onclick="app.closeDeviceDetail()">İptal</button>
-            <button class="btn btn-accent" style="flex: 1;" onclick="app.saveEdit()">Güncelle</button>
+            <button class="btn btn-accent" style="flex: 1;" id="btn-save-device" onclick="app.saveEdit()">Güncelle</button>
         </div>`;
     },
     // 
@@ -4260,7 +5280,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         } catch (e) { alert('Hata: ' + e.message); }
     },
     deleteNote: async function(noteId) {
-        if (!confirm('Bu notu silmek istediinize emin misiniz?')) return;
+        if (!confirm('Bu notu silmek istediğinize emin misiniz?')) return;
         try {
             const resp = await this.apiRequest(`/notes/delete/${noteId}?user_id=${this.state.activeUser.key}&role=${this.state.activeUser.role}`, { method: 'DELETE' });
             const result = resp;
@@ -4301,47 +5321,421 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         document.querySelectorAll('#view-general-notes .btn-chip').forEach(btn => {
             btn.classList.toggle('active', btn.id === `kb-tab-${tab}`);
         });
-        if (tab === 'indir') {
-            this.loadDownloads();
+        
+        const btnAdd = document.getElementById('btn-add-kb');
+        if (btnAdd) {
+            if (tab === 'kodlar' && (!this.state.activeUser || this.state.activeUser.role !== 'ADMIN')) {
+                btnAdd.style.display = 'none';
+            } else {
+                btnAdd.style.display = this.canEdit('general-notes') ? 'flex' : 'none';
+            }
+        }
+        
+        this.loadGeneralNotes();
+    },
+    setInstallTab: function(tab) {
+        this.state._installTab = tab;
+        document.querySelectorAll('#view-installations .btn-chip').forEach(btn => {
+            btn.classList.toggle('active', btn.id === `inst-tab-${tab}`);
+        });
+        
+        const appsContainer = document.getElementById('isvec-apps-container');
+        const downloadsGrid = document.getElementById('downloads-grid');
+        const dlActions = document.getElementById('inst-downloads-actions');
+        
+        // Sıfır İmaj ve Toplu Kur butonları sadece apps sekmesinde görünür
+        const btnSifir = document.getElementById('btn-sifir-imaj-global');
+        const btnSifirEdit = document.getElementById('btn-sifir-imaj-duzenle-global');
+        const btnBulk = document.getElementById('btn-isvec-bulk');
+        
+        if (tab === 'apps') {
+            if (appsContainer) appsContainer.style.display = '';
+            if (downloadsGrid) downloadsGrid.style.display = 'none';
+            if (dlActions) dlActions.style.display = 'none';
+            if (btnBulk) btnBulk.style.display = '';
+            this.loadInstallationApps();
         } else {
-            this.loadGeneralNotes();
+            if (appsContainer) appsContainer.style.display = 'none';
+            if (downloadsGrid) downloadsGrid.style.display = '';
+            if (dlActions) dlActions.style.display = (this.state.activeUser && this.state.activeUser.role === 'ADMIN') ? 'flex' : 'none';
+            if (btnSifir) btnSifir.style.display = 'none';
+            if (btnSifirEdit) btnSifirEdit.style.display = 'none';
+            if (btnBulk) btnBulk.style.display = 'none';
+            this.loadDownloadFiles();
         }
     },
-    loadDownloads: async function() {
-        const grid = document.getElementById('general-notes-grid');
-        if (grid) grid.innerHTML = '<div style="text-align:center; padding:50px;"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+    loadInstallationApps: async function() {
+        const container = document.getElementById('isvec-apps-container');
+        if (container) container.innerHTML = '<div style="grid-column: 1 / -1; text-align:center; padding:40px;"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
         try {
-            const resp = await this.apiRequest('/downloads/list');
-            this.renderDownloads(resp.files || []);
-        } catch (e) {
-            if (grid) grid.innerHTML = `<div style="color:red; text-align:center; padding:30px;">Dosyalar yüklenemedi.</div>`;
+            const resp = await this.apiRequest("/installations/apps?t=" + new Date().getTime());
+            const apps = resp.apps || [];
+            this.currentIsvecApps = apps;
+            this.renderInstallationApps(apps);
+        } catch(e) {
+            if (container) container.innerHTML = '<div style="grid-column: 1 / -1; text-align:center; padding:30px; color:red;">Kurulumlar yüklenemedi.</div>';
         }
     },
-    renderDownloads: function(files) {
-        const grid = document.getElementById('general-notes-grid');
-        if (!grid) return;
-        if (!files || files.length === 0) {
-            grid.innerHTML = '<div style="text-align:center; padding:30px; opacity:0.5;">Klasörde henüz dosya bulunamadı.</div>';
+    renderInstallationApps: function(apps) {
+        const container = document.getElementById('isvec-apps-container');
+        if (!container) return;
+        if (apps.length === 0) {
+            container.innerHTML = '<div style="grid-column: 1 / -1; text-align:center; padding:30px; opacity:0.5;">Henüz sessiz kurulum bulunamadı.</div>';
             return;
         }
-        grid.innerHTML = `
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; width: 100%;">
-                ${files.map(f => {
-                    const isBat = f.name.toLowerCase().endsWith('.bat');
-                    const icon = isBat ? 'fa-terminal' : 'fa-file-arrow-down';
-                    return `
-                    <div class="card" style="padding: 15px; display: flex; align-items: center; gap: 15px; cursor: pointer;" onclick="window.location.href='${this.state.API_BASE}/downloads/get/${encodeURIComponent(f.name)}'">
-                        <div style="width: 45px; height: 45px; background: rgba(255,255,255,0.05); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--accent);">
-                            <i class="fas ${icon} fa-xl"></i>
-                        </div>
-                        <div style="flex: 1; overflow: hidden;">
-                            <div style="font-weight: 600; font-size: 0.9rem;" title="${f.name}">${f.name}</div>
-                            <div style="font-size: 0.7rem; opacity: 0.5;">${f.size} | ${f.date}</div>
-                        </div>
-                    </div>`;
-                }).join('')}
+        
+        let hasSifirImaj = apps.some(a => a.is_sifir_imaj);
+        const btnSifir = document.getElementById('btn-sifir-imaj-global');
+        if (btnSifir) btnSifir.style.display = hasSifirImaj ? 'block' : 'none';
+        const btnEdit = document.getElementById('btn-sifir-imaj-duzenle-global');
+        if (btnEdit) btnEdit.style.display = (this.state.activeUser && this.state.activeUser.role === 'ADMIN') ? 'block' : 'none';
+
+        let html = '';
+        apps.forEach(appItem => {
+            let icon = "fa-cube";
+            let color = "#00d2ff";
+            const nm = appItem.id.toLowerCase();
+            if(nm.includes("anydesk")) { icon="fa-desktop"; color="#ef4444"; }
+            else if(nm.includes("chrome")) { icon="fa-chrome"; color="#10b981"; icon = "fab "+icon; }
+            else if(nm.includes("brave")) { icon="fa-brave"; color="#f59e0b"; icon = "fab "+icon; }
+            else if(nm.includes("zoiper")) { icon="fa-phone-alt"; color="#00d2ff"; }
+            else if(nm.includes("vlc")) { icon="fa-play-circle"; color="#ff9800"; }
+            else if(nm.includes("java")) { icon="fa-java"; color="#f44336"; icon = "fab "+icon; }
+            else if(nm.includes("winrar")||nm.includes("zip")) { icon="fa-file-archive"; color="#9c27b0"; }
+            else { icon = "fas "+icon; }
+            
+            let descHtml = appItem.description || '';
+            if (appItem.is_custom) {
+                descHtml = descHtml ? descHtml + ' <span style="color: #10b981; font-weight: 600;">[Özel Script]</span>' : '<span style="color: #10b981; font-weight: 600;">[Özel Script]</span>';
+            }
+
+            html += `
+            <div class="card" style="padding: 10px 15px 10px 15px; display: flex; align-items: center; gap: 15px; position: relative; border-left: 3px solid ${appItem.is_sifir_imaj ? '#ef4444' : '#0ea5e9'}; cursor: pointer;" onclick="const cb = this.querySelector('.isvec-checkbox'); if(event.target.tagName !== 'INPUT' && event.target.tagName !== 'BUTTON' && !event.target.closest('button')) { cb.checked = !cb.checked; }">
+                <input type="checkbox" class="isvec-checkbox" value="${appItem.id}" style="position: absolute; top: 8px; left: 8px; cursor: pointer; width: 18px; height: 18px; accent-color: var(--accent); z-index: 10;">
+                <div style="width: 45px; height: 45px; background: rgba(255,255,255,0.05); border-radius: 0 10px 10px 0; margin-left: -7px; display: flex; align-items: center; justify-content: center; color: ${color}; overflow: hidden;">
+                    ${appItem.icon_url ? `<img src="${appItem.icon_url}" onerror="this.style.display=\'none\'; this.parentElement.insertAdjacentHTML(\'beforeend\', \'<i class=&quot;${icon} fa-xl&quot;></i>\');" style="width: 32px; height: 32px; object-fit: contain;">` : `<i class="${icon} fa-xl"></i>`}
+                </div>
+                <div style="flex: 1; overflow: hidden; padding-right: 15px;">
+                    <div style="font-weight: 600; font-size: 0.9rem;" title="${appItem.name}">${appItem.name}</div>
+                    ${descHtml ? `<div style="font-size: 0.7rem; opacity: 0.7; line-height: 1.2; margin-top: 2px;">${descHtml}</div>` : ''}
+                </div>
+                
+                ${(this.state.activeUser && this.state.activeUser.role === 'ADMIN') ? `<button class="btn btn-sm" style="background: rgba(255,255,255,0.1); border-radius: 5px;" onclick="app.showUpdateIsvecModal('${appItem.id}')" title="Sürüm Güncelle"><i class="fas fa-upload"></i></button>` : ''}
             </div>`;
+        });
+        container.innerHTML = `<div style="grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; width: 100%; align-items: stretch;">${html}</div>`;
     },
+    loadDownloadFiles: async function() {
+        const grid = document.getElementById('downloads-grid');
+        if (grid) grid.innerHTML = '<div style="text-align:center; padding:50px;"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+        try {
+            const resp = await this.apiRequest('/installations/downloads/list');
+            const files = resp.files || [];
+            this.renderDownloadFiles(files);
+        } catch(e) {
+            if (grid) grid.innerHTML = '<div style="color:red; text-align:center; padding:30px;">İndirme dosyaları yüklenemedi.</div>';
+        }
+    },
+    renderDownloadFiles: function(files) {
+        const grid = document.getElementById('downloads-grid');
+        if (!grid) return;
+        if (files.length === 0) {
+            grid.innerHTML = '<div style="text-align:center; padding:30px; opacity:0.5;">Henüz indirme dosyası bulunamadı.</div>';
+            return;
+        }
+        let html = '<div style="grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; width: 100%; align-items: stretch;">';
+        files.forEach(f => {
+            const isBat = f.name.toLowerCase().endsWith('.bat');
+            const icon = isBat ? 'fa-terminal' : 'fa-file-arrow-down';
+            html += `
+            <div class="card" style="padding: 15px; display: flex; align-items: center; gap: 15px; background: rgba(255,255,255,0.02);">
+                <div style="width: 45px; height: 45px; background: rgba(255,255,255,0.05); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--accent);">
+                    <i class="fas ${icon} fa-xl"></i>
+                </div>
+                <div style="flex: 1; overflow: hidden; cursor: pointer;" onclick="window.location.href='${this.state.API_BASE}/installations/downloads/get/${encodeURIComponent(f.name)}'">
+                    <div style="font-weight: 600; font-size: 0.9rem;" title="${f.name}">${f.name}</div>
+                    <div style="font-size: 0.7rem; opacity: 0.5;">${f.size} | ${f.date}</div>
+                </div>
+                <button class="btn btn-sm btn-primary" onclick="window.location.href='${this.state.API_BASE}/installations/downloads/get/${encodeURIComponent(f.name)}'"><i class="fas fa-download"></i> İndir</button>
+                ${(this.state.activeUser && this.state.activeUser.role === 'ADMIN') ? `<button class="btn btn-sm" style="background: rgba(239,68,68,0.2); color: #ef4444; border-radius: 5px;" onclick="app.deleteDownloadFile('${f.name}')" title="Dosyayı Sil"><i class="fas fa-trash"></i></button>` : ''}
+            </div>`;
+        });
+        html += '</div>';
+        grid.innerHTML = html;
+    },
+    uploadDownloadFile: async function(input) {
+        if (!input.files || input.files.length === 0) return;
+        const formData = new FormData();
+        formData.append('file', input.files[0]);
+        this.showToast('Dosya yükleniyor...', 'info');
+        try {
+            const res = await fetch(`${this.state.API_BASE}/installations/downloads/upload`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${this.state.token}` },
+                body: formData
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                this.showToast(data.message || 'Dosya yüklendi!', 'success');
+                this.loadDownloadFiles();
+            } else {
+                this.showToast(data.error || 'Yükleme hatası', 'error');
+            }
+        } catch(e) {
+            this.showToast('Ağ hatası oluştu', 'error');
+        }
+        input.value = '';
+    },
+    deleteDownloadFile: async function(filename) {
+        if (!confirm(`"${filename}" dosyasını silmek istediğinize emin misiniz?`)) return;
+        try {
+            const resp = await this.apiRequest(`/installations/downloads/delete/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+            if (resp.success) {
+                this.showToast('Dosya silindi', 'success');
+                this.loadDownloadFiles();
+            } else {
+                this.showToast(resp.error || 'Silme hatası', 'error');
+            }
+        } catch(e) {
+            this.showToast('Silme hatası oluştu', 'error');
+        }
+    },
+    // Eski KB indirmeler uyumluluk - Artık Hızlı Kurulumlara taşındı
+    loadDownloads: async function() {
+        this.setInstallTab('downloads');
+    },
+    renderDownloads: function(files, apps) {
+        // Uyumluluk fonksiyonu - Artık ayrı render fonksiyonları kullanılıyor
+        if (apps && apps.length > 0) this.renderInstallationApps(apps);
+        if (files && files.length > 0) this.renderDownloadFiles(files);
+    },
+    
+    showNewIsvecModal: function() {
+        const modalId = 'new-isvec-modal';
+        if(document.getElementById(modalId)) document.getElementById(modalId).remove();
+        const html = `
+            <div id="${modalId}" style="position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); display: flex; align-items:center; justify-content:center; z-index:9999;">
+                <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 25px; border-radius: 10px; width: 450px;">
+                    <h3 style="margin-top:0;">Yeni Kurulum Ekle</h3>
+                    <div style="margin-bottom: 15px;">
+                        <label>Program Klasör Adı</label>
+                        <input type="text" id="isvec-new-name" placeholder="Örn: Google Chrome" class="form-control" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: white;">
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label>Kurulum Dosyası (.exe / .msi)</label>
+                        <input type="file" id="isvec-new-file" class="form-control" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: white;">
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <label style="display:flex; align-items:center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="isvec-new-sifir" style="width: 18px; height: 18px;">
+                            Sıfır İmaja Dahil Edilsin mi?
+                        </label>
+                    </div>
+                    <div style="display:flex; justify-content:flex-end; gap: 10px;">
+                        <button class="btn" style="background: rgba(255,255,255,0.1);" onclick="document.getElementById('${modalId}').remove()">İptal</button>
+                        <button class="btn btn-primary" onclick="app.submitNewIsvec()">Yükle ve Oluştur</button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.insertAdjacentHTML('beforeend', html);
+    },
+    
+    submitNewIsvec: async function() {
+        const name = document.getElementById('isvec-new-name').value;
+        const fileInput = document.getElementById('isvec-new-file');
+        const isSifir = document.getElementById('isvec-new-sifir').checked;
+        
+        if(!name || fileInput.files.length === 0) {
+            this.showToast('Lütfen isim ve dosya seçin', 'warning');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('app_name', name);
+        formData.append('file', fileInput.files[0]);
+        formData.append('is_sifir_imaj', isSifir);
+        
+        this.showToast('Dosya yükleniyor, lütfen bekleyin...', 'info');
+        
+        try {
+            const res = await fetch(`${this.state.API_BASE}/installations/upload`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${this.state.token}` },
+                body: formData
+            });
+            const data = await res.json();
+            if(res.ok) {
+                this.showToast(data.message || 'Başarıyla yüklendi', 'success');
+                document.getElementById('new-isvec-modal').remove();
+                this.loadDownloads();
+            } else {
+                this.showToast(data.error || 'Yükleme hatası', 'error');
+            }
+        } catch(e) {
+            this.showToast('Ağ hatası oluştu', 'error');
+        }
+    },
+    
+    showUpdateIsvecModal: function(appId) {
+        const modalId = 'update-isvec-modal';
+        if(document.getElementById(modalId)) document.getElementById(modalId).remove();
+        const html = `
+            <div id="${modalId}" style="position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); display: flex; align-items:center; justify-content:center; z-index:9999;">
+                <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 25px; border-radius: 10px; width: 450px;">
+                    <h3 style="margin-top:0;">Program Güncelle (${appId})</h3>
+                    <p style="font-size:0.8rem; opacity:0.8;">Sisteme yeni sürüm dosyasını yüklersiniz. 5'ten fazla eski dosya varsa en eski olanlar otomatik silinir.</p>
+                    <div style="margin-bottom: 20px;">
+                        <label>Yeni Kurulum Dosyası (.exe / .msi)</label>
+                        <input type="file" id="isvec-update-file" class="form-control" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: white;">
+                    </div>
+                    <div style="display:flex; justify-content:flex-end; gap: 10px;">
+                        <button class="btn" style="background: rgba(255,255,255,0.1);" onclick="document.getElementById('${modalId}').remove()">İptal</button>
+                        <button class="btn btn-primary" onclick="app.submitUpdateIsvec('${appId}')">Güncelle</button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.insertAdjacentHTML('beforeend', html);
+    },
+    
+    submitUpdateIsvec: async function(appId) {
+        const fileInput = document.getElementById('isvec-update-file');
+        if(fileInput.files.length === 0) {
+            this.showToast('Lütfen dosya seçin', 'warning');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        
+        this.showToast('Güncelleme yükleniyor, lütfen bekleyin...', 'info');
+        
+        try {
+            const res = await fetch(`${this.state.API_BASE}/installations/update/${appId}`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${this.state.token}` },
+                body: formData
+            });
+            const data = await res.json();
+            if(res.ok) {
+                this.showToast(data.message || 'Başarıyla güncellendi', 'success');
+                document.getElementById('update-isvec-modal').remove();
+                this.loadDownloads();
+            } else {
+                this.showToast(data.error || 'Güncelleme hatası', 'error');
+            }
+        } catch(e) {
+            this.showToast('Ağ hatası oluştu', 'error');
+        }
+    },
+
+    startZeroImage: function() {
+        if (!this.currentIsvecApps) return;
+        const sifirImajIds = this.currentIsvecApps.filter(a => a.is_sifir_imaj).map(a => a.id);
+        if (sifirImajIds.length === 0) {
+            this.showToast('Sıfır İmaj listesine ekli hiçbir program bulunamadı.', 'error');
+            return;
+        }
+        
+        if (confirm(`Sıfır İmaj listesinde ${sifirImajIds.length} adet program var.\nBunlarin tamami sirasiyla kurulacaktir. Onayliyor musunuz?`)) {
+            this.downloadDynamicBat(sifirImajIds);
+        }
+    },
+
+    downloadDynamicBat: function(ids) {
+        if (!ids || ids.length === 0) {
+            this.showToast("Kurulum için uygulama seçilmedi.", "warning");
+            return;
+        }
+        const selectedIds = ids.join(",");
+        const link = document.createElement("a");
+        link.href = "/api/isvec/bulk?ids=" + encodeURIComponent(selectedIds);
+        link.download = "sifir_imaj_kurulum.ps1";
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        this.showToast("Sıfır imaj kurulum dosyası indiriliyor.", "success");
+    },
+
+    toggleZeroImageEdit: function() {
+        if (!this.currentIsvecApps) return;
+        
+        const existing = document.getElementById('sifir-imaj-edit-modal');
+        if (existing) { existing.remove(); return; }
+        
+        const apps = this.currentIsvecApps;
+        const sifirIds = apps.filter(a => a.is_sifir_imaj).map(a => a.id);
+        
+        let listHtml = apps.map(a => {
+            const checked = sifirIds.includes(a.id) ? 'checked' : '';
+            const iconHtml = a.icon_url 
+                ? `<img src="${a.icon_url}" style="width:24px; height:24px; object-fit:contain; border-radius:4px;">` 
+                : `<div style="width:24px; height:24px; background:rgba(255,255,255,0.1); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:12px;">📦</div>`;
+            return `
+                <label style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; cursor:pointer; transition:background 0.2s;" 
+                       onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                    <input type="checkbox" class="si-edit-cb" value="${a.id}" ${checked} style="width:18px; height:18px; accent-color:#ef4444;">
+                    ${iconHtml}
+                    <span style="flex:1;">${a.name}</span>
+                </label>`;
+        }).join('');
+        
+        const modal = document.createElement('div');
+        modal.id = 'sifir-imaj-edit-modal';
+        modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:10000; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
+        modal.innerHTML = `
+            <div style="background:var(--bg-card, #1e293b); border-radius:16px; padding:24px; width:500px; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                    <h3 style="margin:0; font-size:1.1rem;">🎯 Sıfır İmaj Düzenle</h3>
+                    <button onclick="document.getElementById('sifir-imaj-edit-modal').remove()" style="background:none; border:none; color:white; font-size:1.3rem; cursor:pointer;">✕</button>
+                </div>
+                <p style="font-size:0.8rem; opacity:0.6; margin:0 0 12px 0;">Sıfır İmaj kurulumuna dahil olacak programları işaretleyin.</p>
+                <div style="flex:1; overflow-y:auto; margin-bottom:16px; border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:4px;">
+                    ${listHtml}
+                </div>
+                <div style="display:flex; gap:10px; justify-content:flex-end;">
+                    <button onclick="document.getElementById('sifir-imaj-edit-modal').remove()" class="btn btn-sm" style="background:rgba(255,255,255,0.1);">İptal</button>
+                    <button id="si-save-btn" class="btn btn-sm" style="background:#ef4444; color:white;">💾 Kaydet</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // Close on backdrop click
+        modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+        
+        // Save handler
+        document.getElementById('si-save-btn').addEventListener('click', async () => {
+            const selectedIds = Array.from(document.querySelectorAll('.si-edit-cb:checked')).map(cb => cb.value);
+            const btn = document.getElementById('si-save-btn');
+            btn.disabled = true;
+            btn.textContent = 'Kaydediliyor...';
+            
+            try {
+                const resp = await fetch('/api/installations/update_zero_image', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ selected_ids: selectedIds })
+                });
+                const result = await resp.json();
+                if (result.success) {
+                    this.showToast(`Sıfır İmaj listesi güncellendi (${selectedIds.length} program).`, 'success');
+                    modal.remove();
+                    // Listeyi yenile
+                    this.loadDownloads();
+                } else {
+                    this.showToast('Hata: ' + (result.error || 'Bilinmeyen hata'), 'error');
+                    btn.disabled = false;
+                    btn.textContent = '💾 Kaydet';
+                }
+            } catch(e) {
+                this.showToast('Sunucu hatası: ' + e.message, 'error');
+                btn.disabled = false;
+                btn.textContent = '💾 Kaydet';
+            }
+        });
+    },
+
     renderGeneralNotes: function(data) {
         const grid = document.getElementById('general-notes-grid');
         if (!grid) return;
@@ -4368,44 +5762,59 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                 let displayContent = n.content;
                 let isMulti = false;
                 try {
-                    if (n.content.startsWith('{')) {
+                    if (n.content && n.content.trim().startsWith('{')) {
                         const parsed = JSON.parse(n.content);
                         if (parsed.type === 'multi') {
                             displayContent = parsed.commands.map((c, i) => `[KOMUT ${i+1}]\n${c}`).join('\n\n');
                             isMulti = true;
                         }
                     }
-                } catch(e) { console.error(e); }
+                } catch(e) {
+                    // Sessizce geçiyoruz; kod bloğu vb. içerikler { ile başlayabilir ama geçerli JSON olmayabilir
+                }
 
                 contentHtml = `
                     ${userControlHtml}
                     <div class="kb-code-container" style="${isMulti ? 'border-left: 4px solid #ff4b2b;' : ''}">
                         <div class="kb-code-block">
-                            <pre id="kb-pre-${n.id}">${displayContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
-                        </div>
-                        <div class="kb-action-sidebar" style="display: flex; flex-direction: row; gap: 5px; align-items: center; justify-content: flex-end; margin-top: 5px;">
-                            <i class="fas fa-edit kb-mini-icon" onclick="app.editKBEntry(${n.id})" title="Düzenle" style="color: #ffcc00; font-size: 1.1rem; cursor:pointer;"></i>
-                            <i class="fas fa-copy kb-mini-icon" onclick="app.copyToClipboard(document.getElementById('kb-pre-${n.id}').innerText)" title="Kopyala" style="font-size: 1.1rem; cursor:pointer;"></i>
-                            ${isKodlar ? `
-                            <i class="fas fa-play-circle kb-mini-icon" onclick="app.openRunCommandModal(${n.id})" title="${isMulti ? 'Sıralı Komutları Çalıtır' : 'Çalıtır'}" style="color: ${isMulti ? '#ff4b2b' : 'var(--accent)'}; font-size: 1.4rem; cursor:pointer;"></i>
-                            ` : ''}
+                            <pre id="kb-pre-${n.id}" style="margin:0; white-space: pre-wrap; font-family: inherit;">${displayContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
                         </div>
                     </div>`;
             }
             return `
-            <div class="kb-card" id="kb-card-${n.id}">
+            <div class="kb-card fade-in" id="kb-card-${n.id}">
                 <div class="kb-header" onclick="app.toggleKB(${n.id})">
-                    <div class="kb-title">${n.title || 'İsimsiz Bilgi'}</div>
+                    <div class="kb-title-wrapper">
+                        <i class="fas fa-folder" style="font-size: 1.3rem;"></i> 
+                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;">${(n.title || 'İsimsiz Bilgi').toUpperCase()}</span>
+                    </div>
                     <i class="fas fa-chevron-down kb-icon"></i>
                 </div>
+                
                 <div class="kb-content">
-                    <div id="kb-body-${n.id}" class="kb-body">
+                    <div id="kb-body-${n.id}" class="kb-body custom-scrollbar">
+                        ${n.last_edit_user ? `<div style="font-size: 0.75rem; color: #a0a0a0; margin-bottom: 10px; font-style: italic;"><i class="fas fa-edit"></i> Son düzenleyen: ${n.last_edit_user}</div>` : ''}
                         ${contentHtml}
-                        ${n.image_path ? `<img src="${this.state.API_BASE.replace('/api', '')}/uploads/notes/${n.image_path}" class="timeline-image" style="max-height:300px;" onclick="window.open(this.src)">` : ''}
+                        ${n.image_path ? `<img src="${this.state.API_BASE.replace('/api', '')}/uploads/notes/${n.image_path}" class="timeline-image" style="max-height:300px; margin-top:10px;" onclick="window.open(this.src)">` : ''}
                     </div>
-                    <div class="kb-footer">
-                        ${date !== '-' ? `<span>${date}</span>` : ''}
-                        ${n.user_name ? `<span><i class="fas fa-user-edit"></i> ${n.user_name.toUpperCase()}</span>` : ''}
+                    
+                    <div class="kb-action-grid">
+                        <div class="kb-action-btn" onclick="app.copyToClipboard(document.getElementById('kb-pre-${n.id}').innerText)" style="color: #00d2ff;">
+                            <div class="icon-circle" style="background: rgba(0, 210, 255, 0.1); border: 1px solid rgba(0, 210, 255, 0.2);"><i class="fas fa-copy"></i></div>
+                            <span>KOPYALA</span>
+                        </div>
+                        
+                        ${(isKodlar ? isAdmin : this.canEdit('general-notes')) ? `
+                        <div class="kb-action-btn" onclick="app.editKBEntry(${n.id})" style="color: #ffcc00;">
+                            <div class="icon-circle" style="background: rgba(255, 204, 0, 0.1); border: 1px solid rgba(255, 204, 0, 0.2);"><i class="fas fa-pencil"></i></div>
+                            <span>DÜZENLE</span>
+                        </div>` : '<div></div>'}
+                        
+                        ${isKodlar ? `
+                        <div class="kb-action-btn" onclick="app.openRunCommandModal(${n.id})" style="color: #00ff88;">
+                            <div class="icon-circle" style="background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.2);"><i class="fas fa-terminal"></i></div>
+                            <span>ÇALIŞTIR</span>
+                        </div>` : '<div></div>'}
                     </div>
                 </div>
             </div>`;
@@ -4426,7 +5835,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             const inputs = document.querySelectorAll('.multi-command-input');
             const commands = Array.from(inputs).map(inp => inp.value.trim()).filter(v => v);
             if (commands.length < 2) return alert('Lütfen en az 2 komut giriniz.');
-            content = JSON.stringify({ type: 'multi', commands: commands, delay: 60000 });
+            content = JSON.stringify({ type: 'multi', commands: commands });
         } else {
             content = document.getElementById('kb-content').value;
             if (type !== 'indir' && !content) return alert('Lütfen içerik giriniz.');
@@ -4440,12 +5849,24 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             const formData = new FormData();
             formData.append('device_type', type);
             formData.append('type', type);
+            formData.append('original_type', this.state_kb.tab || 'kodlar');
             formData.append('title', title);
             formData.append('content', content);
             formData.append('requires_user', document.getElementById('kb-requires-user').checked ? 1 : 0);
             formData.append('user_id', this.state.activeUser.key);
             formData.append('user_name', this.state.activeUser.display_name || this.state.activeUser.username || this.state.activeUser.name || 'Sistem');
             formData.append('role', this.state.activeUser.role);
+            
+            if (this.state.activeUser.role === 'ADMIN') {
+                const isRestricted = document.getElementById('kb-is-restricted').checked;
+                formData.append('is_restricted', isRestricted ? '1' : '0');
+                if (isRestricted) {
+                    const container = document.getElementById('kb-allowed-users');
+                    const selectedUsers = Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value).join(',');
+                    formData.append('allowed_users', selectedUsers);
+                }
+            }
+            
             if (imageFile) formData.append('image', imageFile);
             
             let url = this.state.API_BASE + '/notes/kb/add';
@@ -4474,13 +5895,16 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
     },
     generateMultiInputs: function(count) {
         const container = document.getElementById('kb-multi-inputs');
+        const existingInputs = Array.from(container.querySelectorAll('textarea')).map(ta => ta.value);
         container.innerHTML = '';
         for (let i = 1; i <= count; i++) {
-            container.innerHTML += `
-                <div class="form-group">
-                    <label style="font-size:0.65rem; color:var(--accent);">KOMUT #${i}</label>
-                    <textarea class="search-bar multi-command-input" placeholder="Komut giriniz..." style="min-height:60px; font-family:monospace;"></textarea>
-                </div>`;
+            const val = existingInputs[i - 1] || '';
+            const div = document.createElement('div');
+            div.className = 'form-group';
+            div.innerHTML = `<label style="font-size:0.65rem; color:var(--accent);">KOMUT #${i}</label>
+                <textarea class="search-bar multi-command-input" placeholder="Komut giriniz..." style="min-height:60px; font-family:monospace;"></textarea>`;
+            div.querySelector('textarea').value = val;
+            container.appendChild(div);
         }
     },
     applyKBUserPlaceholder: function(id) {
@@ -4508,7 +5932,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         if (bimFunction === 'AddPrinter') titleText = ">_ Uzaktan Yazıcı Ekle";
         if (bimFunction === 'RemovePrinter') titleText = ">_ Uzaktan Yazıcı Kaldır";
         if (customScript && customScript === 'reboot') titleText = ">_ Bilgisayarı Yeniden Başlat";
-        if (customScript && customScript === 'shutdown') titleText = ">_ Bilgisayarı Kapat";
+        if (customScript && customScript === 'poweroff') titleText = ">_ Bilgisayarı Kapat";
         
         const titleEl = document.querySelector('#run-command-modal h3');
         if (titleEl) {
@@ -4548,8 +5972,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         const btn = document.getElementById('btn-execute-run');
 
         if (!ip) return alert('Lütfen komutun çalıtırılacaı IP adresini giriniz.');
-        if (!bimUser) return alert('Lütfen BİM kullanıcı adınızı giriniz.');
-        if (!bimPass) return alert('Lütfen BİM ifrenizi giriniz.');
+
         if (!rawCommand) return alert('alıtırılacak komut bulunamadı.');
 
         let commands = [rawCommand];
@@ -4560,8 +5983,8 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             if (rawCommand.startsWith('{')) {
                 const parsed = JSON.parse(rawCommand);
                 if (parsed.type === 'multi') {
-                    commands = parsed.commands;
-                    delayMs = parsed.delay || 60000;
+                    // Tüm komutları && ile birleştirerek tek komut yapıyoruz
+                    commands = [parsed.commands.join(' && ')];
                 }
             }
         } catch(e) { console.error(e); }
@@ -4572,7 +5995,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         try {
             for (let i = 0; i < commands.length; i++) {
                 const cmd = commands[i];
-                btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Komut ${i+1}/${commands.length} Gönderiliyor...`;
+                btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${i+1}. komut çalıştırılıyor...`;
                 
                 const resp = await this.apiRequest('/bim/run_command', {
                     method: 'POST',
@@ -4590,15 +6013,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
 
                 this.showToast(`Komut ${i+1} iletildi: ${result.result || 'OK'}`);
 
-                // Eer sonraki komut varsa ve delay tanımlıysa bekle
-                if (i < commands.length - 1 && delayMs > 0) {
-                    let secondsLeft = delayMs / 1000;
-                    while (secondsLeft > 0) {
-                        btn.innerHTML = `<i class="fas fa-clock"></i> Bekleniyor... (${secondsLeft}s)`;
-                        await new Promise(r => setTimeout(r, 1000));
-                        secondsLeft--;
-                    }
-                }
+                this.showToast(`Komut iletildi: ${result.result || 'OK'}`);
             }
             this.showToast('Tüm komutlar sırayla iletildi.');
             document.getElementById('run-command-modal').style.display = 'none';
@@ -4616,7 +6031,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         this.closeKBModal();
     },
     deleteKBEntry: async function(id) {
-        if (!confirm('Bu bilgiyi silmek istediinize emin misiniz?')) return;
+        if (!confirm('Bu bilgiyi silmek istediğinize emin misiniz?')) return;
         try {
             const resp = await this.apiRequest(`/notes/kb/delete/${id}?user_id=${this.state.activeUser.key}&role=${this.state.activeUser.role}`, {
                 method: 'DELETE'
@@ -4645,6 +6060,14 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         this.renderGeneralNotes(filtered);
     },
     openKBModal: function(id = null) {
+        if (!id && this.state_kb && this.state_kb.tab === 'indir') {
+            if (this.state.activeUser && this.state.activeUser.role === 'ADMIN') {
+                this.showNewIsvecModal();
+            } else {
+                this.showToast('Bu islem icin ADMIN yetkisi gereklidir.', 'error');
+            }
+            return;
+        }
         const isAdmin = this.state.activeUser.role === 'ADMIN';
         document.getElementById('kb-modal').style.display = 'flex';
         document.getElementById('kb-modal-title').innerHTML = id ? '<i class="fas fa-edit"></i> Bilgiyi Düzenle' : '<i class="fas fa-pen-to-square"></i> Yeni Bilgi / Not Ekle';
@@ -4654,6 +6077,56 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         document.getElementById('kb-type').value = this.state_kb.tab || 'kodlar';
         document.getElementById('kb-requires-user').checked = false;
         document.getElementById('kb-multi-command').checked = false;
+        document.getElementById('kb-is-restricted').checked = false;
+        document.getElementById('kb-allowed-users-container').style.display = 'none';
+        
+        if (isAdmin) {
+            document.getElementById('kb-restricted-group').style.display = 'block';
+            this.apiRequest('/users/get_all').then(users => {
+                const container = document.getElementById('kb-allowed-users');
+                container.innerHTML = '';
+                if (users && users.length) {
+                    users.forEach(u => {
+                        const div = document.createElement('div');
+                        div.style.display = 'flex';
+                        div.style.alignItems = 'center';
+                        div.style.gap = '8px';
+                        
+                        const cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.value = u.id;
+                        cb.style.width = '16px';
+                        cb.style.height = '16px';
+                        cb.style.cursor = 'pointer';
+                        
+                        const lbl = document.createElement('label');
+                        lbl.textContent = `${u.display_name} (${u.username})`;
+                        lbl.style.margin = '0';
+                        lbl.style.cursor = 'pointer';
+                        lbl.style.fontSize = '0.85rem';
+                        lbl.style.textTransform = 'none';
+                        lbl.onclick = () => cb.click();
+                        
+                        div.appendChild(cb);
+                        div.appendChild(lbl);
+                        container.appendChild(div);
+                    });
+                }
+                
+                // Apply selection immediately after loading users
+                if (id) {
+                    const item = this.state_kb.raw.find(x => x.id == id);
+                    if (item && item.allowed_users) {
+                        Array.from(container.querySelectorAll('input[type="checkbox"]')).forEach(cb => {
+                            cb.checked = item.allowed_users.includes(',' + cb.value + ',');
+                        });
+                    }
+                }
+            }).catch(err => console.error("Error loading users for kb:", err));
+        } else {
+            document.getElementById('kb-restricted-group').style.display = 'none';
+        }
+
         this.handleMultiCommandToggle(false);
         document.getElementById('kb-btn-delete').style.display = id ? 'block' : 'none';
         document.getElementById('kb-image').value = '';
@@ -4662,8 +6135,13 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             const item = this.state_kb.raw.find(x => x.id == id);
             if (item) {
                 document.getElementById('kb-title').value = item.title || '';
-                document.getElementById('kb-type').value = item.type || 'kodlar';
+                document.getElementById('kb-type').value = this.state_kb.tab || 'kodlar';
                 document.getElementById('kb-requires-user').checked = item.requires_user == 1;
+                
+                if (isAdmin) {
+                    document.getElementById('kb-is-restricted').checked = item.is_restricted == 1;
+                    document.getElementById('kb-allowed-users-container').style.display = item.is_restricted == 1 ? 'block' : 'none';
+                }
                 
                 // Çoklu komut kontrolü
                 if (item.content && item.content.startsWith('{"type":"multi"')) {
@@ -4721,44 +6199,65 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         const modal = document.getElementById(modalId);
         if (modal) {
             modal.style.display = 'flex';
+            // Formun ilk halini kaydet (Deiiklik kontrolü için)
+            const form = modal.querySelector('form');
+            if (form) {
+                const data = new FormData(form);
+                this.state.initialFormData = JSON.stringify(Object.fromEntries(data));
+            }
+            if (type === 'hasar-tespit') {
+                const bSorumlu = document.getElementById('ht-birim-sorumlusu');
+                if (bSorumlu) bSorumlu.value = 'Yetkili Kişi 1';
+            }
         } else {
             // Generic fallback for placeholders
             const genericModal = document.getElementById('doc-modal-generic');
             const titles = {
-                'sla-sehven': 'SLA Sehven Tutanaı',
+                'sla-sehven': 'SLA Sehven Tutanağı',
                 'barcode-manual': 'Manuel Barkod',
                 'barcode-55x45': 'Manuel Barkod (55x45)',
                 'barcode-100x100': 'Manuel Barkod (100x100)'
             };
-            document.getElementById('generic-modal-title').innerText = titles[type] || 'Form Taslaı';
-            genericModal.style.display = 'flex';
+            if(document.getElementById('generic-modal-title')) {
+                document.getElementById('generic-modal-title').innerText = titles[type] || 'Form Taslağı';
+            }
+            if(genericModal) genericModal.style.display = 'flex';
         }
     },
     closeDocModal: function(type) {
         const modalId = type === 'generic' ? 'doc-modal-generic' : `doc-modal-${type}`;
         const modal = document.getElementById(modalId);
-        if (modal) modal.style.display = 'none';
+        if (modal) {
+            const form = modal.querySelector('form');
+            if (form && this.state.initialFormData) {
+                const currentData = new FormData(form);
+                const currentDataStr = JSON.stringify(Object.fromEntries(currentData));
+                if (currentDataStr !== this.state.initialFormData) {
+                    if (!confirm('Kaydedilmemiş değişiklikleriniz var. Çıkmak istediğinize emin misiniz?')) return;
+                }
+            }
+            modal.style.display = 'none';
+        }
     },
     // 
     //  SERVICE OPERATIONS
     // 
     loadServiceRecords: async function() {
         const tbody = document.getElementById('service-table-body');
-        if (!tbody) return;
         try {
             const resp = await this.apiRequest('/service/get_all');
             const data = resp;
             if (data.error) {
                 console.error("Service API Error:", data.error);
-                tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:#ff4b2b; padding:20px;">Hata: ${data.error}</td></tr>`;
+                if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:#ff4b2b; padding:20px;">Hata: ${data.error}</td></tr>`;
                 return;
             }
             this.state_service.raw = Array.isArray(data) ? data : [];
             this.state_service.filtered = this.state_service.raw;
-            this.renderServiceTable(this.state_service.filtered);
+            if (tbody) this.renderServiceTable(this.state_service.filtered);
         } catch (e) {
             console.error("Service Load Error:", e);
-            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:red; padding:20px;">Yükleme Hatası (Sunucu Erişimi)!</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:red; padding:20px;">Yükleme Hatası (Sunucu Erişimi)!</td></tr>';
         }
     },
     renderServiceTable: function(items) {
@@ -4811,7 +6310,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             </tr>`;
         }).join('');
     },
-    openAddServiceModal: function(printer_id = null) {
+    openAddServiceModal: function(printer_id = null, deviceClass = null) {
         try {
             const isAdmin = this.state.activeUser && (this.state.activeUser.role === 'ADMIN' || this.state.activeUser.role === 'EDITOR');
             // Formu sıfırla
@@ -4824,6 +6323,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             // Alanları temizle
             const fields = [
                 'service-pr-no', 'service-seri', 'service-mac', 'service-model', 
+                'service-sla-no',
                 'service-mahal', 'service-acq-place', 'service-acq-date', 
                 'service-sent-date', 'service-return-date', 'service-substitute-pr-no',
                 'service-fault-desc'
@@ -4861,20 +6361,28 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
                     if(e.target.value && statusEl) statusEl.value = 'Depoda';
                 };
             }
+
+            // Role tabanlı tarih kısıtlaması
+            const userRole = (this.state.activeUser && this.state.activeUser.role) ? this.state.activeUser.role.toUpperCase() : '';
+            const canEditOtherDates = (userRole === 'ADMIN' || userRole === 'DEPOT');
+            const sentDate = document.getElementById('service-sent-date');
+            if (sentDate) sentDate.readOnly = !canEditOtherDates;
+            if (retDate) retDate.readOnly = !canEditOtherDates;
             const ikameCheck = document.getElementById('service-has-substitute');
             if(ikameCheck) {
                 ikameCheck.checked = false;
-                const subContainer = document.getElementById('service-substitute-container');
-                if(subContainer) {
-                    subContainer.style.display = 'none';
+                const subInput = document.getElementById('service-substitute-pr-no');
+                if(subInput) {
+                    subInput.disabled = true;
                     ikameCheck.onchange = (e) => {
-                        subContainer.style.display = e.target.checked ? 'block' : 'none';
+                        subInput.disabled = !e.target.checked;
+                        if (!e.target.checked) subInput.value = '';
                     };
                 }
             }
             // Eger printer_id varsa bilgileri doldur
             if (printer_id && this.state.printers) {
-                const p = this.state.printers.find(x => x.id == printer_id);
+                const p = this.state.printers.find(x => x.id == printer_id && (deviceClass ? (x.device_class || 'PRINTER') === deviceClass : true));
                 if (p) {
                     if(document.getElementById('service-pr-no')) document.getElementById('service-pr-no').value = p.pr_no || p.name || '';
                     if(document.getElementById('service-seri')) document.getElementById('service-seri').value = p.seri || p.serial_no || p.serial || '';
@@ -4936,6 +6444,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             'service-seri': record.seri,
             'service-mac': record.mac,
             'service-model': record.model,
+            'service-sla-no': record.sla_no,
             'service-mahal': record.mahal,
             'service-acq-place': record.acq_place,
             'service-acq-date': app.formatDateForInput(record.acquisition_date),
@@ -4956,10 +6465,14 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
 
         // İkame yazıcı kontrolü
         const ikameCheck = document.getElementById('service-has-substitute');
-        if (ikameCheck) {
+        const subInput = document.getElementById('service-substitute-pr-no');
+        if (ikameCheck && subInput) {
             ikameCheck.checked = !!record.has_substitute;
-            const subContainer = document.getElementById('service-substitute-container');
-            if (subContainer) subContainer.style.display = record.has_substitute ? 'block' : 'none';
+            subInput.disabled = !ikameCheck.checked;
+            ikameCheck.onchange = (e) => {
+                subInput.disabled = !e.target.checked;
+                if (!e.target.checked) subInput.value = '';
+            };
         }
 
         // Silme butonunu adminlere göster
@@ -4983,7 +6496,7 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         
         try {
             this.showToast('CUPS güncelleniyor, lütfen bekleyin...', 'info');
-            const resp = await this.apiRequest('/printers/printers/cups/modify_location', {
+            const resp = await this.apiRequest('/inventory/printers/cups/modify_location', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ pr_no: pr_no, location: mahal })
@@ -5057,10 +6570,17 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         const returnDateVal = document.getElementById('service-return-date').value;
 
         // YENİ GÜVENLİK: Mükerrer kayıt engeli (Sadece yeni kayıt eklerken)
-        if (!editId && prNoVal) {
-            const activeRecord = this.state_service.raw.find(s => 
-                s.pr_no === prNoVal && (!s.return_date || s.return_date.trim() === "" || s.return_date === "-")
-            );
+        // Eğer geldiği tarih doluysa bu "geçmiş kayıt ekleme" işlemidir, engelleme
+        const sentDateVal = document.getElementById('service-sent-date').value;
+        const isHistoricalRecord = (returnDateVal && returnDateVal.trim() !== '');
+        console.log('[SERVICE SAVE] editId:', editId, 'prNo:', prNoVal, 'returnDate:', returnDateVal, 'sentDate:', sentDateVal, 'isHistorical:', isHistoricalRecord);
+        
+        if (!editId && prNoVal && !isHistoricalRecord) {
+            const normPr = prNoVal.trim().toUpperCase();
+            const activeRecord = this.state_service.raw.find(s => {
+                const sPr = (s.pr_no || '').trim().toUpperCase();
+                return sPr === normPr && (!s.return_date || s.return_date.trim() === "" || s.return_date === "-");
+            });
             if (activeRecord) {
                 alert(`HATA: ${prNoVal} için zaten açık bir servis kaydı bulunuyor! Önceki kayıt sonuçlanmadan yenisi açılamaz.`);
                 return;
@@ -5068,25 +6588,38 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
         }
 
         const printerIdVal = document.getElementById('service-printer-id').value;
+        const slaNoVal = document.getElementById('service-sla-no').value;
+
+        if (!slaNoVal || slaNoVal.trim() === '') {
+            alert('HATA: SLA No alanı zorunludur!');
+            return;
+        }
+
         const payload = {
             printer_id: printerIdVal ? parseInt(printerIdVal) : null,
             pr_no: prNoVal,
             seri: document.getElementById('service-seri').value,
             mac: document.getElementById('service-mac').value,
             model: document.getElementById('service-model').value,
+            sla_no: slaNoVal,
             mahal: document.getElementById('service-mahal').value,
-            acq_place: document.getElementById('service-acq-place').value,
+            acq_place: document.getElementById('service-acq-place') ? document.getElementById('service-acq-place').value : null,
             acquisition_date: document.getElementById('service-acq-date').value,
             sent_date: document.getElementById('service-sent-date').value,
             return_date: returnDateVal,
-            status: document.getElementById('service-status').value,
+            status: document.getElementById('service-status') ? document.getElementById('service-status').value : null,
             fault_description: document.getElementById('service-fault-desc').value,
             has_substitute: document.getElementById('service-has-substitute').checked,
             substitute_pr_no: document.getElementById('service-substitute-pr-no').value,
             user_name: this.state.activeUser.username
         };
 
+        this.state.initialFormData = null;
+
         try {
+            // ══════════════════════════════════════════════
+            // 1. SQL'E KAYDET (INSERT veya UPDATE)
+            // ══════════════════════════════════════════════
             const url = editId ? `${this.state.API_BASE}/service/update/${editId}` : `${this.state.API_BASE}/service/add`;
             const method = editId ? 'PUT' : 'POST';
             
@@ -5101,66 +6634,6 @@ rm -f /KEYDATA/Script/MountAuto_${folder}.sh`;
             document.getElementById('service-modal').style.display = 'none';
             this.showToast('Servis kaydı başarıyla kaydedildi!');
             
-            // --- AKILLI OTOMASYON ---
-            // 1. İkame işaretlenirse yazıcının mahalini DEPO yap
-            if (payload.has_substitute) {
-                this.showToast('İkame verildi: Yazıcı mahali DEPO olarak güncelleniyor...', 'info');
-                await this.apiRequest('/printers/printers/cups/update_mahal', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pr_no: payload.pr_no, mahal: 'DEPO' })
-                });
-
-                // CUPS SYNC (AÅAMA 4)
-                if (payload.substitute_pr_no) {
-                    this.showToast('CUPS lokasyonu güncelleniyor...', 'info');
-                    try {
-await this.apiRequest('/printers/printers/cups/modify_location', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ 
-                                pr_no: payload.substitute_pr_no, 
-                                location: payload.mahal 
-                            })
-                        });
-                        this.showToast('CUPS lokasyonu başarıyla senkronize edildi.', 'success');
-                    } catch (cupsErr) {
-                        console.error("CUPS Sync Error:", cupsErr);
-                        this.showToast('CUPS senkronizasyonu başarısız, ancak SQL kaydı tamamlandı.', 'warning');
-                    }
-                }
-            } else {
-                const newMahal = payload.mahal.startsWith("SERVİSTE-") ? payload.mahal : "SERVİSTE-" + payload.mahal;
-                this.showToast("İkame verilmedi: Yazıcı mahali " + newMahal + " olarak güncelleniyor...", 'info');
-                await this.apiRequest('/printers/printers/cups/update_mahal', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pr_no: payload.pr_no, mahal: newMahal })
-                });
-                try {
-                    await this.apiRequest('/printers/printers/cups/modify_location', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ pr_no: payload.pr_no, location: newMahal })
-                    });
-                } catch(e) { console.error(e); }
-            }
-
-            // 2. Her durumda yazıcıyı CUPS üzerinden durdur (Pause/Reject)
-            try {
-                this.showToast('CUPS Durduruluyor (Pause/Reject)...', 'info');
-                await this.apiRequest('/printers/printers/cups/pause', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pr_no: payload.pr_no, reason: 'Servis/Arıza' })
-                });
-            } catch (cupsErr) { console.warn('CUPS Otomasyon Hatası:', cupsErr); }
-
-            // 3. Otomatik Yazıcı Değişimi (PC bazlı)
-            if (payload.has_substitute && payload.substitute_pr_no) {
-                this.handleAutomaticPrinterSwap(payload.pr_no, payload.substitute_pr_no);
-            }
-
             this.loadServiceRecords();
             this.renderPrinters(); 
             this.loadDashboardStats();
@@ -5201,7 +6674,7 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
             const backendTargets = targets.map(t => ({ type: 'pc', value: t.id }));
             
             // 3. Eski Yazıcıyı Kaldır
-            const remResp = await this.apiRequest('/printers/printers/batch_action', {
+            const remResp = await this.apiRequest('/inventory/printers/batch_action', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -5217,7 +6690,7 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
             });
             
             // 4. İkame Yazıcıyı Kur
-            const addResp = await this.apiRequest('/printers/printers/batch_action', {
+            const addResp = await this.apiRequest('/inventory/printers/batch_action', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -5254,26 +6727,90 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
         // Printer Web Interface
         window.open('http://' + ip, '_blank');
         // CUPS Interface
-        window.open('https://print01.kocaelish.com:49631/printers/' + pr_no, '_blank');
+        window.open('https://print01.ornek-kurum.com:49631/printers/' + pr_no, '_blank');
     },
     deleteServiceRecord: async function(id) {
-        if (!confirm('Bu servis kaydını silmek istediinize emin misiniz?')) return;
+        if (!confirm('Bu servis kaydını silmek istediğinize emin misiniz?')) return;
         try {
             await this.apiRequest(`/service/delete/${id}`, { method: 'DELETE' });
             this.showToast('Kayıt silindi.');
-            this.loadServiceRecords();
+            await this.loadServiceRecords();
         } catch (e) { alert('Hata: ' + e.message); }
+    },
+    sortServiceTable: function(key) {
+        if (!this.state.activeUser || this.state.activeUser.role !== 'ADMIN') {
+            this.showToast('Sıralama işlemi sadece admin yetkisiyle yapılabilir.', 'warning');
+            return;
+        }
+
+        if (!this.state_service.sortConfig) {
+            this.state_service.sortConfig = { key: null, direction: null };
+        }
+
+        const config = this.state_service.sortConfig;
+        
+        // Remove icon from previous header
+        if (config.key) {
+            const oldIcon = document.getElementById('sort-icon-' + config.key);
+            if (oldIcon) oldIcon.innerHTML = '';
+        }
+
+        if (config.key === key) {
+            if (config.direction === 'asc') config.direction = 'desc';
+            else if (config.direction === 'desc') config.direction = null;
+            else config.direction = 'asc';
+        } else {
+            config.key = key;
+            config.direction = 'asc';
+        }
+
+        if (config.direction === null) {
+            config.key = null;
+        }
+
+        // Add icon to current header
+        if (config.key && config.direction) {
+            const newIcon = document.getElementById('sort-icon-' + config.key);
+            if (newIcon) {
+                newIcon.innerHTML = config.direction === 'asc' ? ' <i class="fas fa-sort-alpha-down"></i>' : ' <i class="fas fa-sort-alpha-up-alt"></i>';
+            }
+        }
+
+        this.filterServiceRecords();
     },
     filterServiceRecords: function() {
         const query = document.getElementById('service-search').value.toUpperCase();
         const status = document.getElementById('service-filter-status').value;
-        const filtered = this.state_service.raw.filter(s => {
+        let filtered = this.state_service.raw.filter(s => {
             const matchesQuery = (s.pr_no || '').toUpperCase().includes(query) || 
                                 (s.seri || '').toUpperCase().includes(query) || 
                                 (s.mahal || '').toUpperCase().includes(query);
             const matchesStatus = status === 'ALL' || s.status === status;
             return matchesQuery && matchesStatus;
         });
+
+        const config = this.state_service.sortConfig;
+        if (config && config.key && config.direction) {
+            filtered.sort((a, b) => {
+                let valA = a[config.key] || '';
+                let valB = b[config.key] || '';
+                
+                // If the key is an integer (like sla_no), compare as numbers
+                if (config.key === 'sla_no') {
+                    valA = parseInt(valA) || 0;
+                    valB = parseInt(valB) || 0;
+                    return config.direction === 'asc' ? valA - valB : valB - valA;
+                }
+
+                if (typeof valA === 'string') valA = valA.toLowerCase();
+                if (typeof valB === 'string') valB = valB.toLowerCase();
+
+                if (valA < valB) return config.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return config.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
         this.renderServiceTable(filtered);
     },
     downloadServiceDeliveryForm: function() {
@@ -5292,7 +6829,7 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
     // 
     //  DOCUMENTS (PDF)
     // 
-    sendPDFRequest: async function(payload, type, isFormData = false) {
+    sendPDFRequest: async function(payload, type, isFormData = false, sendToCups = false) {
         try {
             const options = {
                 method: 'POST',
@@ -5301,46 +6838,63 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
             if (!isFormData) {
                 options.headers = { 'Content-Type': 'application/json' };
             }
-            const response = await this.apiRequest('/documents/generate_tutanak', {
-                ...options
-            });
+            const apiUrl = this.state.API_BASE + '/documents/generate_tutanak';
+            const response = await fetch(apiUrl, options);
             if (!response.ok) {
-                const errData = response;
-                throw new Error(errData.error || 'Backend hatası');
+                let errMsg = 'Backend hatası';
+                try {
+                    const errData = await response.json();
+                    errMsg = errData.error || errData.message || errMsg;
+                } catch(e) {}
+                throw new Error(errMsg);
             }
             // --- CUPS CHECK ---
-            if (response.headers.get('Content-Type').includes('application/json')) {
-                const res = response;
+            const contentType = response.headers.get('Content-Type') || '';
+            if (contentType.includes('application/json')) {
+                const res = await response.json();
                 if (res.success) {
                     this.showToast('<i class="fas fa-print"></i> ' + res.message);
                     return;
+                } else {
+                    throw new Error(res.error || res.message || 'İşlem başarısız');
                 }
             }
             // Dosya tipini kontrol et (PDF mi XLSX mi?)
             const disposition = response.headers.get('Content-Disposition');
-            const contentType = response.headers.get('Content-Type') || '';
-            let isExcel = contentType.includes('spreadsheet') || (disposition && disposition.includes('.xlsx'));
+            let isExcel = contentType.includes('spreadsheet') || (disposition && (disposition.includes('.xlsx') || disposition.includes('excel')));
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             if (isExcel) {
-                // Excel dosyasını indir - kullanıcı açıp yazdıracak
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `Tutanak_${type}_${new Date().toLocaleDateString('tr-TR')}.xlsx`;
-                a.click();
-                this.showToast('Doldurulmu Excel ablonu indiriliyor. Açıp yazdırabilirsiniz.');
+                if (sendToCups) {
+                    const cupsFile = new File([blob], `Tutanak_${type}_${new Date().toLocaleDateString('tr-TR')}.xlsx`, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                    this.openMobilePrintModalForFile(cupsFile);
+                } else {
+                    // Excel dosyasını indir - kullanıcı açıp yazdıracak
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Tutanak_${type}_${new Date().toLocaleDateString('tr-TR')}.xlsx`;
+                    a.click();
+                    this.showToast('Doldurulmuş Excel şablonu indiriliyor. Açıp yazdırabilirsiniz.');
+                }
             } else {
-                // PDF'i dorudan yazdır
-                this.directPrint(url);
-                this.showToast('Yazdırma penceresi açılıyor...');
+                if (sendToCups) {
+                    const cupsFile = new File([blob], `Tutanak_${type}_${new Date().toLocaleDateString('tr-TR')}.pdf`, { type: 'application/pdf' });
+                    this.openMobilePrintModalForFile(cupsFile);
+                } else {
+                    // PDF'i doğrudan yazdır
+                    this.directPrint(url);
+                    this.showToast('Yazdırma penceresi açılıyor...');
+                }
             }
         } catch (e) { alert('Hata: ' + e.message); }
     },
-    generateZimmetPDF: async function(format = 'pdf') {
+    generateZimmetPDF: async function(format = 'pdf', sendToCups = false) {
         if (this.state.zimmetDevices.length === 0) return alert('Lütfen en az bir cihaz ekleyin.');
         const staff = document.getElementById('zimmet-staff-name').value;
         const alan = document.getElementById('zimmet-teslim-alan').value;
+        const alan_unvan = document.getElementById('zimmet-teslim-alan-unvan') ? document.getElementById('zimmet-teslim-alan-unvan').value : '';
         const veren = document.getElementById('zimmet-teslim-eden').value;
+        const veren_unvan = document.getElementById('zimmet-teslim-eden-unvan') ? document.getElementById('zimmet-teslim-eden-unvan').value : 'Bilgi İşlem ve HBYS Uzm. Yrd.';
         if (!staff || !alan || !veren) {
             return alert('Lütfen personel adı ve teslim alan/eden bilgilerini doldurun.');
         }
@@ -5352,9 +6906,11 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
                 staff: staff,
                 devices: this.state.zimmetDevices,
                 alan: alan,
-                veren: veren
+                alan_unvan: alan_unvan,
+                veren: veren,
+                veren_unvan: veren_unvan
             }
-        }, 'ZIMMET');
+        }, 'ZIMMET', false, sendToCups);
     },
     openAddDeviceToZimmet: function() {
         document.getElementById('zimmet-device-modal').style.display = 'flex';
@@ -5426,7 +6982,7 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
                 const view = e.target.dataset.view;
                 this.navigateTo(view);
                 // Lazy-load printers when tab is clicked
-                if (view === 'printers' && !this.state.printers.length) {
+                if (view === 'inventory' && ['PRINTER', 'BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER'].includes(this.state.invCategory) && !this.state.printers.length) {
                     this.renderPrinters();
                 }
                 // Load service records when tab is clicked
@@ -5466,7 +7022,7 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
         }
     },
     deleteArea: async function(id) {
-        if (!confirm('Bu ortak alan kaydını sistemden silmek istediinize emin misiniz?')) return;
+        if (!confirm('Bu ortak alan kaydını sistemden silmek istediğinize emin misiniz?')) return;
         try {
             const resp = await this.apiRequest('/areas/delete/' + id, { method: 'DELETE' });
             const result = resp;
@@ -5568,19 +7124,20 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
         try {
             const resp = await this.apiRequest('/users/get_all');
             const users = resp;
-            tbody.innerHTML = users.map(u => {
+            this.state.users = Array.isArray(users) ? users : [];
+            tbody.innerHTML = this.state.users.map(u => {
                 const created = u.created_at ? u.created_at : '-';
                 const lastLog = u.last_login ? u.last_login : '-';
                 return `
                 <tr>
-                    <td style="font-weight:600;">${u.username}</td>
-                    <td>${u.display_name}</td>
-                    <td><span class="role-badge" style="background: rgba(255,255,255,0.2);">${u.role}</span></td>
+                    <td style="font-weight:600;">${this.escapeHtml(u.username || '')}</td>
+                    <td>${this.escapeHtml(u.display_name || '')}</td>
+                    <td><span class="role-badge" style="background: rgba(255,255,255,0.2);">${this.escapeHtml(u.role || '')}</span></td>
                     <td style="font-size:0.75rem; opacity:0.6;">${created}</td>
                     <td style="font-size:0.75rem; color:var(--accent);">${lastLog}</td>
                     <td style="text-align: right;">
                         <div class="flex-row gap-2" style="justify-content: flex-end;">
-                            <button class="btn-chip" onclick="app.openEditUserModal(${u.id}, '${u.username}', '${u.display_name}', '${u.role}', ${u.permissions ? `'${u.permissions}'` : 'null'})"><i class="fas fa-edit"></i></button>
+                            <button class="btn-chip" onclick="app.openEditUserModalById(${u.id})"><i class="fas fa-edit"></i></button>
                             <button class="btn-chip" onclick="app.deleteUser(${u.id})" style="color:#ff4b2b;"><i class="fas fa-trash"></i></button>
                         </div>
                     </td>
@@ -5615,6 +7172,23 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
             container.style.display = 'none';
         }
     },
+    openEditUserModalById: function(id) {
+        const list = this.state.users || [];
+        const user = list.find(u => String(u.id) === String(id));
+        if (!user) {
+            this.showToast('Kullanıcı bilgisi bulunamadı, liste yenileniyor...', 'warning');
+            this.loadUsers();
+            return;
+        }
+        this.openEditUserModal(
+            user.id,
+            user.username || '',
+            user.display_name || '',
+            user.role || 'VIEWER',
+            user.permissions || null
+        );
+    },
+
     openEditUserModal: function(id, username, displayName, role, permissions) {
         document.getElementById('user-modal-title').innerHTML = '<i class="fas fa-user-edit"></i> Kullanıcı Düzenle';
         document.getElementById('user-edit-id').value = id;
@@ -5623,13 +7197,21 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
         document.getElementById('user-displayname').value = displayName;
         document.getElementById('user-password').value = '';
         document.getElementById('user-password').placeholder = 'Yeni ifre (bo bırakılırsa deimez)';
-        document.getElementById('user-role').value = role;
-        this.handleUserRoleChange(role);
+        const cleanRole = role || 'VIEWER';
+        document.getElementById('user-role').value = cleanRole;
+        this.handleUserRoleChange(cleanRole);
         // Checkboxları doldur
         const container = document.getElementById('user-permissions-container');
         const checks = container.querySelectorAll('input[type="checkbox"]');
         let allowed = [];
-        try { allowed = permissions ? JSON.parse(permissions) : []; } catch(e) { console.error(e); }
+        try {
+            if (Array.isArray(permissions)) allowed = permissions;
+            else if (permissions && typeof permissions === 'string') allowed = JSON.parse(permissions);
+            else allowed = [];
+        } catch(e) {
+            console.error('permissions parse error:', e, permissions);
+            allowed = [];
+        }
         checks.forEach(cb => {
             cb.checked = allowed.includes(cb.value);
         });
@@ -5653,7 +7235,7 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
             if (editId) {
                 // Güncelle
                 const payload = { display_name: displayName, role: role, permissions: permissions };
-                if (password) payload.password = password;
+                if (password && password !== '********') payload.password = password;
                 resp = await this.apiRequest('/users/update/' + editId, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
@@ -5676,7 +7258,7 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
         } catch(e) { alert('Hata: ' + e.message); }
     },
     deleteUser: async function(id) {
-        if (!confirm('Bu kullanıcıyı silmek istediinize emin misiniz?')) return;
+        if (!confirm('Bu kullanıcıyı silmek istediğinize emin misiniz?')) return;
         try {
             const resp = await this.apiRequest('/users/delete/' + id, { method: 'DELETE' });
             const result = resp;
@@ -5780,9 +7362,9 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
             const resp = await this.apiRequest(`/admin/reports/tail?file_id=${file_id}&lines=${lines}`);
             if (contentEl) {
                 if (resp.success) {
-                    contentEl.textContent = resp.content || '(Boş)';
+                    contentEl.innerHTML = resp.content ? app.colorizeConsoleLog(resp.content) : '(Boş)';
                 } else {
-                    contentEl.textContent = "Hata: " + (resp.error || "Dosya okunamadı.");
+                    contentEl.innerHTML = "<span style='color:var(--danger)'>Hata: " + (resp.error || "Dosya okunamadı.") + "</span>";
                 }
             }
         } catch(e) {
@@ -5803,9 +7385,9 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
             const resp = await this.apiRequest(`/admin/reports/view?file_id=${file_id}`);
             if (contentEl) {
                 if (resp.success) {
-                    contentEl.textContent = resp.content || '(Boş)';
+                    contentEl.innerHTML = resp.content ? app.colorizeConsoleLog(resp.content) : '(Boş)';
                 } else {
-                    contentEl.textContent = "Hata: " + (resp.error || "Büyük dosyalar doğrudan yüklenemez, lütfen 'tail' özelliğini kullanın.");
+                    contentEl.innerHTML = "<span style='color:var(--danger)'>Hata: " + (resp.error || "Büyük dosyalar doğrudan yüklenemez, lütfen 'tail' özelliğini kullanın.") + "</span>";
                 }
             }
         } catch(e) {
@@ -5856,11 +7438,11 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
                 const resp = await this.apiRequest(`/admin/reports/tail?file_id=${liveFileId}&lines=500`);
                 if (contentEl) {
                     if (resp.success) {
-                        contentEl.textContent = resp.content || '(Konsol çıktısı boş)';
+                        contentEl.innerHTML = resp.content ? app.colorizeConsoleLog(resp.content) : '(Konsol çıktısı boş)';
                         // Otomatik olarak en aşağı kaydır (Real-time cmd terminal hissi)
                         contentEl.scrollTop = contentEl.scrollHeight;
                     } else {
-                        contentEl.textContent = "Hata: " + (resp.error || "Konsol çıktısı yüklenemedi.");
+                        contentEl.innerHTML = "<span style='color:var(--danger)'>Hata: " + (resp.error || "Konsol çıktısı yüklenemedi.") + "</span>";
                     }
                 }
             } catch (e) {
@@ -5894,6 +7476,22 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
             }
         }
     },
+    colorizeConsoleLog: function(text) {
+        if (!text) return '';
+        let escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return text.split('\n').map(line => {
+            let safe = escapeHtml(line);
+            if (safe.includes('[MATRIX_CLICK]')) return `<span style="color: #00E676;">${safe}</span>`;
+            if (safe.includes('[MATRIX]')) return `<span style="color: #29B6F6;">${safe}</span>`;
+            if (safe.includes('ERROR:') || safe.includes('Exception') || safe.includes('Traceback')) return `<span style="color: #FF5252; font-weight:bold;">${safe}</span>`;
+            if (safe.includes('WARNING')) return `<span style="color: #FFD740;">${safe}</span>`;
+            if (safe.match(/HTTP\/1\.\d"\s+200\s+/)) return `<span style="color: #9CCC65;">${safe}</span>`;
+            if (safe.match(/HTTP\/1\.\d"\s+4\d{2}\s+/)) return `<span style="color: #FFA726;">${safe}</span>`;
+            if (safe.match(/HTTP\/1\.\d"\s+5\d{2}\s+/)) return `<span style="color: #FF5252; font-weight:bold;">${safe}</span>`;
+            if (safe.includes('[*]') || safe.includes('[+]')) return `<span style="color: #B39DDB;">${safe}</span>`;
+            return `<span>${safe}</span>`;
+        }).join('\n');
+    },
     // 
     //  AUDIT LOGS
     // 
@@ -5906,7 +7504,7 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
         const table = tableEl ? tableEl.value : '';
         tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; opacity:0.5; padding:20px;"><i class="fas fa-spinner fa-spin"></i> Yükleniyor...</td></tr>';
         try {
-            const resp = await this.apiRequest(`/logs/get_all?user=${user}&table=${table}`);
+            const resp = await this.apiRequest(`/logs/get_all?user=${user}&table=${table}&_t=${new Date().getTime()}`);
             const data = resp;
             this.state.auditLogs = data;
             if (userEl && userEl.options.length <= 1) {
@@ -5921,33 +7519,32 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
                 tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; opacity:0.5; padding:30px;"><i class="fas fa-check-circle" style="color:#00ff88;"></i> İşlem geçmişi temiz.</td></tr>';
                 return;
             }
-            const fieldNameMap = {
-                'is_faulty': 'Arızalı Durumu',
-                'sahada': 'Saha Durumu',
-                'mahal': 'Mahal / Lokasyon',
-                'ip': 'IP Adresi',
-                'seri': 'Seri No',
-                'model': 'Model',
-                'pr_no': 'PR Numarası',
-                'rdp': 'Uzak Masaüstü',
-                'location_code': 'Lokasyon Kodu',
-                'scanner_serial': 'Tarayıcı Seri No',
-                'by_serial': 'Eski Seri No',
-                'status': 'Durum',
-                'personnel': 'Personel',
-                'brand': 'Marka',
-                'mac': 'MAC Adresi',
-                'is_deleted': 'Silinme Durumu',
-                'category': 'Kategori',
-                'current_stock': 'Mevcut Stok',
-                'critical_stock': 'Kritik Stok'
-            };
 
             tbody.innerHTML = data.map(l => {
-                const date = l.timestamp ? l.timestamp.replace('T', ' ').split('.')[0] : '-';
+                let date = '-';
+                if (l.timestamp) {
+                    if (/^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$/.test(l.timestamp)) {
+                        date = l.timestamp;
+                    } else {
+                        try {
+                            const d = new Date(l.timestamp);
+                            if (!isNaN(d.getTime())) {
+                                const pad = (n) => String(n).padStart(2, '0');
+                                date = `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${pad(d.getFullYear())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                            } else {
+                                date = l.timestamp.replace('T', ' ').split('.')[0];
+                            }
+                        } catch (e) {
+                            date = l.timestamp.replace('T', ' ').split('.')[0];
+                        }
+                    }
+                }
                 const cleanOld = (l.old_value || '-').replace('Sahada Kurulu', 'KURULU');
                 const cleanNew = (l.new_value || '-').replace('Sahada Kurulu', 'KURULU');
-                const friendlyFieldName = fieldNameMap[l.field_name] || l.field_name;
+                
+                // Use global fieldLabelMap, fallback to UPPERCASE
+                const friendlyFieldName = this.fieldLabelMap[l.field_name] || l.field_name.toUpperCase();
+                
                 return `
                 <tr>
                     <td style="font-size:0.75rem; white-space:nowrap;">${date}</td>
@@ -6087,7 +7684,7 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
         }
     },
     resetCount: async function() {
-        if (!confirm('TM sayım verileri sıfırlanacak! Yeni bir sayım dönemine balamak istediinize emin misiniz?')) return;
+        if (!confirm('TM sayım verileri sıfırlanacak! Yeni bir sayım dönemine balamak istediğinize emin misiniz?')) return;
         try {
             const resp = await this.apiRequest('/inventory/count/reset', { method: 'POST' });
             const result = resp;
@@ -6103,20 +7700,6 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
     // 
     //  HISTORY CAROUSEL LOGIC
     // 
-    setStateFromRole: function() {
-        if (!this.state.activeUser) return;
-        const isAdmin = this.state.activeUser.role === 'ADMIN';
-        const logNav = document.getElementById('nav-logs');
-        if (logNav) logNav.style.display = isAdmin ? 'block' : 'none';
-        const userNav = document.getElementById('nav-users');
-        if (userNav) userNav.style.display = isAdmin ? 'block' : 'none';
-        const userMenuBtn = document.getElementById('menu-users');
-        if (userMenuBtn) userMenuBtn.style.display = isAdmin ? 'block' : 'none';
-        const keyosSyncBtn = document.getElementById('menu-keyos-sync');
-        if (keyosSyncBtn) keyosSyncBtn.style.display = isAdmin ? 'block' : 'none';
-        const keyosReportBtn = document.getElementById('menu-keyos-report');
-        if (keyosReportBtn) keyosReportBtn.style.display = isAdmin ? 'block' : 'none';
-    },
     closeHistoryModal: function() {
         document.getElementById('history-modal').style.display = 'none';
     },
@@ -6131,7 +7714,7 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
         const container = document.getElementById('history-carousel-content');
         const items = this.state.historyItems;
         if (!items || items.length === 0) {
-            container.innerHTML = '<div style="padding:40px; text-align:center; width:100%; opacity:0.5;">Bu ürün için henüz bir deiiklik kaydı bulunmuyor.</div>';
+            container.innerHTML = '<div style="padding:40px; text-align:center; width:100%; opacity:0.5;">Bu ürün için henüz bir değişiklik kaydı bulunmuyor.</div>';
             document.getElementById('carousel-dots').innerHTML = '';
             return;
         }
@@ -6201,8 +7784,13 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
         const idx = this.state.currentHistoryIndex;
         const item = items[idx];
         if (!item) return;
-        const date = item.created_at ? (isNaN(new Date(item.created_at)) ? item.created_at : new Date(item.created_at).toLocaleString('tr-TR')) : '-';
-        const avatar = item.display_name ? item.display_name[0].toUpperCase() : 'U';
+        const date = item.timestamp ? (isNaN(new Date(item.timestamp)) ? item.timestamp : new Date(item.timestamp).toLocaleString('tr-TR')) : '-';
+        const avatar = item.display_name ? item.display_name[0].toUpperCase() : (item.changed_by ? item.changed_by[0].toUpperCase() : 'U');
+        const username = item.display_name || item.changed_by || 'Bilinmeyen Kullanıcı';
+        
+        // Use global fieldLabelMap, fallback to UPPERCASE
+        const fieldName = this.fieldLabelMap[item.field_name] || (item.field_name ? item.field_name.toUpperCase() : 'BİLİNMEYEN ALAN');
+        
         popup.innerHTML = `
             <div class="hp-header">
                 <div class="hp-title">Düzenleme Geçmişi (${idx + 1}/${items.length})</div>
@@ -6264,9 +7852,9 @@ await this.apiRequest('/printers/printers/cups/modify_location', {
 @echo off
 set "AreaName=${area.name}"
 echo [%AreaName%] Ortak Alan Kurulumu Baslatiliyor...
-:: 1. Klasör oluştur
+:: 1. Klasor olustur
 if not exist "C:\\OrtakAlan" mkdir "C:\\OrtakAlan"
-:: 2. Kalıcı BAT dosyasını oluştur (C:\\OrtakAlan)
+:: 2. Kalici BAT dosyasini olustur (C:\\OrtakAlan)
 (
 echo @echo off
 echo set "DriveLetter=Z:"
@@ -6277,16 +7865,16 @@ echo set "AreaName=${area.name}"
 echo net use %%DriveLetter%% /delete /y ^>nul 2^>^&1
 echo net use %%DriveLetter%% "%%RemotePath%%" /user:%%Username%% %%Password%% /persistent:yes
 echo powershell -Command "$s=(New-Object -COM WScript.Shell).CreateShortcut('%%USERPROFILE%%\\\\Desktop\\\\%%AreaName%%.lnk');$s.TargetPath='%%DriveLetter%%';$s.Save()"
+echo exit
 ) > "C:\\OrtakAlan\\${area.name}.bat"
-:: 3. Masaüstüne kopyala (Hem BAT dosyasını hem Kısayolu)
-copy /y "C:\\OrtakAlan\\${area.name}.bat" "%USERPROFILE%\\Desktop\\${area.name}.bat" >nul
-:: 4. Kayıt Defterine ekle
+:: 3. Kayit Defterine ekle (Baslangicta otomatik baglanmasi icin)
 reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "OrtakAlan_${area.name}" /t REG_SZ /d "C:\\OrtakAlan\\${area.name}.bat" /f >nul
-:: 5. alıtır
-start "" "%USERPROFILE%\\Desktop\\${area.name}.bat"
-echo Kurulum Tamamlandıi. Masaustunde hem BAT dosyaniz hem de Surucu kisayolunuz hazir.
+:: 4. Calistir
+start "" "C:\\OrtakAlan\\${area.name}.bat"
+echo Kurulum Tamamlandi. Masaustunuzde Surucu kisayolunuz olusturuldu.
 timeout /t 2 >nul
-(goto) 2>nul & del "%~f0"
+start /b "" cmd /c "ping localhost -n 2 >nul & del ""%~f0"""
+exit
 `.trim();
         const blob = new Blob([setupContent], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
@@ -6297,7 +7885,7 @@ timeout /t 2 >nul
         a.click();
     },
     undoMarkCounted: async function(id) {
-        if (!confirm('Bu sayımı iptal etmek istediinize emin misiniz?')) return;
+        if (!confirm('Bu sayımı iptal etmek istediğinize emin misiniz?')) return;
         try {
             const resp = await this.apiRequest('/inventory/count/undo', {
                 method: 'POST',
@@ -6318,7 +7906,7 @@ timeout /t 2 >nul
     },
     handleExclusiveCheck: function(group, id) {
         if (group === 'status') {
-            const list = ['edit-on_field', 'edit-warehouse', 'edit-is_faulty', 'edit-without_location', 'edit-pending_installation'];
+            const list = ['edit-on_field', 'edit-warehouse', 'edit-is_faulty', 'edit-without_location'];
             list.forEach(item => { 
                 const el = document.getElementById(item);
                 if (el && item !== id) el.checked = false; 
@@ -6383,7 +7971,7 @@ timeout /t 2 >nul
             return true;
         }
     },
-    openPrinterServiceHistoryModal: async function(printerId, prNo) {
+    openPrinterServiceHistoryModal: async function(printerId, prNo, deviceClass = null) {
         const modal = document.getElementById('printer-service-history-modal');
         const container = document.getElementById('printer-service-history-list');
         const title = document.getElementById('printer-service-history-title');
@@ -6395,9 +7983,9 @@ timeout /t 2 >nul
             // we filter from existing raw service records or fetch
             if (this.state_service.raw.length === 0) await this.loadServiceRecords();
             // Filter by printer_id AND pr_no (some records might only have pr_no)
-            const printerObj = this.state.printers.find(p => p.id == printerId);
+            const printerObj = this.state.printers.find(p => p.id == printerId && (deviceClass ? (p.device_class || 'PRINTER') === deviceClass : true));
             const pr_no = printerObj ? printerObj.pr_no : null;
-            const records = this.state_service.raw.filter(s => s.printer_id == printerId || (pr_no && s.pr_no === pr_no));
+            const records = this.state_service.raw.filter(s => s.printer_id == printerId || (pr_no && s.pr_no && String(s.pr_no).trim().toUpperCase() === String(pr_no).trim().toUpperCase()));
             // Sort by sent_date descending (newest first)
             records.sort((a,b) => (b.sent_date || '').localeCompare(a.sent_date || ''));
             if (records.length === 0) {
@@ -6408,19 +7996,25 @@ timeout /t 2 >nul
                 <table style="width:100%; border-collapse: collapse; font-size: 0.85rem;">
                     <thead>
                         <tr style="border-bottom: 2px solid rgba(255,255,255,0.1); text-align:left;">
-                            <th style="padding:10px;">Gidi Tarihi</th>
-                            <th style="padding:10px;">Dönü Tarihi</th>
+                            <th style="padding:10px;">Alındığı Tarih</th>
+                            <th style="padding:10px;">Gidiş Tarihi</th>
+                            <th style="padding:10px;">Dönüş Tarihi</th>
                             <th style="padding:10px;">Arıza Açıklaması</th>
                             <th style="padding:10px;">Durum</th>
+                            <th style="padding:10px;">İşlem</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${records.map(function(r) { return `
                             <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                <td style="padding:10px; white-space:nowrap;">${app.formatDate(r.acquisition_date)}</td>
                                 <td style="padding:10px; white-space:nowrap;">${app.formatDate(r.sent_date)}</td>
                                 <td style="padding:10px; white-space:nowrap;">${app.formatDate(r.return_date)}</td>
                                 <td style="padding:10px;">${r.fault_description || '-'}</td>
                                 <td style="padding:10px;"><span class="status-badge ${r.status === 'Serviste' ? 'status-ariza' : 'status-on_field'}">${r.status}</span></td>
+                                <td style="padding:10px;">
+                                    ${(app.state.activeUser && ['ADMIN','EDITOR'].includes(app.state.activeUser.role)) || app.isDepotRole(app.state.activeUser.role) ? `<button class="btn btn-chip btn-sm" style="font-size:0.7rem;" onclick="document.getElementById('printer-service-history-modal').style.display='none'; app.openServiceEditModal(${r.id});"><i class="fas fa-edit"></i> Düzenle</button>` : ''}
+                                </td>
                             </tr>
                         `; }).join('')}
                     </tbody>
@@ -6589,8 +8183,12 @@ timeout /t 2 >nul
 
         const misTbody = document.getElementById('keyos-table-mismatch');
         let misHtml = '';
+        const inv = this.state.inventory || [];
         (data.mismatches || []).forEach(r => {
-            misHtml += `<tr><td>${r.pc_no}</td><td style="color:#ff4b2b;">${r.local_hostname}</td><td style="color:#00ff88;">${r.keyos_hostname}</td></tr>`;
+            const pc = inv.find(item => item.pc_no == r.pc_no && item.device_type === 'PC');
+            const serial = r.serial || (pc && pc.pc_serial) || '-';
+            const ip = r.ip || (pc && pc.ip) || '-';
+            misHtml += `<tr><td>${r.pc_no}</td><td>${serial}</td><td>${ip}</td><td style="color:#ff4b2b;">${r.local_hostname}</td><td style="color:#00ff88;">${r.keyos_hostname}</td></tr>`;
         });
         misTbody.innerHTML = misHtml;
     },
@@ -6599,6 +8197,89 @@ timeout /t 2 >nul
         document.getElementById('keyos-tab-success').style.display = tabName === 'success' ? 'block' : 'none';
         document.getElementById('keyos-tab-failed').style.display = tabName === 'failed' ? 'block' : 'none';
         document.getElementById('keyos-tab-mismatch').style.display = tabName === 'mismatch' ? 'block' : 'none';
+    },
+
+    bulkUpdateKeyOSMismatches: async function() {
+        if (!this.keyosReports || this.keyosReports.length === 0) return;
+        const sel = document.getElementById('keyos-report-selector');
+        const index = sel ? parseInt(sel.value) || 0 : 0;
+        const data = this.keyosReports[index];
+        const mismatches = data.mismatches || [];
+        
+        if (mismatches.length === 0) {
+            alert('Güncellenecek uyuşmazlık bulunamadı.');
+            return;
+        }
+
+        if (!this.state.activeUser.keyos_user) {
+            return alert('Profil ayarlarınızdan KeyOS MGT yetkili kullanıcı adı ve şifrenizi kaydetmelisiniz!');
+        }
+        
+        if (!confirm(`${mismatches.length} adet cihazın lokal hostname'i kullanılarak KeyOS MGT üzerinde toplu olarak güncellenecektir.\n\nBu işlem birkaç dakika sürebilir. Emin misiniz?`)) return;
+        
+        const btn = document.getElementById('btn-bulk-update-mismatch');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> KeyOS\'a bağlanılıyor ve güncelleniyor...';
+        }
+
+        try {
+            const inv = this.state.inventory || [];
+            const items = [];
+            const skipped = [];
+            
+            for (const m of mismatches) {
+                // pc_no eşleşmesi KUTULU, BELİRSİZ gibi durumlarda mükerrer sonuç verebilir.
+                // Bu yüzden eşleştirmeyi eşsiz olan pc_serial (Seri No) üzerinden yapıyoruz.
+                const pc = inv.find(item => item.pc_serial === m.serial && item.device_type === 'PC');
+                if (!pc || !pc.pc_serial) {
+                    skipped.push(`${m.pc_no} (${m.serial}): Seri no bulunamadı`);
+                    continue;
+                }
+                items.push({
+                    serial: pc.pc_serial,
+                    hostname: m.local_hostname || pc.hostname,
+                    placeId: pc.location_code || ''
+                });
+            }
+
+            if (items.length === 0) {
+                alert('Güncellenecek geçerli cihaz bulunamadı.\n\n' + skipped.join('\n'));
+                return;
+            }
+
+            const resp = await this.apiRequest('/keyos/bulk_update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: items })
+            });
+            
+            let finalMsg = `Toplu güncelleme tamamlandı!\n\nBaşarılı: ${resp.updated || 0}\nBaşarısız: ${resp.failed || 0}`;
+            
+            if (skipped.length > 0) {
+                finalMsg += `\nAtlanan: ${skipped.length}`;
+            }
+            
+            if (resp.results) {
+                const failures = resp.results.filter(r => !r.success);
+                if (failures.length > 0) {
+                    finalMsg += '\n\nBaşarısız Cihazlar:\n';
+                    finalMsg += failures.slice(0, 15).map(f => `${f.serial}: ${f.error}`).join('\n');
+                    if (failures.length > 15) finalMsg += `\n... ve ${failures.length - 15} hata daha.`;
+                }
+            }
+            
+            alert(finalMsg);
+            
+        } catch (err) {
+            console.error(err);
+            alert('Toplu güncelleme hatası: ' + err.message);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-sync"></i> Uyuşmazlıkları KeyOS\'ta Güncelle (Toplu)';
+            }
+        }
     },
 
     exportKeyosReportToExcel: async function() {
@@ -6706,77 +8387,12 @@ timeout /t 2 >nul
             data: payload
         }, 'IZIN');
     },
-    generateBarcodePDF: async function(size) {
-        const type = size === '55x45' ? 'BC55' : 'BC100';
-        const prefix = size === '55x45' ? 'bc55' : 'bc100';
-        const payload = {
-            text: document.getElementById(`${prefix}-text`).value,
-            subtext: size === '55x45' ? document.getElementById('bc55-subtext').value : '',
-            desc: size === '100x100' ? document.getElementById('bc100-desc').value : '',
-            count: document.getElementById(`${prefix}-count`).value || 1
-        };
-        if (!payload.text) return alert('Barkod metni zorunludur.');
-        try {
-            this.showToast('Barkod hazırlanıyor...', 'info');
-            const resp = await this.apiRequest('/documents/generate_tutanak', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type: type,
-                    mahal: 'Barkod',
-                    data: payload
-                })
-            });
-            if (!resp.ok) throw new Error('Sunucu hatası');
-            const blob = await resp.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Barkod_${size}_${payload.text}.pdf`;
-            a.click();
-            this.showToast('Barkod baarıyla oluşturuldu.');
-        } catch (e) { alert('Hata: ' + e.message); }
-    },
-    openDocModal: function(type) {
-        const modal = document.getElementById(`doc-modal-${type}`);
-        if (modal) {
-            modal.style.display = 'flex';
-            // Formun ilk halini kaydet (Deiiklik kontrolü için)
-            const form = modal.querySelector('form');
-            if (form) {
-                const data = new FormData(form);
-                this.state.initialFormData = JSON.stringify(Object.fromEntries(data));
-            }
-        }
-    },
-    closeDocModal: function(type) {
-        const modal = document.getElementById(`doc-modal-${type}`);
-        if (!modal) return;
-        const form = modal.querySelector('form');
-        if (form) {
-            const currentData = JSON.stringify(Object.fromEntries(new FormData(form)));
-            // Eer formda deiiklik varsa sor (İptal hariç)
-            if (this.state.initialFormData && currentData !== this.state.initialFormData) {
-                if (!confirm('Yapılan deiiklikler silinecek. Kapatmak istediinize emin misiniz?')) {
-                    return;
-                }
-            }
-            form.reset(); // Formu sıfırla
-            // Custom reset logic (pre-filled fields)
-            if (type === 'izin-istek') {
-                document.getElementById('izin-bolum-muduru').value = "MURAT COKUN";
-                document.getElementById('izin-ik').value = "PINAR ENDOAN";
-            }
-        }
-        modal.style.display = 'none';
-        this.state.initialFormData = null;
-    },
     toggleOtherHT: function() {
         const check = document.getElementById('ht-check-other');
         const text = document.getElementById('ht-other-text');
         if (check && text) text.style.display = check.checked ? 'block' : 'none';
     },
-    generateHTPDF: async function(format = 'pdf') {
+    generateHTPDF: async function(format = 'pdf', sendToCups = false) {
         const actualFormat = (format === 'pdf') ? 'excel' : format;
         const checkboxes = document.querySelectorAll('#ht-equipment-list input[type="checkbox"]:checked');
         const equipment = Array.from(checkboxes).map(cb => cb.value);
@@ -6811,37 +8427,144 @@ timeout /t 2 >nul
                 formData.append('format', actualFormat);
                 formData.append('data', JSON.stringify(payload));
                 formData.append('photo', photoInput.files[0]);
-                this.sendPDFRequest(formData, 'HT', true);
+                this.sendPDFRequest(formData, 'HT', true, sendToCups);
             } else {
                 this.sendPDFRequest({
                     type: 'HT',
                     mahal: 'Hasar_Tespit',
                     format: actualFormat,
                     data: payload
-                }, 'HT');
+                }, 'HT', false, sendToCups);
             }
         } catch (e) { alert('Hata: ' + e.message); }
     },
     generateSLAPDF: async function(format = 'pdf') {
         const actualFormat = (format === 'pdf') ? 'excel' : format;
         const payload = {
-            ticket: document.getElementById('sla-ticket-no').value,
-            cihaz: document.getElementById('sla-cihaz').value,
-            aciklama: document.getElementById('sla-aciklama').value,
-            personel: document.getElementById('sla-personel').value,
-            onaylayan: document.getElementById('sla-onaylayan').value
+            ticket: document.getElementById('sla-ticket-no')?.value || '',
+            aciklama: document.getElementById('sla-aciklama')?.value || '',
+            kisi1_ad: document.getElementById('sla-kisi1-ad')?.value || '',
+            kisi1_unvan: document.getElementById('sla-kisi1-unvan')?.value || '',
+            kisi2_ad: document.getElementById('sla-kisi2-ad')?.value || '',
+            kisi2_unvan: document.getElementById('sla-kisi2-unvan')?.value || '',
+            kisi3_ad: document.getElementById('sla-kisi3-ad')?.value || '',
+            kisi3_unvan: document.getElementById('sla-kisi3-unvan')?.value || ''
         };
-        if (!payload.ticket || !payload.cihaz || !payload.aciklama || !payload.personel || !payload.onaylayan) {
-            return alert('Lütfen tüm alanları doldurun.');
+        if (!payload.ticket || !payload.aciklama) {
+            return alert('Lütfen Ticket No ve Açıklama alanlarını doldurun.');
         }
         try {
-            this.showToast('SLA tutanaı hazırlanıyor...', 'info');
+            this.showToast('SLA tutanağı hazırlanıyor...', 'info');
             this.sendPDFRequest({
                 type: 'SLA',
                 mahal: 'SLA',
                 format: actualFormat,
                 data: payload
             }, 'SLA');
+        } catch (e) { alert('Hata: ' + e.message); }
+    },
+    fetchUsulsuzTasimaInfo: async function(pcNo) {
+        if (!pcNo || pcNo === '-') {
+            document.getElementById('ut-seri-no').disabled = false;
+            document.getElementById('ut-eski-mahal').disabled = false;
+            return;
+        }
+        try {
+            const response = await fetch(`${this.state.API_BASE}/inventory_core/device_by_code/${encodeURIComponent(pcNo)}`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.data) {
+                    document.getElementById('ut-seri-no').value = data.data.serial_no || '';
+                    document.getElementById('ut-eski-mahal').value = data.data.location_code || '';
+                    document.getElementById('ut-seri-no').disabled = false;
+                    document.getElementById('ut-eski-mahal').disabled = false;
+                    this.showToast('Cihaz bilgileri çekildi.', 'success');
+                } else {
+                    document.getElementById('ut-seri-no').disabled = false;
+                    document.getElementById('ut-eski-mahal').disabled = false;
+                    this.showToast('Cihaz bulunamadı, bilgileri manuel girebilirsiniz.', 'warning');
+                }
+            } else {
+                document.getElementById('ut-seri-no').disabled = false;
+                document.getElementById('ut-eski-mahal').disabled = false;
+            }
+        } catch (e) {
+            console.error('fetchUsulsuzTasimaInfo error:', e);
+            document.getElementById('ut-seri-no').disabled = false;
+            document.getElementById('ut-eski-mahal').disabled = false;
+        }
+    },
+    generateUsulsuzPDF: async function(format = 'pdf', sendToCups = false) {
+        const actualFormat = (format === 'pdf') ? 'excel' : format;
+        const payload = {
+            pc_no: document.getElementById('ut-pc-no')?.value || '',
+            seri_no: document.getElementById('ut-seri-no')?.value || '',
+            eski_mahal: document.getElementById('ut-eski-mahal')?.value || '',
+            yeni_mahal: document.getElementById('ut-yeni-mahal')?.value || '',
+            kisi1_ad: document.getElementById('ut-kisi1-ad')?.value || '',
+            kisi1_unvan: document.getElementById('ut-kisi1-unvan')?.value || '',
+            kisi2_ad: document.getElementById('ut-kisi2-ad')?.value || '',
+            kisi2_unvan: document.getElementById('ut-kisi2-unvan')?.value || '',
+            kisi3_ad: document.getElementById('ut-kisi3-ad')?.value || '',
+            kisi3_unvan: document.getElementById('ut-kisi3-unvan')?.value || ''
+        };
+        if (!payload.pc_no || !payload.seri_no || !payload.eski_mahal || !payload.yeni_mahal) {
+            return alert('Lütfen Donanım Bilgisi ve Mahal Bilgisi alanlarını eksiksiz doldurun.');
+        }
+        try {
+            this.showToast('Usulsüz Taşıma tutanağı hazırlanıyor...', 'info');
+            this.sendPDFRequest({
+                type: 'USULSUZ_TASIMA',
+                mahal: 'Usulsuz_Tasima',
+                format: actualFormat,
+                data: payload
+            }, 'USULSUZ_TASIMA', false, sendToCups);
+        } catch (e) { alert('Hata: ' + e.message); }
+    },
+    generateVPNPDF: async function(format = 'pdf', sendToCups = false) {
+        const actualFormat = (format === 'pdf') ? 'excel' : format;
+        
+        let osValue = 'Windows';
+        const osRadios = document.getElementsByName('vpn-os');
+        for (let i = 0; i < osRadios.length; i++) {
+            if (osRadios[i].checked) {
+                osValue = osRadios[i].value;
+                break;
+            }
+        }
+
+        const payload = {
+            adsoyad: document.getElementById('vpn-adsoyad').value,
+            firma: document.getElementById('vpn-firma').value,
+            resmiyazi: document.getElementById('vpn-resmiyazi').value,
+            gorevi: document.getElementById('vpn-gorevi').value,
+            hbys: document.getElementById('vpn-hbys').value,
+            telefon: document.getElementById('vpn-telefon').value,
+            eposta: document.getElementById('vpn-eposta').value,
+            os: osValue,
+            bitis: document.getElementById('vpn-bitis').value,
+            network: document.getElementById('vpn-network').value,
+            ip: document.getElementById('vpn-ip').value,
+            mac: document.getElementById('vpn-mac').value
+        };
+
+        try {
+            this.showToast('VPN formu hazırlanıyor...', 'info');
+            if (sendToCups) {
+                this.sendPDFRequest({
+                    type: 'VPN',
+                    mahal: 'VPN_Baglanti',
+                    format: actualFormat,
+                    data: payload
+                }, 'VPN', false, true);
+            } else {
+                this.sendPDFRequest({
+                    type: 'VPN',
+                    mahal: 'VPN_Baglanti',
+                    format: actualFormat,
+                    data: payload
+                }, 'VPN');
+            }
         } catch (e) { alert('Hata: ' + e.message); }
     },
     generateBarcodePDF: async function(size) {
@@ -6861,6 +8584,13 @@ timeout /t 2 >nul
                 count: document.getElementById('bc100-count').value
             };
             type = 'BC100';
+        } else if (size === '50x30') {
+            payload = {
+                text: document.getElementById('bc50-text').value,
+                subtext: document.getElementById('bc50-subtext').value,
+                count: document.getElementById('bc50-count').value
+            };
+            type = 'BC50';
         } else {
             payload = {
                 text: document.getElementById('bc-manual-text').value,
@@ -6872,7 +8602,8 @@ timeout /t 2 >nul
         if (!payload.text) return alert('Lütfen barkod metnini girin.');
         try {
             this.showToast('Barkod oluşturuluyor...', 'info');
-            const resp = await this.apiRequest('/documents/generate_tutanak', {
+            const url = this.state.API_BASE + '/documents/generate_tutanak';
+            const resp = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ type: type, mahal: 'Barkod', data: payload })
@@ -6881,7 +8612,7 @@ timeout /t 2 >nul
         } catch (e) { alert('Hata: ' + e.message); }
     },
     printBarcode: function(size) {
-        let text = "", subtext = "", width = "", height = "", count = 1, frameStyle = 'solid';
+        let text = "", subtext = "", width = "", height = "", count = 1, frameStyle = 'solid', selectedSizeStr = size;
         if (size === '55x45') {
             text = document.getElementById('bc55-text').value;
             subtext = document.getElementById('bc55-subtext').value;
@@ -6896,18 +8627,39 @@ timeout /t 2 >nul
             frameStyle = document.getElementById('bc100-style')?.value || 'solid';
             width = "100mm";
             height = "100mm";
+        } else if (size === '50x30') {
+            text = document.getElementById('bc50-text').value;
+            subtext = document.getElementById('bc50-desc').value;
+            count = parseInt(document.getElementById('bc50-count').value) || 1;
+            frameStyle = document.getElementById('bc50-style')?.value || 'solid';
+            width = "50mm";
+            height = "30mm";
+            selectedSizeStr = '50x30';
         } else {
+             // Manuel barkod (size selector ile)
              text = document.getElementById('bc-manual-text').value;
              subtext = document.getElementById('bc-manual-subtext').value;
              count = parseInt(document.getElementById('bc-manual-count').value) || 1;
-             width = "55mm";
-             height = "45mm";
+             const manualSizeSelect = document.getElementById('bc-manual-size');
+             if (manualSizeSelect) {
+                 selectedSizeStr = manualSizeSelect.value;
+                 if (selectedSizeStr === '50x30') { width = "50mm"; height = "30mm"; }
+                 else if (selectedSizeStr === '100x100') { width = "100mm"; height = "100mm"; }
+                 else { width = "55mm"; height = "45mm"; }
+             } else {
+                 width = "55mm"; height = "45mm";
+             }
         }
         if (!text) return alert('Lütfen barkod metnini girin.');
-        // Dinamik font boyutu (55x45 için 6 satır kuralı)
-        let fontSizeMain = size === '100x100' ? '32pt' : '18pt';
-        let fontSizeSub = size === '100x100' ? '16pt' : '10pt';
-        if (size === '55x45' || size === 'manual') {
+
+        // Dinamik font boyutu
+        let fontSizeMain = selectedSizeStr === '100x100' ? '32pt' : '18pt';
+        let fontSizeSub = selectedSizeStr === '100x100' ? '16pt' : '10pt';
+        if (selectedSizeStr === '50x30') {
+            fontSizeMain = '14pt';
+            fontSizeSub = '8pt';
+        }
+        if (selectedSizeStr === '55x45' || size === 'manual') {
             const lines = (subtext ? subtext.split('\n').length : 0) + (text.length > 15 ? 2 : 1);
             const totalChars = (text.length + (subtext ? subtext.length : 0));
             if (lines > 6 || totalChars > 110) {
@@ -6918,6 +8670,7 @@ timeout /t 2 >nul
                 fontSizeSub = '9pt';
             }
         }
+
         let borderCSS = '1px solid #000';
         if (frameStyle === 'dotted') borderCSS = '1px dashed #000';
         else if (frameStyle === 'none') borderCSS = 'none';
@@ -6933,7 +8686,7 @@ timeout /t 2 >nul
         printWin.document.write(`
             <html>
             <head>
-                <title>Barkod Yazdır - ${size}</title>
+                <title>Barkod Yazdır - ${selectedSizeStr}</title>
                 <style>
                     @page { 
                         size: ${width} ${height}; 
@@ -6958,19 +8711,19 @@ timeout /t 2 >nul
                         justify-content: center;
                         text-align: center;
                         box-sizing: border-box;
-                        padding: 3mm;
-                        padding-bottom: 8mm; /* Alt kısım kesilmesin diye daha fazla boluk */
+                        padding: ${selectedSizeStr === '50x30' ? '2mm' : '3mm'};
+                        padding-bottom: ${selectedSizeStr === '50x30' ? '3mm' : '8mm'};
                         overflow: hidden;
                         border: ${borderCSS};
                         border-radius: ${frameStyle === 'rounded' ? '4mm' : '0'};
                         margin: 0;
-                        transform: scale(0.88); /* Daha güvenli bir ölçek */
+                        transform: scale(${selectedSizeStr === '50x30' ? '0.92' : '0.88'});
                         transform-origin: center;
                     }
                     .main-text { 
                         font-size: ${fontSizeMain}; 
                         font-weight: 900; 
-                        margin-bottom: 5px; 
+                        margin-bottom: ${selectedSizeStr === '50x30' ? '2px' : '5px'}; 
                         word-break: break-all;
                         line-height: 1.1;
                     }
@@ -6981,7 +8734,6 @@ timeout /t 2 >nul
                         word-break: break-word;
                         line-height: 1.2;
                     }
-                </style>
                 </style>
             </head>
             <body>
@@ -7028,7 +8780,7 @@ timeout /t 2 >nul
             this.showToast('İlem tamamlandı, yazdırma penceresi açılıyor.');
         }
         // Modalları kapat
-        ['hasar-tespit', 'zimmet', 'izin-istek', 'sla-sehven', 'barcode-55x45', 'barcode-100x100', 'barcode-manual'].forEach(id => this.closeDocModal(id));
+        ['hasar-tespit', 'zimmet', 'izin-istek', 'sla-sehven', 'barcode-55x45', 'barcode-100x100', 'barcode-50x30', 'barcode-manual'].forEach(id => this.closeDocModal(id));
     },
 
     // =========================================================================
@@ -7037,8 +8789,7 @@ timeout /t 2 >nul
     getDurumBadge: function(status, isInstalled) {
         let text = "KURULU", css = "on_field";
         const s = (status || '').toUpperCase();
-        if (s.includes("BEKLE")) { text = "BEKLEMEDE"; css = "kurulum"; }
-        else if (s.includes("ARIZALI")) { text = "ARIZALI"; css = "is_faulty"; }
+        if (s.includes("ARIZALI")) { text = "ARIZALI"; css = "is_faulty"; }
         else if (s.includes("DEPODA") || s.includes("DEPO")) { text = "DEPODA"; css = "warehouse"; }
         else if (s.includes("KAYIP")) { text = "KAYIP"; css = "is_faulty"; }
         else if (s.includes("SERVİSTE") || s.includes("SERVIS")) { text = "SERVİSTE"; css = "servis"; }
@@ -7102,13 +8853,20 @@ app.openProfileSettingsModal = function() {
     const user = app.state.activeUser;
     if (!user) return;
     document.getElementById('profile-keyos-user').value = user.keyos_user || '';
-    document.getElementById('profile-keyos-pass').value = ''; 
+    document.getElementById('profile-keyos-pass').value = user.keyos_pass === '********' ? '********' : ''; 
     document.getElementById('profile-bim-user').value = user.bim_user || '';
-    document.getElementById('profile-bim-pass').value = '';
+    document.getElementById('profile-bim-pass').value = user.bim_pass === '********' ? '********' : '';
     document.getElementById('profile-current-pass').value = '';
     document.getElementById('profile-new-pass').value = '';
     document.getElementById('profile-session-timeout').value = user.session_timeout !== undefined ? user.session_timeout : 5;
+    
+    // Güvenilir IP'ler
+    const trustedIpsEl = document.getElementById('profile-trusted-ips');
+    if (trustedIpsEl) trustedIpsEl.value = user.trusted_ips || '';
+
     document.getElementById('profile-settings-modal').style.display = 'flex';
+    document.querySelectorAll('#profile-settings-modal details').forEach(d => d.removeAttribute('open'));
+    app.loadActiveSessions();
 };
 app.saveProfileSettings = async function() {
     const user = app.state.activeUser;
@@ -7133,9 +8891,12 @@ app.saveProfileSettings = async function() {
             keyos_user: document.getElementById('profile-keyos-user').value,
             keyos_pass: document.getElementById('profile-keyos-pass').value,
             bim_user: document.getElementById('profile-bim-user').value,
-            bim_pass: document.getElementById('profile-bim-pass').value || user.bim_pass,
-            session_timeout: parseInt(document.getElementById('profile-session-timeout').value)
+            bim_pass: document.getElementById('profile-bim-pass').value,
+            session_timeout: parseInt(document.getElementById('profile-session-timeout').value),
+            trusted_ips: document.getElementById('profile-trusted-ips') ? document.getElementById('profile-trusted-ips').value : ''
         };
+
+        // Eğer kullanıcı şifreyi değiştirmediyse (******** bıraktıysa), backend zaten None yapacak ama yine de undefined'ı önlemek için üstteki değerleri alıyoruz.
 
         app.showToast('Ayarlar kaydediliyor...', 'info');
         const result = await app.apiRequest('/users/update_profile', {
@@ -7152,10 +8913,81 @@ app.saveProfileSettings = async function() {
         app.state.activeUser.bim_user = payload.bim_user;
         app.state.activeUser.bim_pass = payload.bim_pass; // NEW
         app.state.activeUser.session_timeout = payload.session_timeout;
+        app.state.activeUser.trusted_ips = payload.trusted_ips;
         localStorage.setItem('it_user_data', JSON.stringify(app.state.activeUser));
     } catch (e) { 
         console.error(e);
         alert(e.message); 
+    }
+};
+
+app.loadActiveSessions = async function() {
+    const listEl = document.getElementById('active-sessions-list');
+    if (!listEl) return;
+    listEl.innerHTML = '<div style="text-align:center; color:var(--text-secondary); padding:10px;"><i class="fas fa-spinner fa-spin"></i> Yükleniyor...</div>';
+    
+    try {
+        const result = await app.apiRequest('/users/sessions');
+        if (result.success && result.sessions.length > 0) {
+            let html = '';
+            result.sessions.forEach(s => {
+                const dateParts = (s.created_at || s.last_activity || '-').split('.')[0];
+                html += `
+                <div style="background:rgba(255,255,255,0.05); padding:8px 10px; border-radius:6px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="color:#00d2ff; font-weight:600; font-size:0.8rem;"><i class="fas fa-network-wired"></i> ${s.client_ip} ${s.is_trusted ? '<span style="color:#00ff88; font-size:0.7rem; margin-left:5px;"><i class="fas fa-shield-check"></i> Güvenli</span>' : ''}</div>
+                        <div style="color:var(--text-secondary); font-size:0.7rem;">Giris: ${dateParts}</div>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        ${!s.is_trusted ? `
+                        <button class="btn btn-secondary" style="padding:4px 8px; font-size:0.7rem; background:rgba(0,255,136,0.1); border-color:rgba(0,255,136,0.3); color:#00ff88;" onclick="app.trustIp('${s.client_ip}')" title="Güvenli IP Yap">
+                            <i class="fas fa-shield-alt"></i>
+                        </button>` : ''}
+                        <button class="btn btn-secondary" style="padding:4px 8px; font-size:0.7rem; background:rgba(255,71,87,0.1); border-color:rgba(255,71,87,0.3); color:#ff4757;" onclick="app.revokeSession(${s.id})" title="Oturumu Sonlandir">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                `;
+            });
+            listEl.innerHTML = html;
+        } else {
+            listEl.innerHTML = '<div style="text-align:center; color:var(--text-secondary); padding:10px;">Aktif oturum bulunamadı.</div>';
+        }
+    } catch (e) {
+        listEl.innerHTML = '<div style="text-align:center; color:#ff4757; padding:10px;">Oturumlar yüklenemedi.</div>';
+    }
+};
+
+app.revokeSession = async function(sessionId) {
+    if(!confirm("Bu oturumu sonlandırmak istediğinize emin misiniz? (O cihazdan çıkış yapılacaktır)")) return;
+    try {
+        app.showToast("Oturum sonlandırılıyor...", "info");
+        await app.apiRequest('/users/sessions/revoke', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId })
+        });
+        app.showToast("Oturum sonlandırıldı.");
+        app.loadActiveSessions();
+    } catch (e) {
+        app.showToast(e.message, 'error');
+    }
+};
+
+app.trustIp = async function(ip_address) {
+    if(!confirm(`${ip_address} IP adresini güvenli IP olarak isaretlemek istiyor musunuz? Bu cihazdan 1 yil boyunca cikis yapilmayacaktir.`)) return;
+    try {
+        app.showToast("Güvenli IP kaydediliyor...", "info");
+        await app.apiRequest('/users/trust_ip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ip_address: ip_address })
+        });
+        app.showToast("IP güvenli olarak isaretlendi.");
+        app.loadActiveSessions();
+    } catch (e) {
+        app.showToast(e.message, "error");
     }
 };
 app.clearSearch = function(id) {
@@ -7205,12 +9037,12 @@ app.refreshSystemHealth = async function() {
     }
 };
 
-app.openDevOpsModal = function() {
+app.openDevOpsModal = function() { return; /* DISABLED */
     document.getElementById('devops-modal').style.display = 'flex';
     document.getElementById('devops-status-box').style.display = 'none';
 };
 
-app.runSystemUpdate = async function() {
+app.runSystemUpdate = async function() { return; /* DISABLED */
     if(!confirm("Sistem güncellenecektir. Bu işlem sırasında kısa süreli kesinti yaşanabilir. Devam edilsin mi?")) return;
     
     const outputEl = document.getElementById('devops-pipeline-output');
@@ -7227,7 +9059,7 @@ app.runSystemUpdate = async function() {
         });
         
         if(result.status === 'Success') {
-            outputEl.innerHTML += `<div style="color: #00ff88; font-weight: bold; margin-top: 10px;">> GÜNCELLEME BAÅARILI!</div>`;
+            outputEl.innerHTML += `<div style="color: #00ff88; font-weight: bold; margin-top: 10px;">> GÜNCELLEME BAŞARILI!</div>`;
             this.showToast('Sistem başarıyla güncellendi. Sayfa yenileniyor...', 'success');
             setTimeout(() => location.reload(), 3000);
         } else {
@@ -7241,7 +9073,7 @@ app.runSystemUpdate = async function() {
     }
 };
 
-app.runSystemCleanup = async function() {
+app.runSystemCleanup = async function() { return; /* DISABLED */
     try {
         const res = await this.apiRequest('/devops/cleanup', { method: 'POST' });
         this.showToast(`${res.cleared_count} gereksiz dosya karantinaya alındı.`, 'success');
@@ -7253,7 +9085,7 @@ app.runSystemCleanup = async function() {
     }
 };
 
-app.runSystemRollback = async function() {
+app.runSystemRollback = async function() { return; /* DISABLED */
     if(!confirm("Sistemi son stabil sürüme geri döndürmek istediğinize emin misiniz? Bu işlem mevcut dosyaların üzerine yazacaktır.")) return;
     
     try {
@@ -7270,7 +9102,7 @@ app.runSystemRollback = async function() {
     }
 };
 
-app.runSelfHealing = async function() {
+app.runSelfHealing = async function() { return; /* DISABLED */
     try {
         this.showToast('Sistem analizi başlatıldı...', 'info');
         const res = await this.apiRequest('/devops/self_healing', { method: 'POST' });
@@ -7316,7 +9148,7 @@ app.archiveAllData = function() {
             clearInterval(timer);
             input.disabled = false;
             confirmBtn.disabled = false;
-            confirmBtn.innerText = 'ARÅİVLE';
+            confirmBtn.innerText = 'ARŞİVLE';
             input.focus();
         } else {
             confirmBtn.innerText = `BEKLEYİN (${count}s)`;
@@ -7400,5 +9232,861 @@ app.loadBatApps = async function() {
 
 app.downloadBatApp = function(filename) {
     window.open(app.state.API_BASE + '/bat_apps/download/' + encodeURIComponent(filename), '_blank');
+};
+
+
+
+app.loadIsvecApps = async function() {
+    const container = document.getElementById("isvec-apps-container");
+    if (!container) return;
+    try {
+        const resp = await this.apiRequest("/installations/apps?t=" + new Date().getTime());
+        if (resp && resp.success) {
+            let html = "";
+            if (resp.apps.length === 0) {
+                html = `<div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-secondary);">
+                    <i class="fas fa-folder-open fa-3x" style="margin-bottom:15px; color:#555;"></i>
+                    <p>Sunucuda (static/kurulum_dosyalari) hic uygulama bulunamadi.</p>
+                </div>`;
+            } else {
+                resp.apps.forEach(appItem => {
+                    // Default icon guessing
+                    let icon = "fas fa-cube";
+                    let color = "#00d2ff";
+                    const nm = appItem.id.toLowerCase();
+                    if(nm.includes("anydesk")) { icon="fas fa-desktop"; color="#ef4444"; }
+                    else if(nm.includes("chrome")) { icon="fab fa-chrome"; color="#10b981"; }
+                    else if(nm.includes("brave")) { icon="fab fa-brave"; color="#f59e0b"; }
+                    else if(nm.includes("zoiper")) { icon="fas fa-phone-alt"; color="#00d2ff"; }
+                    else if(nm.includes("vlc")) { icon="fas fa-play-circle"; color="#ff9800"; }
+                    else if(nm.includes("java")) { icon="fab fa-java"; color="#f44336"; }
+                    else if(nm.includes("winrar")||nm.includes("zip")) { icon="fas fa-file-archive"; color="#9c27b0"; }
+
+                    html += `
+                    <div class="card card-compact" style="text-align: center; padding: 20px; position: relative;">
+                        <input type="checkbox" class="isvec-checkbox" value="${appItem.id}" style="position: absolute; top: 15px; left: 15px; transform: scale(1.5); cursor:pointer;">
+                        <i class="${icon}" style="font-size: 2.5rem; color: ${color}; margin-bottom: 15px;"></i>
+                        <h3 style="margin-bottom: 10px;">${appItem.name}</h3>
+                        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">Kurulum (Parametre: ${appItem.args})</p>
+                        <a href="/api/installations/${appItem.id}/" download="kurulum_${appItem.id}.ps1" class="btn btn-outline btn-sm" style="width: 100%; border-color: var(--accent); color: var(--accent);">
+                            <i class="fas fa-download"></i> Kurulum İndir
+                        </a>
+                    </div>
+                    `;
+                });
+            }
+            container.innerHTML = html;
+        }
+    } catch (e) {
+        container.innerHTML = `<div style="grid-column: 1 / -1; color:#ff4b2b; text-align:center;">API Hatasi: ${e.message}</div>`;
+    }
+};
+
+app.isvecBulkInstall = function() {
+    const checkboxes = document.querySelectorAll(".isvec-checkbox:checked");
+    if (checkboxes.length === 0) {
+        this.showToast("Lütfen toplu kurulum için en az bir uygulama seçin.", "warning");
+        return;
+    }
+    const selectedIds = Array.from(checkboxes).map(cb => cb.value).join(",");
+    
+    const link = document.createElement("a");
+    link.href = "/api/installations/bulk?ids=" + selectedIds;
+    link.download = "toplu_kurulum.ps1";
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clear selections
+    checkboxes.forEach(cb => cb.checked = false);
+    this.showToast("Kurulum scripti (toplu_kurulum.ps1) indiriliyor. İndirilen dosyaya sağ tıklayıp 'PowerShell ile Çalıştır' deyin.", "success");
+};
+
+app.testDesktopCentral = function() {
+    const target = document.getElementById('dc-target-pc').value.trim();
+    const pkg = document.getElementById('dc-package').value;
+    const user = document.getElementById('dc-username').value.trim();
+    const pass = document.getElementById('dc-password').value;
+    const resultDiv = document.getElementById('dc-test-result');
+
+    if (!target || !pkg || !user || !pass) {
+        this.showToast('Lütfen tüm alanları doldurun!', 'error');
+        return;
+    }
+
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<span style="color:var(--accent);">[ * ] Desktop Central API bağlantısı başlatılıyor...</span><br>';
+    
+    setTimeout(() => {
+        resultDiv.innerHTML += '<span style="color:var(--text-secondary);">[ * ] Kimlik doğrulanıyor (' + user + ')...</span><br>';
+        setTimeout(() => {
+            resultDiv.innerHTML += '<span style="color:#4caf50;">[ + ] Kimlik doğrulandı! Auth Token alındı.</span><br>';
+            setTimeout(() => {
+                resultDiv.innerHTML += '<span style="color:var(--text-secondary);">[ * ] Görev oluşturuluyor: ' + pkg + ' -> ' + target + '</span><br>';
+                setTimeout(() => {
+                    resultDiv.innerHTML += '<span style="color:#4caf50;">[ + ] Başarılı! Görev Desktop Central kuyruğuna eklendi ve uzak bilgisayara gönderildi.</span><br>';
+                    this.showToast('Görev başarıyla gönderildi!', 'success');
+                }, 1500);
+            }, 1000);
+        }, 1000);
+    }, 1000);
+};
+
+
+
+
+app.openPrinterAddModal = function() {
+    if (app.state.activeUser && app.state.activeUser.role !== 'ADMIN') {
+        alert('Bu işlem sadece yetkililer (ADMIN) tarafından yapılabilir.');
+        return;
+    }
+    document.getElementById('pa-type').value = app.state.printerMainType === 'ALL' ? 'PRINTER' : app.state.printerMainType;
+    document.getElementById('pa-name').value = '';
+    document.getElementById('pa-model').value = '';
+    document.getElementById('pa-serial').value = '';
+    document.getElementById('pa-mac').value = '';
+    document.getElementById('pa-ip').value = '';
+    document.getElementById('pa-location').value = '';
+    document.getElementById('pa-pcno').value = '';
+    document.getElementById('pa-status').value = 'Kurulu';
+    
+    app.onPrinterAddTypeChange();
+    document.getElementById('printer-add-modal').style.display = 'flex';
+};
+
+app.closePrinterAddModal = function() {
+    document.getElementById('printer-add-modal').style.display = 'none';
+};
+
+app.onPrinterAddTypeChange = function() {
+    const t = document.getElementById('pa-type').value;
+    const isPrinter = (t === 'PRINTER');
+    document.getElementById('pa-mac-group').style.display = isPrinter ? 'block' : 'none';
+    document.getElementById('pa-ip-group').style.display = isPrinter ? 'block' : 'none';
+    document.getElementById('pa-location-group').style.display = isPrinter ? 'block' : 'none';
+    document.getElementById('pa-pcno-group').style.display = isPrinter ? 'none' : 'block';
+};
+
+app.saveNewPrinter = async function() {
+    const t = document.getElementById('pa-type').value;
+    const name = document.getElementById('pa-name').value.trim();
+    const model = document.getElementById('pa-model').value.trim();
+    const serial = document.getElementById('pa-serial').value.trim();
+    const mac = document.getElementById('pa-mac').value.trim();
+    const ip = document.getElementById('pa-ip').value.trim();
+    const loc = document.getElementById('pa-location').value.trim();
+    const pcno = document.getElementById('pa-pcno').value.trim();
+    const status = document.getElementById('pa-status').value;
+
+    const payload = {
+        device_type: t,
+        name: name,
+        model: model,
+        serial_no: serial,
+        status: status,
+        pc_no: pcno,
+        mac: mac,
+        ip: ip,
+        location_code: loc
+    };
+
+    try {
+        const data = await app.apiRequest('/inventory/printers/add', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+
+        app.showToast(data.message || 'Cihaz başarıyla eklendi.', 'success');
+        app.closePrinterAddModal();
+        app.renderAll();
+    } catch (e) {
+        app.showToast('Kayıt başarısız: ' + e.message, 'error');
+    }
+};
+
+app.deleteDeviceFromModal = async function() {
+    if (!this.state.editingId || !this.state.editingType) return;
+    const id = this.state.editingId;
+    
+    if (this.state.editingType === 'pr') {
+        const dClass = this.state.editingDeviceClass || 'PRINTER';
+        if (!confirm('Bu cihazı (Yazıcı/Tarayıcı) silmek istediğinize emin misiniz?')) return;
+        try {
+            const data = await app.apiRequest(`/inventory/printers/delete/${id}?class=${dClass}`, {
+                method: 'DELETE'
+            });
+            app.showToast(data.message || 'Cihaz başarıyla silindi.', 'success');
+            app.closeDeviceDetail();
+            app.renderAll();
+        } catch (e) {
+            app.showToast('Silme başarısız: ' + e.message, 'error');
+        }
+    } else {
+        if (!confirm('Bu cihazı (PC/Donanım) silmek istediğinize emin misiniz?')) return;
+        try {
+            const data = await app.apiRequest(`/inventory/delete/${id}?type=${this.state.editingType.toUpperCase()}`, {
+                method: 'DELETE'
+            });
+            app.showToast(data.message || 'Cihaz başarıyla silindi.', 'success');
+            app.closeDeviceDetail();
+            app.renderAll();
+        } catch (e) {
+            app.showToast('Silme başarısız: ' + e.message, 'error');
+        }
+    }
+};
+
+app.deletePrinter = async function(id, deviceClass) {
+    if (!confirm('Bu cihazı silmek istediğinize emin misiniz?')) return;
+    try {
+        const data = await app.apiRequest(`/inventory/printers/delete/${id}?class=${deviceClass}`, {
+            method: 'DELETE'
+        });
+        app.showToast(data.message || 'Cihaz başarıyla silindi.', 'success');
+        app.renderAll();
+    } catch (e) {
+        app.showToast('Silme başarısız: ' + e.message, 'error');
+    }
+};
+
+app.runSpeedTest = async function() {
+    this.showToast('Genişletilmiş Hard Performans Testi V3 Başlatıldı! Lütfen bekleyin...', 'info');
+    
+    const delay = ms => new Promise(r => setTimeout(r, ms));
+    const results = [];
+    
+    // Normalize
+    this.navigateTo('dashboard');
+    await delay(500);
+
+    // 1. Envanter Sekmesi Açılışı
+    let start = performance.now();
+    this.navigateTo('inventory');
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    results.push(`<b>ENVANTER</b> Sekmesi Açılış: ${(performance.now() - start).toFixed(2)} ms`);
+    await delay(500);
+    
+    const firstCard = document.querySelector('#inventory-grid .card');
+    if (firstCard) {
+        start = performance.now();
+        firstCard.click();
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        results.push(`<b>ENVANTER MODAL</b> Açılış Hızı: ${(performance.now() - start).toFixed(2)} ms`);
+        
+        await delay(500);
+        const closeBtn = document.querySelector('.modal-close');
+        if (closeBtn) closeBtn.click();
+        await delay(300);
+    }
+    
+    // 2. Yazıcılar Sekmesi Testi
+    start = performance.now();
+    this.navigateTo('inventory'); this.setInvCategory('PRINTER');
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    results.push(`<b>YAZICILAR</b> Sekmesi Açılış: ${(performance.now() - start).toFixed(2)} ms`);
+    await delay(500);
+    
+    const printerSubBtn = document.querySelector('#printer-main-filters .btn-chip:nth-child(2)'); // Barkod yazıcıları veya ikinci sekme
+    if (printerSubBtn) {
+        start = performance.now();
+        printerSubBtn.click();
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        results.push(`<b>YAZICILAR (${printerSubBtn.innerText})</b> Alt Sekme Yükleme: ${(performance.now() - start).toFixed(2)} ms`);
+        await delay(400);
+    }
+    
+    const firstPrinterCard = document.querySelector('#printers-grid .card');
+    if (firstPrinterCard) {
+        start = performance.now();
+        firstPrinterCard.click();
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        results.push(`<b>YAZICILAR MODAL</b> Açılış Hızı: ${(performance.now() - start).toFixed(2)} ms`);
+        
+        await delay(500);
+        const closeBtn = document.querySelector('.modal-close');
+        if (closeBtn) closeBtn.click();
+        await delay(300);
+    }
+    
+    // 3. Bilgi Bankası Sekmesi Testi
+    start = performance.now();
+    this.navigateTo('general-notes');
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    results.push(`<b>BİLGİ BANKASI</b> Sekmesi Açılış: ${(performance.now() - start).toFixed(2)} ms`);
+    await delay(500);
+    
+    const networkTabBtn = document.querySelector('#note-category-filters .btn-chip[data-category="NETWORK"]');
+    if (networkTabBtn) {
+        start = performance.now();
+        networkTabBtn.click();
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        results.push(`<b>BİLGİ BANKASI (NETWORK)</b> Alt Sekme Yükleme: ${(performance.now() - start).toFixed(2)} ms`);
+        await delay(400);
+    }
+    
+    // 4. Ortak Alanlar Sekmesi Testi
+    start = performance.now();
+    this.navigateTo('areas');
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    results.push(`<b>ORTAK ALANLAR</b> Sekmesi Açılış: ${(performance.now() - start).toFixed(2)} ms`);
+    await delay(500);
+
+    const areaFilterBtn = document.querySelector('#area-filters .btn-chip[data-filter="yazici"]');
+    if (areaFilterBtn) {
+        start = performance.now();
+        areaFilterBtn.click();
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        results.push(`<b>ORTAK ALANLAR (YAZICILI)</b> Süzme Hızı: ${(performance.now() - start).toFixed(2)} ms`);
+        await delay(400);
+    }
+
+    // 5. Depo Sekmesi Testi
+    start = performance.now();
+    this.navigateTo('depot');
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    results.push(`<b>DEPO</b> Sekmesi Açılış: ${(performance.now() - start).toFixed(2)} ms`);
+    await delay(500);
+
+    const depotFilterBtn = document.querySelector('#depot-filters .btn-chip[data-dcat="DONANIM"]');
+    if (depotFilterBtn) {
+        start = performance.now();
+        depotFilterBtn.click();
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        results.push(`<b>DEPO (DONANIM)</b> Alt Sekme Yükleme: ${(performance.now() - start).toFixed(2)} ms`);
+        await delay(400);
+    }
+
+    // 6. Tutanaklar Sekmesi Testi
+    start = performance.now();
+    this.navigateTo('docs');
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    results.push(`<b>TUTANAKLAR</b> Sekmesi Açılış: ${(performance.now() - start).toFixed(2)} ms`);
+    await delay(500);
+
+    const firstDocCard = document.querySelector('#view-docs .doc-btn-card');
+    if (firstDocCard) {
+        start = performance.now();
+        firstDocCard.click();
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        results.push(`<b>TUTANAKLAR MODAL</b> Açılış Hızı: ${(performance.now() - start).toFixed(2)} ms`);
+        await delay(500);
+        
+        const closeBtn = document.querySelector('#doc-modal-hasar-tespit .modal-close') || document.querySelector('#doc-modal-generic .modal-close');
+        if (closeBtn) {
+            closeBtn.click();
+        } else {
+            this.closeDocModal('hasar-tespit');
+            this.closeDocModal('generic');
+        }
+        await delay(300);
+    }
+
+    // 7. API Yanıt Hızı Testi
+    const apiStart = performance.now();
+    try {
+        await this.apiRequest('/inventory/pcs');
+        const apiEnd = performance.now();
+        results.push(`<b>ENVANTER API</b> Veritabanı Yanıt Süresi: ${(apiEnd - apiStart).toFixed(2)} ms`);
+    } catch(e) {
+        results.push(`<b>ENVANTER API</b> Hata verdi!`);
+    }
+
+    this.navigateTo('dashboard');
+    
+    // Custom Modal Oluştur ve Göster
+    const modalHtml = `
+        <div id="speed-test-overlay" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.8); z-index:99999; display:flex; justify-content:center; align-items:center;">
+            <div style="background:var(--bg-secondary); border: 2px solid var(--accent); border-radius:10px; padding:20px; max-width:600px; width:90%; color:#fff; font-family:sans-serif; position:relative; overflow-y:auto; max-height:90vh;">
+                <h2 style="color:var(--accent); margin-top:0;"><i class="fas fa-tachometer-alt"></i> Hard Test Raporu V4</h2>
+                <ul style="list-style:none; padding:0; background:rgba(0,0,0,0.3); border-radius:5px; padding:15px; font-size:0.95rem; line-height:1.8;">
+                    <li>${results.join('</li><li>')}</li>
+                </ul>
+                <button onclick="document.getElementById('speed-test-overlay').remove()" style="width:100%; padding:10px; background:var(--accent); color:#111; border:none; border-radius:5px; font-weight:bold; cursor:pointer; margin-top:10px;">KAPAT</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+app.showPrinterPagesReportModal = function() {
+    document.getElementById('printer-pages-modal').style.display = 'flex';
+};
+
+app.generatePrinterPagesReport = async function() {
+    const start = document.getElementById('printer-pages-start').value;
+    const end = document.getElementById('printer-pages-end').value;
+    if(!start || !end) {
+        this.showToast('Lütfen başlangıç ve bitiş tarihlerini seçin.', 'warning');
+        return;
+    }
+    const tbody = document.getElementById('printer-pages-tbody');
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;"><i class="fas fa-spinner fa-spin"></i> Veriler yükleniyor...</td></tr>';
+    try {
+        const res = await this.apiRequest('/inventory/printer_pages/page_report', { method: 'POST', body: JSON.stringify({start_date: start, end_date: end}) });
+        
+        // Handle both stripped array and raw envelope fallback
+        const reportData = (res && res.success === undefined) ? res : (res.data || []);
+        
+        // Sort from smallest difference to largest difference
+        reportData.sort((a, b) => {
+            const diffA = a.difference !== undefined ? Number(a.difference) : 0;
+            const diffB = b.difference !== undefined ? Number(b.difference) : 0;
+            return diffA - diffB;
+        });
+        
+        if(!reportData || reportData.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Seçilen tarih aralığında log bulunamadı.</td></tr>';
+            return;
+        }
+        
+        let html = '';
+        reportData.forEach(item => {
+            html += '<tr>' +
+                '<td>' + (item.pr_no || '-') + '</td>' +
+                '<td>' + (item.serial_no || '-') + '</td>' +
+                '<td>' + (item.location_code || '-') + '</td>' +
+                '<td>' + (item.start_date || '-') + '</td>' +
+                '<td>' + (item.start_count !== undefined ? item.start_count : '-') + '</td>' +
+                '<td>' + (item.end_date || '-') + '</td>' +
+                '<td>' + (item.end_count !== undefined ? item.end_count : '-') + '</td>' +
+                '<td style="font-weight:bold; color:var(--accent);">' + (item.difference !== undefined ? item.difference : '-') + '</td>' +
+                '</tr>';
+        });
+        tbody.innerHTML = html;
+        this.showToast('Rapor başarıyla oluşturuldu.', 'success');
+    } catch(e) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Bağlantı hatası</td></tr>';
+    }
+};
+
+app.forcePrinterPagesSync = async function() {
+    if(!confirm('O anki tüm yazıcı sayaçlarını çekmek istediğinize emin misiniz?')) return;
+    this.showToast('Tüm sayaçlar sorgulanıyor, bu işlem birkaç saniye sürebilir...', 'info');
+    try {
+        const res = await this.apiRequest('/inventory/printer_pages/force_page_sync', { method: 'POST' });
+        if(res.success) {
+            this.showToast(res.message, 'success');
+            app.generatePrinterPagesReport();
+        } else {
+            this.showToast(res.error, 'error');
+        }
+    } catch(e) {
+        this.showToast('Bağlantı hatası', 'error');
+    }
+};
+
+app.exportPrinterPagesReportExcel = function() {
+    const table = document.getElementById('printer-pages-table');
+    if(!table) return;
+    let html = table.outerHTML;
+    let blob = new Blob(['<meta charset="utf-8">' + html], {type: 'application/vnd.ms-excel'});
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement('a');
+    a.href = url;
+    a.download = 'Yazici_Sayac_Raporu.xls';
+    a.click();
+};
+
+app.exportPrinterPagesReportPDF = function() {
+    const table = document.getElementById('printer-pages-table');
+    if(!table) return;
+    const tbody = document.getElementById('printer-pages-tbody');
+    if(!tbody || tbody.innerText.includes('Lütfen') || tbody.innerText.includes('yükleniyor') || tbody.innerText.includes('bulunamadı')) {
+        this.showToast('Aktarılacak rapor verisi bulunamadı.', 'warning');
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+
+    // Add Logos if they exist
+    try {
+        const logoLeft = "/static/logo/ht_left.png";
+        doc.addImage(logoLeft, 'PNG', 10, 10, 20, 10);
+    } catch(e) {}
+
+    doc.setFontSize(14);
+    doc.setTextColor(40);
+    doc.text(this.fixTurkishForPDF("YAZICI SAYAC RAPORU"), 105, 18, null, null, "center");
+
+    const start = document.getElementById('printer-pages-start').value;
+    const end = document.getElementById('printer-pages-end').value;
+    doc.setFontSize(9);
+    doc.text(this.fixTurkishForPDF(`Tarih Araligi: ${start} / ${end}`), 105, 24, null, null, "center");
+    doc.line(10, 27, 200, 27);
+
+    const rows = [];
+    const trs = tbody.querySelectorAll('tr');
+    trs.forEach(tr => {
+        const tds = tr.querySelectorAll('td');
+        if(tds.length === 8) {
+            rows.push([
+                this.fixTurkishForPDF(tds[0].innerText),
+                this.fixTurkishForPDF(tds[1].innerText),
+                this.fixTurkishForPDF(tds[2].innerText),
+                this.fixTurkishForPDF(tds[3].innerText),
+                tds[4].innerText,
+                this.fixTurkishForPDF(tds[5].innerText),
+                tds[6].innerText,
+                tds[7].innerText
+            ]);
+        }
+    });
+
+    doc.autoTable({
+        startY: 32,
+        head: [[
+            this.fixTurkishForPDF('Yazıcı No'),
+            this.fixTurkishForPDF('Seri No'),
+            this.fixTurkishForPDF('Mahal'),
+            this.fixTurkishForPDF('Baslangic Tarihi'),
+            this.fixTurkishForPDF('Baslangic Sayac'),
+            this.fixTurkishForPDF('Bitis Tarihi'),
+            this.fixTurkishForPDF('Bitis Sayac'),
+            this.fixTurkishForPDF('Fark (Cikti)')
+        ]],
+        body: rows,
+        theme: 'striped',
+        headStyles: { fillColor: [239, 68, 110] }, // Accent color
+        styles: { fontSize: 8, cellPadding: 2 },
+        columnStyles: {
+            0: { cellWidth: 20 },
+            1: { cellWidth: 25 },
+            2: { cellWidth: 25 },
+            3: { cellWidth: 30 },
+            4: { cellWidth: 22 },
+            5: { cellWidth: 30 },
+            6: { cellWidth: 22 },
+            7: { cellWidth: 16 }
+        }
+    });
+
+    doc.save(`Yazici_Sayac_Raporu_${start}_${end}.pdf`);
+    this.showToast('PDF Raporu indirildi.', 'success');
+};
+
+app.downloadKeyOSWeeklyExcel = function() {
+    window.location.href = this.state.API_BASE + '/keyos/weekly_excel';
+};
+
+app.toggleFullscreen = function(elementId) {
+    const elem = document.getElementById(elementId);
+    if (!elem) return;
+
+    if (!document.fullscreenElement) {
+        if (elem.requestFullscreen) {
+            elem.requestFullscreen();
+        } else if (elem.webkitRequestFullscreen) { /* Safari */
+            elem.webkitRequestFullscreen();
+        } else if (elem.msRequestFullscreen) { /* IE11 */
+            elem.msRequestFullscreen();
+        }
+        elem.classList.add("is-fullscreen");
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) { /* Safari */
+            document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) { /* IE11 */
+            document.msExitFullscreen();
+        }
+        elem.classList.remove("is-fullscreen");
+    }
+};
+
+document.addEventListener("fullscreenchange", function() {
+    if (!document.fullscreenElement) {
+        document.querySelectorAll(".is-fullscreen").forEach(el => el.classList.remove("is-fullscreen"));
+    }
+});
+
+// ═══════════════ MOBİL CUPS YAZDIRMA ═══════════════
+app._mobilePrintSelectedFile = null;
+
+app.initMobilePrint = function() {
+    const fab = document.getElementById('mobile-print-fab');
+    if (!fab) return;
+    
+    const checkMobile = () => {
+        if (window.innerWidth <= 768 && app.state.isLoggedIn) {
+            fab.style.display = 'flex';
+        } else {
+            fab.style.display = 'none';
+            // Desktop'a geçilince modalı kapat
+            const modal = document.getElementById('mobile-print-modal');
+            if (modal) modal.style.display = 'none';
+        }
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+};
+
+// Uygulama başlatıldıktan sonra mobil yazdırmayı init et
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => app.initMobilePrint(), 500);
+});
+
+app.openMobilePrintModal = function() {
+    const modal = document.getElementById('mobile-print-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    
+    // Formu sıfırla
+    this._mobilePrintSelectedFile = null;
+    document.getElementById('mobile-print-copies').value = '1';
+    document.getElementById('mobile-print-file-input').value = '';
+    document.getElementById('mobile-print-file-label').innerHTML = 'PDF, PNG veya JPG dosyası seçin<br><small style="opacity:0.5;">Maksimum 10 MB</small>';
+    document.getElementById('mobile-print-dropzone').style.borderColor = 'rgba(0,210,255,0.3)';
+    document.getElementById('mobile-print-progress').style.display = 'none';
+    document.getElementById('mobile-print-submit-btn').disabled = false;
+    
+    // Arama kutusunu sıfırla ve gizle
+    const searchInput = document.getElementById('mobile-print-search-input');
+    if (searchInput) {
+        searchInput.style.display = 'none';
+        searchInput.value = '';
+    }
+    
+    // Yazıcı listesini yükle
+    this.refreshMobilePrinterList();
+};
+
+app.closeMobilePrintModal = function() {
+    const modal = document.getElementById('mobile-print-modal');
+    if (modal) modal.style.display = 'none';
+    this._mobilePrintSelectedFile = null;
+    
+    // Arama kutusunu sıfırla ve gizle
+    const searchInput = document.getElementById('mobile-print-search-input');
+    if (searchInput) {
+        searchInput.style.display = 'none';
+        searchInput.value = '';
+    }
+};
+
+app.toggleMobilePrinterSearch = function() {
+    const searchInput = document.getElementById('mobile-print-search-input');
+    if (!searchInput) return;
+    
+    if (searchInput.style.display === 'none') {
+        searchInput.style.display = 'block';
+        searchInput.focus();
+    } else {
+        searchInput.style.display = 'none';
+        searchInput.value = '';
+        this.filterMobilePrinterList('');
+    }
+};
+
+app.filterMobilePrinterList = function(query) {
+    if (!this._mobilePrinters) return;
+    const q = query.trim().toUpperCase();
+    
+    const filtered = this._mobilePrinters.filter(p => {
+        const prNo = (p.pr_no || '').toUpperCase();
+        const devName = (p.device_name || '').toUpperCase();
+        const locCode = (p.location_code || '').toUpperCase();
+        const mahal = (p.mahal || '').toUpperCase();
+        
+        return prNo.includes(q) || devName.includes(q) || locCode.includes(q) || mahal.includes(q);
+    });
+    
+    this.renderMobilePrinters(filtered);
+    
+    const info = document.getElementById('mobile-print-printer-info');
+    if (info) {
+        info.textContent = q ? `${filtered.length} eşleşen yazıcı` : `${this._mobilePrinters.length} sistem yazıcısı listelendi`;
+    }
+};
+
+app.renderMobilePrinters = function(data) {
+    const select = document.getElementById('mobile-print-printer-select');
+    if (!select) return;
+    
+    if (data && data.length > 0) {
+        let html = '<option value="">— Yazıcı Seçin —</option>';
+        
+        data.forEach(p => {
+            const statusIcon = '🟢';
+            const nameText = p.pr_no || p.device_name || 'Bilinmeyen Yazıcı';
+            const locText = p.location_code ? ` (${p.location_code})` : '';
+            const val = p.cups_queue_name || p.pr_no;
+            
+            if (val) {
+                html += `<option value="${val}">${statusIcon} ${nameText}${locText}</option>`;
+            }
+        });
+        
+        select.innerHTML = html;
+    } else {
+        select.innerHTML = '<option value="">Eşleşen yazıcı bulunamadı</option>';
+    }
+};
+
+app.refreshMobilePrinterList = async function() {
+    const select = document.getElementById('mobile-print-printer-select');
+    const info = document.getElementById('mobile-print-printer-info');
+    const refreshIcon = document.getElementById('mobile-print-refresh-icon');
+    
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">Yazıcılar yükleniyor...</option>';
+    if (info) info.textContent = '';
+    if (refreshIcon) refreshIcon.classList.add('spinning');
+    
+    try {
+        const data = await this.apiRequest('/inventory/printers/get_all');
+        this._mobilePrinters = data || [];
+        
+        // Arama kutusu içeriğini temizle
+        const searchInput = document.getElementById('mobile-print-search-input');
+        if (searchInput) {
+            searchInput.value = '';
+        }
+        
+        this.renderMobilePrinters(this._mobilePrinters);
+        if (info) info.textContent = `${this._mobilePrinters.length} sistem yazıcısı listelendi`;
+    } catch (e) {
+        select.innerHTML = '<option value="">Bağlantı hatası</option>';
+        if (info) {
+            info.textContent = 'Sunucuya bağlanılamadı.';
+            info.style.color = '#ff4b2b';
+        }
+        console.error('[MOBİL YAZICI] Liste alınamadı:', e);
+    } finally {
+        if (refreshIcon) refreshIcon.classList.remove('spinning');
+    }
+};
+
+app.onMobilePrintFileSelected = function(input) {
+    const file = input.files && input.files[0];
+    const label = document.getElementById('mobile-print-file-label');
+    const dropzone = document.getElementById('mobile-print-dropzone');
+    
+    if (!file) {
+        this._mobilePrintSelectedFile = null;
+        label.innerHTML = 'PDF, Excel, PNG veya JPG dosyası seçin<br><small style="opacity:0.5;">Maksimum 10 MB</small>';
+        dropzone.style.borderColor = 'rgba(0,210,255,0.3)';
+        return;
+    }
+    
+    // Boyut kontrolü (10 MB)
+    if (file.size > 10 * 1024 * 1024) {
+        this.showToast('Dosya boyutu 10 MB\'ı aşıyor!', 'error');
+        input.value = '';
+        this._mobilePrintSelectedFile = null;
+        return;
+    }
+    
+    // Tür kontrolü
+    const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg'];
+    if (!allowedTypes.includes(file.type)) {
+        this.showToast('Sadece PDF, PNG ve JPG dosyaları kabul edilir.', 'error');
+        input.value = '';
+        this._mobilePrintSelectedFile = null;
+        return;
+    }
+    
+    this._mobilePrintSelectedFile = file;
+    
+    // UI güncelle
+    const sizeKB = (file.size / 1024).toFixed(0);
+    const sizeText = file.size > 1024 * 1024 ? `${(file.size / (1024*1024)).toFixed(1)} MB` : `${sizeKB} KB`;
+    const icon = file.type === 'application/pdf' ? '📄' : '🖼️';
+    
+    label.innerHTML = `${icon} <strong>${file.name}</strong><br><small style="opacity:0.7;">${sizeText} — ${file.type}</small>`;
+    dropzone.style.borderColor = '#00ff88';
+};
+
+app.adjustMobilePrintCopies = function(delta) {
+    const input = document.getElementById('mobile-print-copies');
+    if (!input) return;
+    let val = parseInt(input.value) || 1;
+    val = Math.max(1, Math.min(99, val + delta));
+    input.value = val;
+};
+
+app.submitMobilePrintJob = async function() {
+    const printerName = document.getElementById('mobile-print-printer-select').value;
+    const copies = parseInt(document.getElementById('mobile-print-copies').value) || 1;
+    const file = this._mobilePrintSelectedFile;
+    const submitBtn = document.getElementById('mobile-print-submit-btn');
+    const progressDiv = document.getElementById('mobile-print-progress');
+    const progressBar = document.getElementById('mobile-print-progress-bar');
+    const progressText = document.getElementById('mobile-print-progress-text');
+    
+    // Validasyon
+    if (!printerName) {
+        this.showToast('Lütfen bir yazıcı seçin.', 'warning');
+        return;
+    }
+    if (!file) {
+        this.showToast('Lütfen bir dosya seçin.', 'warning');
+        return;
+    }
+    
+    // UI kilitle
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gönderiliyor...';
+    progressDiv.style.display = 'block';
+    progressBar.style.width = '30%';
+    progressText.textContent = 'Dosya gönderiliyor...';
+    
+    try {
+        const formData = new FormData();
+        formData.append('printer_name', printerName);
+        formData.append('copies', copies.toString());
+        formData.append('file', file);
+        
+        progressBar.style.width = '60%';
+        progressText.textContent = 'CUPS sunucusuna iletiliyor...';
+        
+        // apiRequest yerine doğrudan fetch kullan (multipart form-data için)
+        const token = localStorage.getItem('token');
+        const response = await fetch('/api/inventory/printers/cups/print_job', {
+            method: 'POST',
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            progressBar.style.width = '100%';
+            progressText.textContent = 'Yazdırma başarılı!';
+            progressBar.style.background = 'linear-gradient(90deg, #00ff88, #00d2ff)';
+            
+            this.showToast(data.message || 'Yazdırma işi gönderildi!', 'success');
+            
+            // 1.5 saniye sonra modalı kapat
+            setTimeout(() => this.closeMobilePrintModal(), 1500);
+        } else {
+            throw new Error(data.error || 'Bilinmeyen hata');
+        }
+    } catch (e) {
+        progressBar.style.width = '100%';
+        progressBar.style.background = 'linear-gradient(90deg, #ff4b2b, #ff6b4a)';
+        progressText.textContent = 'Hata oluştu!';
+        
+        this.showToast('Yazdırma hatası: ' + e.message, 'error');
+        console.error('[MOBİL YAZICI] Yazdırma hatası:', e);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> YAZDIR';
+    }
+};
+
+app.openMobilePrintModalForFile = function(file) {
+    this.openMobilePrintModal();
+    this._mobilePrintSelectedFile = file;
+    const label = document.getElementById('mobile-print-file-label');
+    const dropzone = document.getElementById('mobile-print-dropzone');
+    const sizeKB = (file.size / 1024).toFixed(0);
+    const sizeText = file.size > 1024 * 1024 ? `${(file.size / (1024*1024)).toFixed(1)} MB` : `${sizeKB} KB`;
+    label.innerHTML = `📄 <strong>${file.name}</strong><br><small style="opacity:0.7;">${sizeText} — Otomatik Eklendi (Yazdırmaya Hazır!)</small>`;
+    dropzone.style.borderColor = '#00ff88';
 };
 

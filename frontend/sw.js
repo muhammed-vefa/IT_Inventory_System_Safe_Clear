@@ -1,10 +1,13 @@
-const CACHE_NAME = 'it-inventory-v3';
+const CACHE_NAME = 'it-inventory-v7';
 const ASSETS = [
-  './',
-  './index.html',
-  './frontend/style.css',
-  './frontend/UI_controller.js',
-  './assets/logo.png'
+  '/',
+  '/index.html',
+  '/frontend/style.css',
+  '/frontend/UI_controller.js',
+  '/static/logo/KOCSH.png',
+  '/static/logo/favicon/web-app-manifest-192x192.png',
+  '/static/logo/favicon/web-app-manifest-512x512.png',
+  '/frontend/manifest.json'
 ];
 
 self.addEventListener('install', event => {

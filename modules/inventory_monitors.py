@@ -15,10 +15,11 @@ def get_monitors():
             return jsonify({"error": "Database connection error"}), 500
             
         cursor = conn.cursor()
-        query = """
-            SELECT * FROM monitors
-            WHERE is_deleted = 0
-        """
+        include_archived = request.args.get('include_archived') == 'true'
+        if include_archived:
+            query = "SELECT * FROM monitors"
+        else:
+            query = "SELECT * FROM monitors WHERE is_deleted = 0"
         cursor.execute(query)
         columns = [column[0] for column in cursor.description]
         data = [dict(zip(columns, row)) for row in cursor.fetchall()]
@@ -89,7 +90,7 @@ def get_monitors():
         if 'conn' in locals() and conn:
             try:
                 conn.close()
-            except:
-                pass
+            except Exception as conn_close_e:
+                print(f"[Monitors DB Close Error] {conn_close_e}")
 
 

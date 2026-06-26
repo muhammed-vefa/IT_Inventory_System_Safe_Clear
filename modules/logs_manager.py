@@ -12,6 +12,18 @@ logs_manager_bp = Blueprint('logs_manager', __name__)
 
 def log_change(table_name, record_id, record_label, field_name, old_value, new_value, changed_by, display_name="", client_ip="", client_mac=""):
     """Sistemdeki her türlü değişikliği audit_logs tablosuna kaydeder."""
+    # Eğer IP adresi verilmemişse Flask request context'inden çekmeyi dene
+    if not client_ip:
+        try:
+            from flask import request
+            client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+            if client_ip and ',' in client_ip:
+                client_ip = client_ip.split(',')[0].strip()
+        except Exception as e:
+            print(f"[Log Change Context IP Fetch Error] {e}")
+    if not client_ip:
+        client_ip = "-"
+
     conn = get_db_connection()
     if not conn: return
 
@@ -75,7 +87,7 @@ def get_all_logs():
         columns = [column[0] for column in cursor.description]
         results = []
         for row in cursor.fetchall():
-            results.append(dict(zip(columns, row)))
+            results.append(normalize_row(dict(zip(columns, row))))
         conn.close()
         return jsonify(results)
     except Exception as e:
@@ -106,7 +118,7 @@ def get_record_history(table_name, record_id):
         columns = [column[0] for column in cursor.description]
         results = []
         for row in cursor.fetchall():
-            results.append(dict(zip(columns, row)))
+            results.append(normalize_row(dict(zip(columns, row))))
         conn.close()
         return jsonify(results)
     except Exception as e:

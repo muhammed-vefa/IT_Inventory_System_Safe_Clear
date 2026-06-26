@@ -11,9 +11,23 @@ os.chdir(project_root)
 import os
 import sys
 import subprocess
+import mimetypes
+
+# Windows Registry kaynaklı tarayıcı sorunlarını (Özellikle Opera) çözmek için MIME tipi zorlaması
+mimetypes.add_type('application/javascript', '.js')
+mimetypes.add_type('text/css', '.css')
+mimetypes.add_type('image/svg+xml', '.svg')
+
 from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
+
+app = Flask(__name__, static_folder=None)
+# Reverse Proxy (Apache/Nginx vs) arkasında çalışırken gerçek IP'yi almak için:
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+app.url_map.strict_slashes = False
+CORS(app)
 
 # --- Uygulama Yapilandirmasi ---
 BASE_DIR = project_root
@@ -27,31 +41,8 @@ if not os.path.exists(env_path):
     env_path = os.path.join(DATA_DIR, "tools", ".env")
 load_dotenv(env_path, override=True)
 
-# --- Cumartesi Otomatik Yedekleme ---
-def check_saturday_backup():
-    import datetime
-    from core.database_sql import backup_sql_db
-    
-    today = datetime.datetime.now()
-    if today.weekday() == 5: # 5 = Cumartesi
-        yedek_klasor = os.path.join(BASE_DIR, "database", "yedek")
-        bugun_str = today.strftime("%Y-%m-%d")
-        
-        # Bugun yedek alinmis mi kontrol et
-        alinmis = False
-        if os.path.exists(yedek_klasor):
-            for f in os.listdir(yedek_klasor):
-                if bugun_str in f:
-                    alinmis = True
-                    break
-        
-        if not alinmis:
-            print("[*] Bugün Cumartesi ve henüz yedek alınmamış. Otomatik yedekleme başlatılıyor...")
-            backup_sql_db()
-        else:
-            print("[*] Bugün Cumartesi, ancak bugünün yedeği zaten mevcut.")
-
-check_saturday_backup()
+# --- Otomatik Arka Plan Görevleri (APScheduler) ---
+# Görevler core.scheduler_logic içerisinde tanımlıdır.
 
 app = Flask(__name__, static_folder=BASE_DIR, static_url_path='')
 app.url_map.strict_slashes = False
@@ -65,7 +56,9 @@ from core.utils import error_response
 from core.limiter import limiter
 limiter.init_app(app)
 
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024 # 16MB limit
+# Dosya yukleme limitini sinirsiz (veya cok yuksek) yapiyoruz ki ISO dosyalari falan yuklenebilsin
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0 # Statik dosyaların önbelleklenmesini devre dışı bırak
+# app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024 # 16MB limit (IPTAL EDILDI)
 
 # Blueprints (Eksiksiz Liste)
 from modules.inventory_core import inventory_core_bp
@@ -75,10 +68,10 @@ from modules.inventory_queing import inventory_queing_bp
 from modules.inventory_monitors import inventory_monitors_bp
 from modules.inventory_mahal import inventory_mahal_bp
 
-from modules.printers_printers import printers_printers_bp
-from modules.printers_barcode_printers import printers_barcode_printers_bp
-from modules.printers_barcode_readers import printers_barcode_readers_bp
-from modules.printers_scanners import printers_scanners_bp
+from modules.inventory_printers import inventory_printers_bp
+from modules.inventory_barcode_printers import inventory_barcode_printers_bp
+from modules.inventory_barcode_readers import inventory_barcode_readers_bp
+from modules.inventory_scanners import inventory_scanners_bp
 from modules.user_manager import user_manager_bp
 from modules.areas_manager import areas_manager_bp
 from modules.notes_manager import notes_manager_bp
@@ -90,8 +83,11 @@ from modules.document_service import document_service_bp
 from modules.bim_service import bim_service_bp
 from modules.keyos_service import keyos_service_bp
 from modules.monitoring_manager import monitoring_manager_bp
-from modules.bat_manager import bat_manager_bp
 from modules.admin_reports import admin_reports_bp
+from modules.installations_manager import installations_manager_bp
+from modules.printer_pages_api import printer_pages_bp
+from modules.integrations_manager import integrations_bp
+from modules.desktop_central_service import desktop_central_service_bp
 
 # Blueprint Kayitlari
 # Inventory Blueprints
@@ -103,10 +99,11 @@ app.register_blueprint(inventory_monitors_bp, url_prefix='/api/inventory')
 app.register_blueprint(inventory_mahal_bp, url_prefix='/api/inventory')
 
 # Printers Blueprints (Separated by device type as per Constitution)
-app.register_blueprint(printers_printers_bp, url_prefix='/api/printers/printers')
-app.register_blueprint(printers_barcode_printers_bp, url_prefix='/api/printers/barcode_printers')
-app.register_blueprint(printers_barcode_readers_bp, url_prefix='/api/printers/barcode_readers')
-app.register_blueprint(printers_scanners_bp, url_prefix='/api/printers/scanners')
+app.register_blueprint(inventory_printers_bp, url_prefix='/api/inventory/printers')
+app.register_blueprint(inventory_barcode_printers_bp, url_prefix='/api/inventory/barcode_printers')
+app.register_blueprint(printer_pages_bp, url_prefix='/api/inventory/printer_pages')
+app.register_blueprint(inventory_barcode_readers_bp, url_prefix='/api/inventory/barcode_readers')
+app.register_blueprint(inventory_scanners_bp, url_prefix='/api/inventory/scanners')
 app.register_blueprint(user_manager_bp, url_prefix='/api/users')
 app.register_blueprint(areas_manager_bp, url_prefix='/api/areas')
 app.register_blueprint(notes_manager_bp, url_prefix='/api/notes')
@@ -115,19 +112,43 @@ app.register_blueprint(mahal_manager_bp, url_prefix='/api/mahal')
 app.register_blueprint(service_manager_bp, url_prefix='/api/service')
 app.register_blueprint(logs_manager_bp, url_prefix='/api/logs')
 app.register_blueprint(document_service_bp, url_prefix='/api/downloads')
+app.register_blueprint(document_service_bp, url_prefix='/api/documents', name='document_service_docs') # Added for backward compatibility with frontend
 app.register_blueprint(bim_service_bp, url_prefix='/api/bim')
 app.register_blueprint(keyos_service_bp, url_prefix='/api/keyos')
+app.register_blueprint(desktop_central_service_bp, url_prefix='/api/desktop_central')
 app.register_blueprint(monitoring_manager_bp, url_prefix='/api/system')
-app.register_blueprint(bat_manager_bp, url_prefix='/api/bat_apps')
 app.register_blueprint(admin_reports_bp, url_prefix='/api/admin/reports')
+app.register_blueprint(installations_manager_bp, url_prefix='/api/installations')
+app.register_blueprint(installations_manager_bp, url_prefix='/api/isvec', name='installations_manager_isvec')
 
 # --- Alias for Cached Frontends ---
 # Bazen tarayıcılar eski JS dosyasını (printers/batch_action) önbellekte tutabiliyor.
 # 404 hatasını bypass etmek için doğrudan alias oluşturuyoruz.
 @app.route('/api/printers/batch_action', methods=['POST'])
 def batch_action_alias():
-    from modules.printers_printers import batch_action
+    from modules.inventory_printers import batch_action
     return batch_action()
+
+@app.route('/api/system_info', methods=['GET'])
+def get_system_info():
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        server_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        server_ip = request.host.split(':')[0]
+
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if client_ip and ',' in client_ip:
+        client_ip = client_ip.split(',')[0].strip()
+        
+    return jsonify({
+        "server_ip": server_ip,
+        "client_ip": client_ip,
+        "version": "2.1.0"
+    })
 
 # --- Global Exception Handler (PRODUCTION HARDENING) ---
 @app.errorhandler(Exception)
@@ -174,6 +195,12 @@ def audit_logger(response):
         import datetime
         print(f"[MATRIX] [{datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]}] HTTP {method} {path} | Cihaz: {client_ip} | Kullanici: {user_id}")
         
+    # Prevent aggressive caching for the main HTML and static assets
+    if not request.path.startswith('/api/'):
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+
     return response
 
 @app.errorhandler(429)
@@ -181,6 +208,29 @@ def ratelimit_handler(e):
     return error_response(message="Çok fazla istek gönderildi, lütfen biraz bekleyin.", code=429)
 
 from core.auth import require_auth
+
+@app.route('/api/config')
+def get_config():
+    import os
+    domain = os.getenv("HOSPITAL_DOMAIN", "ornek-kurum.com")
+    return jsonify({
+        "hospital_name": os.getenv("HOSPITAL_NAME", "Örnek Kurum Adı"),
+        "hospital_domain": domain,
+        "links": {
+            "bim": os.getenv("LINK_BIM", f"http://bim.{domain}/"),
+            "mym": os.getenv("LINK_MYM", f"https://mym.{domain}/"),
+            "hbys": os.getenv("LINK_HBYS", f"https://hbys.{domain}/hbys-web/desktop/desktop.html"),
+            "cups": os.getenv("LINK_CUPS", f"http://print01.{domain}:49631/printers/"),
+            "bulut": os.getenv("LINK_BULUT", f"https://bulut.{domain}/index.php/login"),
+            "ortak_alan": os.getenv("LINK_ORTAK_ALAN", f"http://ortakalan.{domain}/WebClientNew/Login"),
+            "speedtest": os.getenv("LINK_SPEEDTEST", f"http://speedtest.{domain}/"),
+            "magicinfo_m1": os.getenv("LINK_MAGICINFO_M1", f"http://minfo-01.{domain}:7001/MagicInfo/login.htm?cmd=INIT#"),
+            "magicinfo_m2": os.getenv("LINK_MAGICINFO_M2", f"http://minfo-02.{domain}:7001/MagicInfo/login.htm?cmd=INIT"),
+            "magicinfo_m3": os.getenv("LINK_MAGICINFO_M3", f"http://minfo-03.{domain}:7001/MagicInfo/login.htm?cmd=INIT"),
+            "desktop_central": os.getenv("LINK_DESKTOP_CENTRAL", f"https://desktopcentral.{domain}:8383/webclient#/uems/home/summary"),
+            "lms": os.getenv("LINK_LMS", f"https://lms.{domain}/Login")
+        }
+    })
 
 @app.route('/api/dashboard/stats')
 @require_auth
@@ -218,7 +268,7 @@ def serve_static(path):
     if os.path.isfile(file_path):
         return send_from_directory(BASE_DIR, path)
     
-    for folder in ['img', 'logo', 'assets', 'frontend']:
+    for folder in ['static', 'img', 'assets', 'frontend']:
         alt_path = os.path.join(BASE_DIR, folder, path)
         if os.path.isfile(alt_path):
             return send_from_directory(os.path.join(BASE_DIR, folder), path)
@@ -246,6 +296,11 @@ def initialize_system():
     except Exception as e:
         print(f"[!] Veritabanı Migrasyon Hatası: {e}")
 
+    try:
+        from core.scheduler_logic import init_scheduler
+        init_scheduler()
+    except Exception as e:
+        print(f"[!] APScheduler Başlatılamadı: {e}")
 
         
     _SYSTEM_INITIALIZED = True

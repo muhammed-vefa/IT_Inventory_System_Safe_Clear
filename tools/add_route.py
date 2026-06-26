@@ -45,7 +45,7 @@ def batch_action():
                 failed_targets.append(f"{p_name} (IP yok)")
                 continue
 
-            base_url = "http://bim.kocaelish.com/Handler.ashx"
+            base_url = "http://bim.ornek-kurum.com/Handler.ashx"
             login_data = {
                 "Functions": "Login",
                 "UserName": bim_user,

@@ -33,12 +33,19 @@ def export_all_to_excel():
     with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
         for table in tables:
             print(f"  -> Tablo aktariliyor: {table}")
-            df = pd.read_sql(f"SELECT * FROM {table}", conn)
-            # Excel sayfa isimleri maksimum 31 karakter olabilir
-            df.to_excel(writer, sheet_name=table[:31], index=False)
+            try:
+                df = pd.read_sql(f"SELECT * FROM {table}", conn)
+                if len(df) > 1000000:
+                    print(f"     [UYARI] {table} tablosu çok büyük ({len(df)} kayıt), Excel limitleri nedeniyle ilk 1.000.000 kaydı aktarılıyor!")
+                    df = df.tail(1000000) # En son (en guncel) 1 milyonu almak daha mantikli loglar icin.
+                
+                # Excel sayfa isimleri maksimum 31 karakter olabilir
+                df.to_excel(writer, sheet_name=table[:31], index=False)
+            except Exception as e:
+                print(f"     [HATA] {table} aktarilirken hata olustu: {e}")
             
     conn.close()
-    print(f"[+] Islem TAMAM. Butun verileriniz tek bir dosya icinde '{excel_file}' olarak kaydedildi.")
+    print(f"[+] Islem TAMAM. Butun verileriniz (Loglar dahil ne var ne yok her sey) tek bir dosya icinde '{excel_file}' olarak kaydedildi.")
 
 if __name__ == '__main__':
     export_all_to_excel()

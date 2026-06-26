@@ -49,7 +49,10 @@ TABLE_MAP = {
     'MONITOR': 'monitors',
     'BARKOD YAZICI': 'barcode_printers',
     'BARKOD OKUYUCU': 'barcode_readers',
-    'TARAYICI': 'scanners'
+    'TARAYICI': 'scanners',
+    'BARCODE_PRINTER': 'barcode_printers',
+    'BARCODE_READER': 'barcode_readers',
+    'SCANNER': 'scanners'
 }
 
 def get_table_for_type(device_type):
@@ -93,6 +96,17 @@ def map_db_to_frontend(row, table):
     elif table in ['queing_machines', 'tablets']:
         if 'serial_no' in row:
             row['serial_no'] = row['serial_no']
+            
+    # Clean "0" and "0.0" serial values
+    serial_fields = [
+        'pc_serial', 'by_serial', 'bo_serial', 'scanner_serial', 'monitor_serial', 'monitor2_serial',
+        'serial_no', 'seri', 'by_seri', 'bo_seri', 'tarayici_seri', 'monitor_seri', 'monitor2_seri'
+    ]
+    for field in serial_fields:
+        if field in row and row[field] is not None:
+            s = str(row[field]).strip()
+            if s in ('0', '0.0', '0,0'):
+                row[field] = ''
             
     return row
 
@@ -188,6 +202,51 @@ def get_stats():
 
         keyos_live = get_keyos_live_stats_cached()
 
+        # En son KeyOS uyumsuzluk kontrolü logunu oku
+        keyos_sync_log = None
+        try:
+            import json, os
+            log_path = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))), 'database', 'scheduler_logs.json')
+            if os.path.exists(log_path):
+                with open(log_path, 'r', encoding='utf-8') as f:
+                    logs = json.load(f)
+                    # En sondan başa doğru KeyOS Sync ara
+                    for log in reversed(logs):
+                        if log.get("task_name") == "KeyOS Sync":
+                            keyos_sync_log = log
+                            break
+        except Exception as e:
+            print(f"[API ERROR] reading scheduler_logs: {e}")
+
+        # Yazıcı çıktı sayısı uyarısı (son 30 gün çıktı sayısı < 30 olan aktif yazıcılar)
+        low_print_count = 0
+        try:
+            from datetime import timedelta
+            thirty_days_ago = datetime.now() - timedelta(days=30)
+            low_print_printers_query = """
+                SELECT COUNT(*) as cnt FROM printers p
+                WHERE (p.is_deleted = 0 OR p.is_deleted IS NULL) AND p.on_field = 1
+                AND p.ip IS NOT NULL AND p.ip != '' AND p.ip != '0'
+                AND (
+                    (
+                        SELECT MAX(page_count) FROM printer_page_logs 
+                        WHERE pr_no = p.pr_no AND timestamp >= ?
+                    ) - (
+                        SELECT MIN(page_count) FROM printer_page_logs 
+                        WHERE pr_no = p.pr_no AND timestamp >= ?
+                    ) < 30
+                    OR NOT EXISTS (
+                        SELECT 1 FROM printer_page_logs 
+                        WHERE pr_no = p.pr_no AND timestamp >= ?
+                    )
+                )
+            """
+            res_low = query_db(low_print_printers_query, (thirty_days_ago, thirty_days_ago, thirty_days_ago), one=True)
+            if res_low:
+                low_print_count = res_low.get('cnt', 0)
+        except Exception as ex:
+            print(f"[API ERROR] low_print_printers: {ex}")
+
         return jsonify({
             "pc": {
                 "on_field": pc_stats.get('pc_on_field', 0),
@@ -221,7 +280,9 @@ def get_stats():
                 "on_field": pc_extra.get('tr_g2090_sahada', 0),
                 "warehouse": depo_extra.get('tr_g2090_depo', 0)
             },
-            "keyos_uptime": keyos_live
+            "keyos_uptime": keyos_live,
+            "keyos_sync_log": keyos_sync_log,
+            "low_print_printers": low_print_count
         })
     except Exception as e:
         print(f"[API ERROR] stats: {e}")
@@ -239,6 +300,17 @@ def add_inventory():
         data = request.json
         if not data:
             return jsonify({"error": "Veri yok"}), 400
+
+        # Clean "0" and empty serial values to None for SQL NULL mapping
+        serial_keys = [
+            'pc_serial', 'serial_no', 'seri', 'by_serial', 'bo_serial', 'scanner_serial', 'monitor_serial', 'monitor2_serial',
+            'by_seri', 'bo_seri', 'tarayici_seri', 'monitor_seri', 'monitor2_seri'
+        ]
+        for k in serial_keys:
+            if k in data and data[k] is not None:
+                s = str(data[k]).strip()
+                if s in ('0', '0.0', '0,0', ''):
+                    data[k] = None
         
         device_type = data.get('device_type', 'PC')
         table_name = get_table_for_type(device_type)
@@ -263,20 +335,19 @@ def add_inventory():
                            (data.get('name') or 'Monitör', data.get('model'), data.get('serial_no'), data.get('pc_no'), data.get('location_code'), data.get('on_field', 1), data.get('is_faulty', data.get('is_faulty', 0)), data.get('warehouse', data.get('warehouse', 0))))
         elif table_name == 'printers':
             cursor.execute("""
-                INSERT INTO printers (pr_no, name, model, ip, mac, seri, pc_no, location, sub_location, user_name, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO printers (pr_no, model, ip, mac, serial_no, location_code, on_field, is_faulty, warehouse, without_location)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                data.get('envanter', ''),
-                data.get('envanter', ''),
+                data.get('pr_no', ''),
                 data.get('model', ''),
                 data.get('ip', ''),
                 data.get('mac', ''),
-                data.get('seri', ''),
-                data.get('bilgisayar_adi', ''),
-                data.get('mahal', ''),
-                data.get('alt_mahal', ''),
-                data.get('kullanici', ''),
-                data.get('durum', 'Kurulu')
+                data.get('serial_no') or data.get('seri') or None,
+                data.get('location_code') or data.get('mahal', ''),
+                data.get('on_field', 1),
+                data.get('is_faulty', 0),
+                data.get('warehouse', 0),
+                data.get('without_location', 0)
             ))
 
         conn.commit()
@@ -302,6 +373,17 @@ def update_inventory():
         data = request.json
         if not data or 'id' not in data:
             return jsonify({"error": "ID belirtilmedi."}), 400
+
+        # Clean "0" and empty serial values to None for SQL NULL mapping
+        serial_keys = [
+            'pc_serial', 'serial_no', 'seri', 'by_serial', 'bo_serial', 'scanner_serial', 'monitor_serial', 'monitor2_serial',
+            'by_seri', 'bo_seri', 'tarayici_seri', 'monitor_seri', 'monitor2_seri'
+        ]
+        for k in serial_keys:
+            if k in data and data[k] is not None:
+                s = str(data[k]).strip()
+                if s in ('0', '0.0', '0,0', ''):
+                    data[k] = None
         
         record_id = data['id']
         device_type = data.get('device_type', 'PC')
@@ -406,8 +488,8 @@ def update_inventory():
                                 suffix_str = host_val.lower().split('x')[-1]
                                 try:
                                     existing_suffixes.add(int(suffix_str))
-                                except ValueError:
-                                    pass
+                                except ValueError as val_e:
+                                    print(f"[Inventory Core Suffix Conversion Error] {val_e}")
                         seq = 1
                         while seq in existing_suffixes:
                             seq += 1
@@ -484,8 +566,10 @@ def update_inventory():
             params.append(display_name)
 
         if not update_fields:
-            conn.close()
-            return jsonify({"success": True, "message": "Degisiklik yok."})
+            # Sadece arşivden çıkarma durumu olabilir, en azından is_deleted=0 yapalım
+            update_fields.append("[is_deleted] = 0")
+        else:
+            update_fields.append("[is_deleted] = 0")
 
         # CONFLICT DETECTION & BIDIRECTIONAL SYNC FOR PERIPHERALS (When updating PC)
         force_update = data.get('force_update', False)
@@ -846,6 +930,45 @@ def get_device_detail(device_id):
         print(f"[API ERROR] get_device_detail: {e}")
         return error_response(f"Sistem Hatası: {str(e)}", code=500)
 
+@inventory_core_bp.route('/device_by_code/<code>', methods=['GET'])
+@require_auth
+def get_device_by_code(code):
+    try:
+        code = str(code).strip()
+        from core.database_sql import query_db
+        from core.utils import success_response, error_response
+        
+        # 1. PC Tablosunda ara
+        res = query_db("SELECT id, pc_serial as serial_no, location_code FROM pcs WHERE pc_no = ? AND (is_deleted = 0 OR is_deleted IS NULL)", (code,))
+        if res:
+            return success_response({"serial_no": res[0]['serial_no'], "location_code": res[0]['location_code']})
+            
+        # 2. Diğer Tablolarda ara
+        tables = [
+            ("printers", "serial_no", "recorded_device_no"),
+            ("scanners", "serial_no", "recorded_device_no"),
+            ("barcode_printers", "serial_no", "recorded_device_no"),
+            ("barcode_readers", "serial_no", "recorded_device_no"),
+            ("monitors", "serial_no", "recorded_device_no"),
+            ("queing_machines", "pc_serial", "pc_no"),
+            ("tablets", "pc_serial", "pc_no")
+        ]
+        
+        for t, serial_col, pc_col in tables:
+            try:
+                # Query inside try-except to avoid table-not-exist or col-not-exist errors just in case
+                res = query_db(f"SELECT id, {serial_col} as serial_no, location_code FROM {t} WHERE {pc_col} = ? AND (is_deleted = 0 OR is_deleted IS NULL)", (code,))
+                if res:
+                    return success_response({"serial_no": res[0]['serial_no'], "location_code": res[0]['location_code']})
+            except Exception as e:
+                print(f"[API ERROR] get_device_by_code loop error ({t}): {e}")
+                pass
+                
+        return error_response("Cihaz bulunamadı", code=404)
+    except Exception as e:
+        print(f"[API ERROR] get_device_by_code: {e}")
+        return error_response(f"Sistem Hatası: {str(e)}", code=500)
+
 # =====================================================
 #  SAYIM MODU
 # =====================================================
@@ -937,7 +1060,7 @@ def get_weekly_location_report():
             SELECT table_name, record_id, record_label, field_name, 
                    old_value, new_value, changed_by, display_name, timestamp
             FROM audit_logs
-            WHERE field_name IN ('location_code', 'keyos_location')
+            WHERE field_name IN ('location_code', 'keyos_location', 'warehouse', 'on_field', 'is_faulty', 'without_location')
               AND timestamp >= DATEADD(day, -7, GETDATE())
             ORDER BY timestamp DESC
         """
@@ -952,12 +1075,34 @@ def get_weekly_location_report():
             if row_dict.get('timestamp') and isinstance(row_dict['timestamp'], datetime):
                 row_dict['timestamp'] = row_dict['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
             
-            # Eski ve yeni mahal adlarını eşle
-            old_code = str(row_dict.get('old_value', '')).strip()
-            new_code = str(row_dict.get('new_value', '')).strip()
+            field = row_dict.get('field_name', '')
+            old_val_raw = str(row_dict.get('old_value', '')).strip()
+            new_val_raw = str(row_dict.get('new_value', '')).strip()
             
-            row_dict['old_location_name'] = mahal_map.get(old_code, old_code or '-')
-            row_dict['new_location_name'] = mahal_map.get(new_code, new_code or '-')
+            if field in ['location_code', 'keyos_location']:
+                row_dict['old_location_name'] = mahal_map.get(old_val_raw, old_val_raw or '-')
+                row_dict['new_location_name'] = mahal_map.get(new_val_raw, new_val_raw or '-')
+            else:
+                # Durum değişiklikleri
+                row_dict['old_value'] = '-'
+                row_dict['old_location_name'] = '-'
+                row_dict['new_value'] = 'DURUM DEĞİŞTİ'
+                
+                new_bool = new_val_raw in ('1', 'true', 'True', 'yes', 'Yes')
+                
+                if field == 'warehouse' and new_bool:
+                    row_dict['new_location_name'] = 'Depoya Taşındı'
+                elif field == 'on_field' and new_bool:
+                    row_dict['new_location_name'] = 'Sahada Kuruldu'
+                elif field == 'is_faulty' and new_bool:
+                    row_dict['new_location_name'] = 'Arızalı Olarak Ayrıldı'
+                elif field == 'without_location' and new_bool:
+                    row_dict['new_location_name'] = 'Kayıp/Mahalsiz İşaretlendi'
+                else:
+                    # If it was set to 0, it means it was removed from that state, which usually coincides with being put into another state.
+                    # We can skip the '0' states to avoid duplicate rows, or just log them.
+                    if not new_bool:
+                        continue 
             
             # Cihaz tipi ismini daha okunabilir yapalım (Örn: pcs -> Bilgisayar)
             table_name = row_dict.get('table_name', '')
@@ -987,5 +1132,80 @@ def get_weekly_location_report():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@inventory_core_bp.route('/list_backups', methods=['GET'])
+@require_admin
+def list_backups():
+    try:
+        from config import BASE_DIR
+        import os, datetime
+        yedek_path = os.path.join(BASE_DIR, "database", "yedek")
+        if not os.path.exists(yedek_path):
+            return jsonify({"success": True, "backups": []})
+            
+        files = []
+        for f in os.listdir(yedek_path):
+            if f.endswith('.bak'):
+                full_path = os.path.join(yedek_path, f)
+                stat = os.stat(full_path)
+                files.append({
+                    "filename": f,
+                    "size": stat.st_size,
+                    "created_at": datetime.datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                })
+        files.sort(key=lambda x: x['created_at'], reverse=True)
+        return jsonify({"success": True, "backups": files})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
+@inventory_core_bp.route('/download_backup/<path:filename>', methods=['GET'])
+@require_admin
+def download_backup(filename):
+    try:
+        from config import BASE_DIR
+        import os
+        from flask import send_file
+        from werkzeug.utils import secure_filename
+        
+        safe_filename = secure_filename(filename)
+        yedek_path = os.path.join(BASE_DIR, "database", "yedek")
+        file_path = os.path.join(yedek_path, safe_filename)
+        
+        if os.path.exists(file_path):
+            return send_file(file_path, as_attachment=True)
+        else:
+            return jsonify({"success": False, "error": "Dosya bulunamadi"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
+@inventory_core_bp.route('/restore_db', methods=['POST'])
+@require_admin
+def restore_backup():
+    try:
+        from config import BASE_DIR
+        import os
+        from core.database_sql import restore_sql_db
+        from werkzeug.utils import secure_filename
+        
+        backup_file = None
+        
+        if 'file' in request.files:
+            file = request.files['file']
+            if file and file.filename.endswith('.bak'):
+                safe_name = secure_filename(file.filename)
+                yedek_path = os.path.join(BASE_DIR, "database", "yedek")
+                if not os.path.exists(yedek_path):
+                    os.makedirs(yedek_path)
+                backup_file = os.path.join(yedek_path, f"UPLOADED_{safe_name}")
+                file.save(backup_file)
+        elif request.json and 'filename' in request.json:
+            safe_name = secure_filename(request.json['filename'])
+            backup_file = os.path.join(BASE_DIR, "database", "yedek", safe_name)
+            
+        if not backup_file or not os.path.exists(backup_file):
+            return jsonify({"success": False, "error": "Gecerli bir .bak dosyasi saglanamadi veya dosya bulunamadi."}), 400
+            
+        success, msg = restore_sql_db(backup_file)
+        return jsonify({"success": success, "message" if success else "error": msg}), 200 if success else 500
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500

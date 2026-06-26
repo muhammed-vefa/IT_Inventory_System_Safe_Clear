@@ -131,7 +131,16 @@ class ServerGUI:
         try:
             while True:
                 msg = self.log_queue.get_nowait()
-                self.append_log(msg)
+                try:
+                    # Gelen veriyi güvenli string'e çevir
+                    if isinstance(msg, bytes):
+                        safe_msg = msg.decode('utf-8', errors='replace')
+                    else:
+                        safe_msg = str(msg)
+                    self.append_log(safe_msg)
+                except Exception as e:
+                    # Ekrana basılamayan özel karakterler gelirse GUI çökmesini önlemek için terminale yazdır
+                    print(f"[GUI Log Processing Error] {e}")
         except queue.Empty:
             pass
         self.root.after(100, self.process_queue)
@@ -155,15 +164,15 @@ class ServerGUI:
                 try:
                     with open(log_file_path, "a", encoding="utf-8") as f:
                         f.write(line)
-                except Exception:
-                    pass
+                except Exception as append_e:
+                    print(f"[GUI File Append Error] {append_e}")
         pipe.close()
         
         try:
             with open(log_file_path, "a", encoding="utf-8") as f:
                 f.write("[!] Sunucu kapandi. Arayuz 3 saniye icinde kapatilacak...\n")
-        except Exception:
-            pass
+        except Exception as write_close_e:
+            print(f"[GUI Write Close Message Error] {write_close_e}")
             
         self.log_queue.put("[!] Sunucu kapandi. Arayuz 3 saniye icinde kapatilacak...\n")
         time.sleep(3)
@@ -173,6 +182,7 @@ class ServerGUI:
         import os
         env_vars = os.environ.copy()
         env_vars['PYTHONIOENCODING'] = 'utf-8'
+        env_vars['PYTHONUNBUFFERED'] = '1'
         
         self.process = subprocess.Popen(
             [sys.executable, "-u", "tools/main.py"],

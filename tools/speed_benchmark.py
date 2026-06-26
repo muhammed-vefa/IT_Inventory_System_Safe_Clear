@@ -50,8 +50,8 @@ def run_benchmark():
         # Isınma turu
         try:
              session.request(endpoint['method'], endpoint['url'], timeout=10)
-        except:
-             pass
+        except Exception as warmup_e:
+             print(f"[Benchmark Warmup Error] {warmup_e}")
              
         for i in range(ITERATIONS):
             start = time.time()

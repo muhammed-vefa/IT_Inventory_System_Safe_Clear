@@ -1,0 +1,13 @@
+HAK SAHİPLİĞİ VE KULLANIM NOTU
+
+Bu yazılım, Geliştirici Personel tarafından kurum içi kullanım amacıyla geliştirilmiştir.
+
+Yazılımın amacı; kurum içindeki teknik takip, envanter yönetimi, kayıt düzeni, raporlama ve iş süreçlerinin daha düzenli yürütülmesine katkı sağlamaktır.
+
+Bu proje kapsamında yer alan kaynak kodlar, arayüz yapısı, veri düzeni, dokümantasyon, rapor şablonları ve sistem içerikleri geliştirici emeğiyle oluşturulmuştur.
+
+© 2026 Muhammed Vefa Arabacı. Tüm hakları saklıdır.
+
+Bu yazılım; kurum içi kullanım amacı dışında izinsiz olarak kopyalanamaz, çoğaltılamaz, dağıtılamaz, satılamaz, devredilemez veya üçüncü kişilerle paylaşılamaz.
+
+Bu not, proje sahipliği, teknik kayıt ve kullanım kapsamının belirlenmesi amacıyla hazırlanmıştır. Taraflar arasında ayrıca yazılı bir sözleşme bulunması halinde, ilgili sözleşme hükümleri saklıdır.

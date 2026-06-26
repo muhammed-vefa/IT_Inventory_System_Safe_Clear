@@ -1,0 +1,111 @@
+EXCEL ANALIZI:
+
+Sayfa: consumable_items
+  Toplam Sütun: 13
+  Tamamen Boş Sütunlar: ['description', 'archive_date', 'deleted_at']
+  Veri İçeren Sütunlar: ['id', 'category', 'name', 'critical_stock', 'current_stock', 'unit', 'field_stock', 'total_stock', 'is_deleted', 'created_at']
+
+Sayfa: notes (BOS)
+
+Sayfa: service_records (BOS)
+
+Sayfa: mahal_list
+  Toplam Sütun: 10
+  Tamamen Boş Sütunlar: []
+  Veri İçeren Sütunlar: ['id', 'location_code', 'location_name', 'phone_number', 'tower', 'floor', 'created_at', 'archive_date', 'deleted_at', 'is_deleted']
+
+Sayfa: users
+  Toplam Sütun: 17
+  Tamamen Boş Sütunlar: ['archive_date', 'deleted_at']
+  Veri İçeren Sütunlar: ['id', 'username', 'password_hash', 'display_name', 'role', 'permissions', 'bim_user', 'bim_pass', 'keyos_user', 'keyos_pass', 'last_login', 'session_timeout', 'last_activity', 'is_deleted', 'created_at']
+
+Sayfa: audit_logs
+  Toplam Sütun: 12
+  Tamamen Boş Sütunlar: []
+  Veri İçeren Sütunlar: ['id', 'timestamp', 'table_name', 'record_id', 'record_label', 'field_name', 'old_value', 'new_value', 'changed_by', 'display_name', 'client_ip', 'created_at']
+
+Sayfa: refresh_tokens
+  Toplam Sütun: 12
+  Tamamen Boş Sütunlar: ['replaced_by_token', 'client_ip', 'user_agent', 'archive_date', 'deleted_at']
+  Veri İçeren Sütunlar: ['id', 'user_id', 'token', 'expires_at', 'revoked', 'created_at', 'is_deleted']
+
+Sayfa: user_activity_log
+  Toplam Sütun: 11
+  Tamamen Boş Sütunlar: ['archive_date', 'deleted_at']
+  Veri İçeren Sütunlar: ['id', 'timestamp', 'user_id', 'username', 'action', 'details', 'client_ip', 'user_agent', 'is_deleted']
+
+Sayfa: sync_status (BOS)
+
+Sayfa: sync_logs (BOS)
+
+Sayfa: pcs
+  Toplam Sütun: 36
+  Tamamen Boş Sütunlar: ['last_counted_at', 'counted_by', 'hostname_mismatch', 'archive_date', 'deleted_at']
+  Veri İçeren Sütunlar: ['id', 'pc_no', 'location_code', 'keyos_location', 'on_field', 'warehouse', 'is_faulty', 'without_location', 'pending_installation', 'ip', 'mac', 'connected_printers', 'pc_serial', 'monitor_serial', 'monitor2_serial', 'windows', 'keyos', 'rdp', 'pr6900', 'pr5200', 'pr8690', 'by_serial', 'bo_serial', 'scanner_serial', 'description', 'hostname', 'device_type', 'last_edit_date', 'last_edit_user', 'created_at', 'is_deleted']
+
+Sayfa: queing_machines
+  Toplam Sütun: 14
+  Tamamen Boş Sütunlar: ['pending_installation', 'serial_no', 'archive_date', 'deleted_at']
+  Veri İçeren Sütunlar: ['id', 'pc_no', 'location_code', 'on_field', 'warehouse', 'is_faulty', 'without_location', 'ip', 'mac', 'is_deleted']
+
+Sayfa: tablets
+  Toplam Sütun: 29
+  Tamamen Boş Sütunlar: ['id', 'last_edit_date', 'last_edit_user', 'pending_installation', 'pending_installation.1', 'mac', 'archive_date', 'deleted_at', 'serial_no']
+  Veri İçeren Sütunlar: ['created_at', 'pc_no', 'location_code', 'on_field', 'warehouse', 'is_faulty', 'without_location', 'id.1', 'pc_no.1', 'location_code.1', 'on_field.1', 'warehouse.1', 'is_faulty.1', 'without_location.1', 'ip', 'assigned_to', 'phone', 'title', 'unit', 'is_deleted']
+
+Sayfa: monitors
+  Toplam Sütun: 20
+  Tamamen Boş Sütunlar: ['mac', 'assigned_to', 'notes', 'archive_date', 'deleted_at', 'recorded_device_no']
+  Veri İçeren Sütunlar: ['id', 'name', 'location_code', 'on_field', 'warehouse', 'is_faulty', 'without_location', 'in_service', 'model', 'serial_no', 'status', 'is_deleted', 'created_at', 'monitor_type']
+
+Sayfa: printers
+  Toplam Sütun: 16
+  Tamamen Boş Sütunlar: ['archive_date', 'deleted_at']
+  Veri İçeren Sütunlar: ['id', 'pr_no', 'model', 'serial_no', 'mac', 'ip', 'location_code', 'created_at', 'on_field', 'warehouse', 'is_faulty', 'without_location', 'in_service', 'is_deleted']
+
+Sayfa: barcode_printers
+  Toplam Sütun: 9
+  Tamamen Boş Sütunlar: ['pc_no', 'archive_date', 'deleted_at']
+  Veri İçeren Sütunlar: ['id', 'name', 'serial_no', 'status', 'is_deleted', 'recorded_device_no']
+
+Sayfa: barcode_readers
+  Toplam Sütun: 9
+  Tamamen Boş Sütunlar: ['pc_no', 'archive_date', 'deleted_at']
+  Veri İçeren Sütunlar: ['id', 'name', 'serial_no', 'status', 'is_deleted', 'recorded_device_no']
+
+Sayfa: scanners
+  Toplam Sütun: 9
+  Tamamen Boş Sütunlar: ['archive_date', 'deleted_at']
+  Veri İçeren Sütunlar: ['id', 'name', 'model', 'serial_no', 'status', 'is_deleted', 'recorded_device_no']
+
+Sayfa: printer_service
+  Toplam Sütun: 22
+  Tamamen Boş Sütunlar: ['sla_no', 'archive_date', 'deleted_at', 'acq_date', 'deleted_at.1', 'acq_date.1']
+  Veri İçeren Sütunlar: ['id', 'pr_no', 'serial_no', 'mac', 'location_code', 'model', 'acquisition_date', 'sent_date', 'return_date', 'fault_description', 'has_substitute', 'substitute_pr_no', 'status', 'user_name', 'is_deleted', 'created_at']
+
+Sayfa: printer_service_history (BOS)
+
+Sayfa: technical_notes
+  Toplam Sütun: 12
+  Tamamen Boş Sütunlar: ['image_path', 'archive_date', 'deleted_at']
+  Veri İçeren Sütunlar: ['id', 'title', 'content', 'requires_user', 'user_name', 'created_at', 'is_deleted', 'is_restricted', 'allowed_users']
+
+Sayfa: closure_notes
+  Toplam Sütun: 12
+  Tamamen Boş Sütunlar: ['requires_user', 'user_name', 'image_path', 'archive_date', 'deleted_at', 'is_restricted', 'allowed_users']
+  Veri İçeren Sütunlar: ['id', 'title', 'content', 'created_at', 'is_deleted']
+
+Sayfa: troubleshooting_notes
+  Toplam Sütun: 12
+  Tamamen Boş Sütunlar: ['requires_user', 'user_name', 'image_path', 'archive_date', 'deleted_at', 'is_restricted', 'allowed_users']
+  Veri İçeren Sütunlar: ['id', 'title', 'content', 'created_at', 'is_deleted']
+
+Sayfa: shared_areas
+  Toplam Sütun: 9
+  Tamamen Boş Sütunlar: ['archive_date', 'deleted_at']
+  Veri İçeren Sütunlar: ['id', 'name', 'path', 'username', 'password', 'created_at', 'is_deleted']
+
+Sayfa: depot_items
+  Toplam Sütun: 15
+  Tamamen Boş Sütunlar: ['description', 'archive_date', 'deleted_at']
+  Veri İçeren Sütunlar: ['id', 'category', 'name', 'critical_stock', 'current_stock', 'unit', 'field_stock', 'faulty_stock', 'lost_stock', 'total_stock', 'is_deleted', 'created_at']

@@ -68,7 +68,7 @@
 }
 
 .admin-only {
-    display: none !important;
+    display: none;
 }
 
 * {
@@ -79,8 +79,8 @@
 }
 
 body {
-    background: var(--bg-main);
-    background-image: var(--bg-radial);
+    background: var(--bg-main) !important;
+    background-image: var(--bg-radial) !important;
     color: var(--text-primary);
     min-height: 100vh;
     overflow-x: hidden;
@@ -482,6 +482,7 @@ textarea.search-bar {
     left: 0;
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
     background: rgba(0,0,0,0.85);
     backdrop-filter: blur(10px);
     display: flex;
@@ -493,7 +494,8 @@ textarea.search-bar {
 .modal-card-lg {
     max-width: 700px;
     width: 95%;
-    max-height: 90vh;
+    max-height: 85vh;
+    max-height: 85dvh;
     overflow-y: auto;
 }
 
@@ -944,7 +946,7 @@ textarea.search-bar {
     .container { padding: 1rem; }
     .nav-links { display: none; }
     .grid { grid-template-columns: 1fr; }
-    .modal-card-lg { max-width: 100%; width: 100%; border-radius: 0; max-height: 100vh; }
+    .modal-card-lg { max-width: 100%; width: 100%; border-radius: 0; max-height: 100vh; max-height: 100dvh; padding-bottom: env(safe-area-inset-bottom, 20px); }
 }
 
 /* ═══════════════ NOTE BUBBLE ═══════════════ */
@@ -1119,47 +1121,54 @@ textarea.search-bar {
     gap: 10px;
 }
 
+/* BİLGİ BANKASI GRID SİSTEMİ (Yan Yana 4 Kutu) */
+#general-notes-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+}
+@media (max-width: 1200px) { #general-notes-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 768px) { #general-notes-grid { grid-template-columns: 1fr; } }
+
 .kb-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
+    background: linear-gradient(145deg, rgba(20,30,40,0.4) 0%, rgba(10,15,20,0.6) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border-radius: 12px !important;
     overflow: hidden;
-    transition: all 0.3s ease;
-    cursor: default !important; /* Override general card cursor */
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
 .kb-card:hover {
-    border-color: rgba(0, 210, 255, 0.3);
-    background: rgba(255, 255, 255, 0.05);
-    transform: none !important; /* Disable general card hover transform */
-    box-shadow: none !important;
+    transform: translateY(-4px) !important;
+    border-color: rgba(0, 210, 255, 0.3) !important;
+    box-shadow: 0 10px 25px rgba(0, 210, 255, 0.1) !important;
 }
 
 .kb-header {
-    padding: 1.2rem 1.5rem;
+    padding: 15px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     cursor: pointer;
     user-select: none;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
-.kb-header .kb-title {
-    font-weight: 700;
-    color: #fff;
-    font-size: 1rem;
-    flex: 1;
+.kb-title-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #00d2ff;
+    font-weight: 800;
+    font-size: 1.1rem;
 }
 
 .kb-icon {
     transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     opacity: 0.5;
-    margin-left: 15px;
-}
-
-.kb-card.active {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: var(--accent);
 }
 
 .kb-card.active .kb-icon {
@@ -1172,80 +1181,64 @@ textarea.search-bar {
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    background: rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
 }
 
 .kb-card.active .kb-content {
-    max-height: 2000px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    max-height: 800px;
 }
 
 .kb-body {
-    padding: 1.5rem;
-    font-size: 0.95rem;
-    line-height: 1.6;
-    color: #cbd5e1;
-}
-
-.kb-code-block {
-    background: #000;
-    border-radius: 8px;
-    padding: 1.2rem;
-    position: relative;
-    margin-top: 10px;
-    border: 1px solid rgba(255,255,255,0.1);
-}
-
-.kb-code-block {
-    flex: 1;
-    padding: 1.2rem;
-    overflow-x: auto;
-    font-family: 'Consolas', 'Monaco', monospace;
+    padding: 15px;
     font-size: 0.85rem;
+    color: var(--text-secondary);
+    max-height: 250px;
+    overflow-y: auto;
 }
 
-.kb-action-sidebar {
-    width: 110px;
-    background: rgba(255,255,255,0.03);
+.kb-code-block {
+    background: #010409 !important;
+    border: 1px solid rgba(255,255,255,0.05) !important;
+    border-radius: 8px !important;
+    padding: 15px !important;
+    font-family: Consolas, monospace !important;
+    margin-top: 10px;
+    color: #e2e8f0;
+}
+
+.kb-action-grid {
+    display: grid; 
+    grid-template-columns: repeat(3, 1fr); 
+    gap: 10px; 
+    margin-top: auto; 
+    border-top: 1px solid rgba(255,255,255,0.05); 
+    padding: 15px;
+    background: rgba(0,0,0,0.2);
+}
+
+.kb-action-btn {
     display: flex;
     flex-direction: column;
-    justify-content: center;
     align-items: center;
-    border-left: 1px solid rgba(255,255,255,0.1);
-    padding: 10px;
-}
-
-.kb-copy-btn-new {
-    background: var(--accent-gradient);
-    color: white;
-    border: none;
-    padding: 10px 14px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    transition: all 0.3s ease;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     gap: 5px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    opacity: 0.8;
+    color: var(--text-secondary);
 }
+.kb-action-btn:hover { opacity: 1; transform: scale(1.05); }
 
-.kb-copy-btn-new:hover {
-    filter: brightness(1.2);
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0, 210, 255, 0.3);
-}
-
-.kb-footer {
-    padding: 0.8rem 1.5rem;
-    font-size: 0.75rem;
-    opacity: 0.4;
-    border-top: 1px dashed rgba(255,255,255,0.05);
+.kb-action-btn .icon-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
     display: flex;
-    justify-content: space-between;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
 }
 
 /* ══════════════════════════════════════════
@@ -2230,6 +2223,7 @@ body.login-required #login-overlay .card {
     border: 1px solid rgba(255, 255, 255, 0.08);
     text-align: center;
     min-width: 150px;
+    flex: 1 1 0;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
@@ -2455,3 +2449,181 @@ input[type=search]::-webkit-search-cancel-button { -webkit-appearance: searchfie
         box-shadow: 0 0 0 0 rgba(239, 68, 110, 0);
     }
 }
+
+/* ═══════════════ MOBİL CUPS YAZDIRMA FAB ═══════════════ */
+.mobile-print-fab {
+    display: none; /* JS tarafından mobilde gösterilir */
+    position: fixed;
+    bottom: 25px;
+    right: 25px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--accent-gradient);
+    color: #000;
+    border: none;
+    font-size: 1.3rem;
+    cursor: pointer;
+    z-index: 9990;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 20px rgba(0, 210, 255, 0.4), 0 0 0 0 rgba(0, 210, 255, 0.3);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: fab-pulse 2.5s infinite;
+}
+
+.mobile-print-fab:hover,
+.mobile-print-fab:active {
+    transform: scale(1.1);
+    box-shadow: 0 8px 30px rgba(0, 210, 255, 0.6);
+}
+
+@keyframes fab-pulse {
+    0% { box-shadow: 0 6px 20px rgba(0, 210, 255, 0.4), 0 0 0 0 rgba(0, 210, 255, 0.3); }
+    50% { box-shadow: 0 6px 20px rgba(0, 210, 255, 0.4), 0 0 0 12px rgba(0, 210, 255, 0); }
+    100% { box-shadow: 0 6px 20px rgba(0, 210, 255, 0.4), 0 0 0 0 rgba(0, 210, 255, 0); }
+}
+
+/* ═══════════════ MOBİL UYUM (RESPONSIVE) FİXES ═══════════════ */
+@media screen and (max-width: 768px) {
+    /* Yatay taşmaları engelle */
+    body, html {
+        overflow-x: hidden !important;
+        width: 100% !important;
+        max-width: 100vw !important;
+    }
+
+    /* Modal ve form taşmalarını engelle */
+    .modal-backdrop {
+        align-items: flex-start !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+        padding: 20px 0 !important;
+    }
+
+    #login-overlay {
+        align-items: center !important;
+        padding: 0 !important;
+    }
+
+    .modal-backdrop .card, .modal-card-lg {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        margin: 10px auto !important;
+        padding: 15px !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Açılır menülerin (dropdown) mobilde ekrandan taşmasını engelle ve kaydırılabilir yap */
+    .dropdown-menu {
+        max-height: 70vh !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Section headers alignment on mobile - title on top, search/actions below */
+    .section-header-group .flex-between {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+    }
+
+    .section-header-group .flex-row {
+        flex-direction: row !important;
+        align-items: center !important;
+        width: 100% !important;
+        gap: 8px !important;
+    }
+
+    .search-wrapper {
+        max-width: none !important;
+        flex: 1 !important;
+    }
+
+    /* Modal Kapatma Butonu tık alanı */
+    .modal-close, .fa-times {
+        padding: 5px;
+    }
+
+    /* Table Container (Listeler ve Tablolar için yatay scroll) */
+    .table-container {
+        width: 100% !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        display: block !important;
+        border-radius: 8px;
+    }
+
+    /* Table hücreleri daralıp üst üste binmesin */
+    td, th {
+        white-space: nowrap !important;
+    }
+
+    /* Text alanları (Notlar vb.) ekrandan taşmasın */
+    .notes-display, p, h1, h2, h3, h4, h5, h6 {
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        max-width: 100% !important;
+    }
+
+    /* Input ve Search Bar genişlik sınırlaması */
+    .search-bar, input, select, textarea {
+        max-width: 100% !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Gridleri tek sütun yap */
+    .grid, .form-row-2, .form-row-3, .form-row-4, #inventory-grid, #printers-grid, #docs-grid, #user-grid {
+        grid-template-columns: 1fr !important;
+        display: grid !important;
+        gap: 15px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Özel filtre çipleri yan yana kalsın ama sığmazsa aşağı kaysın */
+    .filter-chips, .note-category-filters, #printer-main-filters, #area-filters, .nav-links {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        flex-direction: row !important;
+        justify-content: center !important;
+        width: 100% !important;
+        gap: 8px !important;
+    }
+
+    /* Filter çiplerindeki butonlar sığsın */
+    .btn-chip {
+        flex: 1 1 auto;
+        text-align: center;
+        padding: 8px 12px !important;
+        font-size: 0.8rem !important;
+    }
+    
+    /* Dashboard grafikleri taşmasını engelle */
+    canvas {
+        max-width: 100% !important;
+        height: auto !important;
+    }
+
+    /* İstisna: Cihaz listesi veya barkod listesi gibi iç flex gruplar yan yana kalsın (Silme ikonu vs) */
+    #zimmet-device-list .device-item, #barcode-manual-list .barcode-item {
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+    }
+
+    /* Yazdırma Modalı Buton Grubu - Yan yana kalsın (Vazgeç | Yazdır) */
+    #mobile-print-modal .flex-row {
+        flex-direction: row !important;
+    }
+
+    /* Hasar Tespit Modalı Input Basliklarini mobilde gizle (Alan kazanci) */
+    #doc-modal-hasar-tespit .ht-mobile-hide {
+        display: none !important;
+    }
+}
+

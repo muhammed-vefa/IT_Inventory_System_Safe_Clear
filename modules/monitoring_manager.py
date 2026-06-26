@@ -21,19 +21,8 @@ def system_stats():
     return jsonify(data)
 
 from core.auth import require_admin
-import subprocess
-import os
 
 @monitoring_manager_bp.route("/git_update", methods=['POST'])
 @require_admin
 def git_update():
-    try:
-        # Arka planda guncelle_ve_baslat.bat dosyasini calistir
-        bat_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'guncelle_ve_baslat.bat')
-        
-        # Popen yerine Windows'ta direkt calistiran ve bagimsiz islem yaratan os.startfile kullaniyoruz
-        os.startfile(bat_file)
-        
-        return jsonify({"success": True, "message": "Güncelleme başlatıldı. Sistem birkaç saniye içinde yeniden başlayacaktır..."})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({'success': False, 'error': 'DISABLED', 'message': 'Site uzerinden guncelleme/komut calistirma devre disidir. Sadece rapor izleme desteklenir.'}), 410

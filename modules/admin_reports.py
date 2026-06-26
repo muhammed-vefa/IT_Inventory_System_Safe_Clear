@@ -18,7 +18,8 @@ ALLOWED_DIRS = [
     'reports/performance',
     'reports/integrity',
     'reports/git',
-    'reports/backup'
+    'reports/backup',
+    'database'
 ]
 
 # İzin verilen dosya uzantıları
@@ -194,7 +195,8 @@ def list_categories():
         {"id": "performance", "name": "Performans Raporları & Logları"},
         {"id": "git", "name": "GitHub İşlem Raporları"},
         {"id": "backup", "name": "Yedekleme Raporları"},
-        {"id": "integrity", "name": "Bütünlük Raporları"}
+        {"id": "integrity", "name": "Bütünlük Raporları"},
+        {"id": "scheduler", "name": "Zamanlanmış Görev Raporları"}
     ]
     return jsonify({"success": True, "categories": categories})
 
@@ -217,6 +219,8 @@ def list_reports():
         files.extend(scan_dir('backup', 'reports/backup'))
     elif category == 'integrity':
         files.extend(scan_dir('integrity', 'reports/integrity'))
+    elif category == 'scheduler':
+        files.extend(scan_dir('scheduler', 'database'))
     else:
         # Belirtilmemişse tüm alt ve ana dizinleri tara
         files.extend(scan_dir('cmd', 'logs/cmd'))
@@ -225,6 +229,7 @@ def list_reports():
         files.extend(scan_dir('git', 'reports/git'))
         files.extend(scan_dir('backup', 'reports/backup'))
         files.extend(scan_dir('integrity', 'reports/integrity'))
+        files.extend(scan_dir('scheduler', 'database'))
         
         # Ana dizinlerdeki dosyaları da tara
         files.extend(scan_dir('cmd', 'logs'))

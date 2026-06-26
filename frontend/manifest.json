@@ -1,20 +1,20 @@
 {
   "name": "IT Envanter Sistemi",
   "short_name": "IT Envanter",
-  "description": "Kocaeli Şehir Hastanesi IT Envanter ve Arıza Takip Sistemi",
-  "start_url": "./index.html",
+  "description": "Örnek Kurum Adı IT Envanter ve Arıza Takip Sistemi",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#06070a",
   "theme_color": "#00d2ff",
   "icons": [
     {
-      "src": "logo/favicon/web-app-manifest-192x192.png",
+      "src": "/static/logo/favicon/web-app-manifest-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "logo/favicon/web-app-manifest-512x512.png",
+      "src": "/static/logo/favicon/web-app-manifest-512x512.png",
       "sizes": "512x512",
       "type": "image/png"
     }

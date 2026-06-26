@@ -1,26 +1,5 @@
-# System Environment Files
-.env
-.env.example
-
-# Local Database & Excel Files
-*.db
-*.sqlite
-database/database.db
-database/inventory.db
-database/SQL_Server_Export_Final.xlsx
-database/~$SQL_Server_Export_Final.xlsx
-
-# Logs, Cache & Uploads
-logs/
-uploads/
-*.log
-__pycache__/
-*.pyc
-
-# Temporary & Local Developer Folders
-.vscode/
+static/kurulum_dosyalari/
+database/yedek/
 temp/
-scratch/
-backups/
-*.pdf
-system_locks/
+Arşiv/
+data/

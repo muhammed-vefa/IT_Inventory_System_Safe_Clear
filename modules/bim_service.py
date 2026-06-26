@@ -1,6 +1,8 @@
+from core.integrations import get_integration_config
 from flask import Blueprint, jsonify, request
 import requests
-import xml.etree.ElementTree as ET
+import os
+from core.auth import require_editor
 
 bim_service_bp = Blueprint('bim_service', __name__)
 
@@ -12,18 +14,42 @@ def get_client_ip():
     return jsonify({"ip": ip})
 
 @bim_service_bp.route('/run_command', methods=['POST'])
+@require_editor
 def run_command():
     try:
-        data = request.json
+        data = request.json or {}
         target_ip = data.get('ip')
         command = data.get('command')
         username = data.get('username')
         password = data.get('password')
 
+        # Eger username veya password bos gelirse DB'den kullanicinin kayitli bilgilerini cek
+        if not username or not password or password == '********':
+            user_id = request.current_user.get('user_id')
+            if user_id:
+                from core.database_sql import get_db_connection
+                from core.encryption import decrypt_password
+                conn = get_db_connection()
+                if conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT bim_user, bim_pass FROM users WHERE id = ?", (user_id,))
+                    row = cursor.fetchone()
+                    conn.close()
+                    if row:
+                        if not username:
+                            username = row[0]
+                        if not password or password == '********':
+                            if row[1]:
+                                password = decrypt_password(row[1])
+
         if not target_ip or not command:
             return jsonify({"error": "IP ve Komut zorunludur."}), 400
 
-        base_url = "http://bim.kocaelish.com/Handler.ashx"
+        if not username or not password:
+            return jsonify({"error": "BİM kullanıcı adı ve şifresi bulunamadı. Lütfen profilinizden kaydedin."}), 400
+
+        bim_config = get_integration_config('BIM') or {}
+        bim_base_url = bim_config.get('base_url', 'http://bim.ornek-kurum.com').rstrip('/')
         
         # 1. Login (Web arayüzünü taklit et)
         login_data = {
@@ -32,11 +58,13 @@ def run_command():
             "Password": password
         }
         
+        base_url = os.getenv("BIM_API_URL", f"{bim_base_url}/Handler.ashx")
+        
         # Tarayıcı gibi davranması için header ekleyelim (Bot korumasını aşmak için)
         browser_headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-            "Referer": "http://bim.kocaelish.com/",
-            "Origin": "http://bim.kocaelish.com"
+            "Referer": os.getenv("BIM_REFERER", f"{bim_base_url}/"),
+            "Origin": os.getenv("BIM_ORIGIN", bim_base_url)
         }
         
         login_resp = requests.post(base_url, data=login_data, headers=browser_headers, timeout=10)
@@ -66,18 +94,25 @@ def run_command():
         else:
             # Genel komut (Eğer arka uç destekliyorsa)
             post_data["Functions"] = "RunCommand"
-            post_data["Command"] = command
+            post_data["Commands"] = command
             
         headers = {
-            "IPASession": ipa_session
+            "IPASession": ipa_session,
+            "Content-Type": "application/x-www-form-urlencoded"
         }
         
-        cmd_resp = requests.post(base_url, data=post_data, headers=headers, timeout=15)
+        import urllib.parse
+        encoded_data = urllib.parse.urlencode(post_data, quote_via=urllib.parse.quote)
         
-        if cmd_resp.status_code == 200:
-            return jsonify({"success": True, "result": cmd_resp.text.strip()})
-        else:
-            return jsonify({"error": f"BIM Servis Hatası: {cmd_resp.status_code}"}), 500
+        try:
+            cmd_resp = requests.post(base_url, data=encoded_data, headers=headers, timeout=45)
+            
+            if cmd_resp.status_code == 200:
+                return jsonify({"success": True, "result": cmd_resp.text.strip()})
+            else:
+                return jsonify({"error": f"BIM Servis Hatası: {cmd_resp.status_code}"}), 500
+        except requests.exceptions.Timeout:
+            return jsonify({"success": True, "result": "BIM sunucusuna komut iletildi ancak yanıt süresi aşıldı (45 sn). Uzun süren komutlar (wget vb.) arka planda başarıyla tamamlanmış olabilir."})
 
     except Exception as e:
         print(f"[BIM ERROR] {e}")

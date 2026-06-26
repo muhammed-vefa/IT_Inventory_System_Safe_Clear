@@ -15,17 +15,19 @@ echo       IT INVENTORY - VERITABANI VERI YONETIMI
 echo ===================================================
 echo.
 echo   [1] Verileri Temizle (Tum tablolari bosalt)
-echo   [2] Excel'den Veritabanina Veri Yukle
+echo   [2] Excel'den Veritabanina Veri Yukle (Ekleme)
 echo   [3] SQL Veritabanini Excel'e Aktar (Export)
-echo   [4] Cikis
+echo   [4] Excel'den Veritabanini Guncelle (Update)
+echo   [5] Cikis
 echo.
 echo ===================================================
-set /p secim="Yapmak istediginiz islemi secin (1/2/3/4): "
+set /p secim="Yapmak istediginiz islemi secin (1/2/3/4/5): "
 
 if "%secim%"=="1" goto temizle
 if "%secim%"=="2" goto yukle
 if "%secim%"=="3" goto export
-if "%secim%"=="4" goto cikis
+if "%secim%"=="4" goto guncelle
+if "%secim%"=="5" goto cikis
 echo [!] Gecersiz secim. Tekrar deneyin.
 timeout /t 2 >nul
 goto menu
@@ -74,6 +76,25 @@ python tools/excel_verileri_yukle.py
 echo.
 echo ===================================================
 echo    VERI YUKLEME ISLEMI TAMAMLANDI!
+echo ===================================================
+echo.
+pause
+goto menu
+
+:guncelle
+echo.
+echo ===================================================
+echo    EXCEL'DEN VERITABANINI GUNCELLEME
+echo ===================================================
+echo.
+echo [*] database/ klasorundeki Excel dosyalari okunacak
+echo     ve mevcut kayitlar SQL Server uzerinde guncellenecektir.
+echo     Eksik olan yeni kayitlar ise eklenecektir. Silme YAPILMAYACAKTIR.
+echo.
+python tools/excel_verileri_guncelle.py
+echo.
+echo ===================================================
+echo    GUNCELLEME ISLEMI TAMAMLANDI!
 echo ===================================================
 echo.
 pause

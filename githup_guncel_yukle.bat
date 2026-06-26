@@ -28,7 +28,7 @@ echo [*] Yedek paketi olusturuluyor...
 git commit -m "%commit_msg%"
 
 echo [*] GitHub'a yukleniyor (Push)...
-git push origin main
+git push origin staging-safe-release
 
 echo.
 echo ===================================================

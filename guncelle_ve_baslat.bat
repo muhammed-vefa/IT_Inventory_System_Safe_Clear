@@ -21,7 +21,7 @@ taskkill /F /IM cmd.exe /FI "WINDOWTITLE eq *IT INVENTORY SISTEMI*" /T >nul 2>&1
 
 echo.
 echo Githup uzerinden en guncel dosyalar indiriliyor...
-git pull origin main
+git pull origin staging-safe-release
 
 echo.
 echo Sistem yeniden baslatiliyor...

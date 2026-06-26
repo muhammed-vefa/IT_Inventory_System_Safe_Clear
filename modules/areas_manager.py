@@ -18,6 +18,7 @@ def get_all():
         return jsonify({"error": str(e)}), 500
 
 @areas_manager_bp.route('/add', methods=['POST'])
+@require_admin
 def add_area():
     try:
         data = request.json

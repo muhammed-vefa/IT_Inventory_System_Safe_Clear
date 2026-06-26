@@ -25,15 +25,6 @@ DB_USER = os.getenv("DB_USER", "").strip()
 DB_PASS = os.getenv("DB_PASS", "").strip()
 
 def clear_all_data():
-    tables_to_clear = [
-        "pcs", "printers", "barcode_printers", "barcode_readers", "scanners",
-        "monitors", "tablets", "queing_machines",
-        "printer_service", "printer_service_history", "technical_notes",
-        "closure_notes", "troubleshooting_notes", "shared_areas",
-        "depot_items", "consumable_items", "mahal_list", "audit_logs",
-        "refresh_tokens", "user_activity_log", "users", "sync_status", "sync_logs"
-    ]
-    
     print(f"\n[*] {DB_NAME} Veritabani Temizleniyor...")
     
     try:
@@ -45,10 +36,18 @@ def clear_all_data():
         conn = pyodbc.connect(conn_str, timeout=10)
         cursor = conn.cursor()
         
+        # Tum tablolari dinamik olarak bul
+        cursor.execute("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'")
+        tables_to_clear = [row[0] for row in cursor.fetchall()]
+        
+        if not tables_to_clear:
+            print("  [INFO] Veritabaninda silinecek tablo bulunamadi (Zaten bos).")
+        
         # Foreign Key kısıtlamalarını devre dışı bırak
         try:
             cursor.execute("EXEC sp_MSforeachtable 'ALTER TABLE ? NOCHECK CONSTRAINT ALL'")
-        except: pass
+        except Exception as e:
+            print(f"  [WARN] Foreign key constraints disable edilemedi: {e}")
         
         for table in tables_to_clear:
             try:
@@ -61,7 +60,8 @@ def clear_all_data():
         # Kısıtlamaları tekrar aç
         try:
             cursor.execute("EXEC sp_MSforeachtable 'ALTER TABLE ? CHECK CONSTRAINT ALL'")
-        except: pass
+        except Exception as e:
+            print(f"  [WARN] Foreign key constraints enable edilemedi: {e}")
         
         conn.commit()
         conn.close()
