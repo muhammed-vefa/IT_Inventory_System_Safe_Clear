@@ -145,13 +145,13 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
 
             print(f"[Async Automation] Started. user_id: {user_id}, pr_no: {pr_no}, sub_pr_no: {substitute_pr_no}, is_return: {is_return}")
 
-            cups_admin_url = 'http://192.168.X.X:49631/admin/'
+            cups_admin_url = 'http://10.241.X.X:49631/admin/'
 
             if is_return:
                 # --- RETURN FROM SERVICE FLOW ---
-                # The returned printer (pr_no) ALWAYS goes to Depo and is paused/rejected.
+                # The returned printer (pr_no) ALWAYS goes to Kontrolde first to be checked, and is paused/rejected.
                 # The substitute printer (substitute_pr_no) stays untouched in its new location.
-                update_cups_printer_location_wizard(pr_no, "Depo")
+                update_cups_printer_location_wizard(pr_no, "Kontrolde")
                 try:
                     # Pause the returning printer
                     requests.post(cups_admin_url, data={
@@ -238,7 +238,7 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                 print(f"[Async BIM Error] Decrypt pass error: {dec_err}")
                 return
 
-            base_url = "http://bim.ornek-kurum.com/Handler.ashx"
+            base_url = "http://bim.kocaelish.com/Handler.ashx"
             browser_headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
             }
@@ -256,7 +256,7 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                         "UserName": bim_user,
                         "Password": bim_pass
                     }
-                    login_resp = requests.post(base_url, data=login_data, headers=browser_headers, timeout=10)
+                    login_resp = requests.post(base_url, data=login_data, headers=browser_headers, timeout=10, verify=False)
                     if login_resp.status_code != 200 or login_resp.text.strip() == "Error" or not login_resp.text.strip():
                         print(f"[Async BIM Error] Login failed for PC {pc_name}")
                         continue
@@ -268,8 +268,8 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                 headers = {
                     "IPASession": ipa_session,
                     "User-Agent": browser_headers["User-Agent"],
-                    "Referer": "http://bim.ornek-kurum.com/",
-                    "Origin": "http://bim.ornek-kurum.com"
+                    "Referer": "http://bim.kocaelish.com/",
+                    "Origin": "http://bim.kocaelish.com"
                 }
 
                 if is_return:
@@ -282,7 +282,7 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                                 "Functions": "RemovePrinter",
                                 "PrinterName": substitute_pr_no
                             }
-                            rem_resp = requests.post(base_url, data=rem_data, headers=headers, timeout=15)
+                            rem_resp = requests.post(base_url, data=rem_data, headers=headers, timeout=15, verify=False)
                             print(f"[Async BIM] RemovePrinter {substitute_pr_no} from {pc_ip} - Status: {rem_resp.status_code}, Body: {rem_resp.text.strip()}")
                         except Exception as re_err:
                             print(f"[Async BIM Error] RemovePrinter failed for PC {pc_name}: {re_err}")
@@ -295,7 +295,7 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                             "Functions": "AddPrinter",
                             "PrinterName": f"{pr_no}/01"
                         }
-                        add_resp = requests.post(base_url, data=add_data, headers=headers, timeout=15)
+                        add_resp = requests.post(base_url, data=add_data, headers=headers, timeout=15, verify=False)
                         print(f"[Async BIM] AddPrinter {pr_no}/01 to {pc_ip} - Status: {add_resp.status_code}, Body: {add_resp.text.strip()}")
                     except Exception as add_err:
                         print(f"[Async BIM Error] AddPrinter failed for PC {pc_name}: {add_err}")
@@ -309,7 +309,7 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                             "Functions": "RemovePrinter",
                             "PrinterName": pr_no
                         }
-                        rem_resp = requests.post(base_url, data=rem_data, headers=headers, timeout=15)
+                        rem_resp = requests.post(base_url, data=rem_data, headers=headers, timeout=15, verify=False)
                         print(f"[Async BIM] RemovePrinter {pr_no} from {pc_ip} - Status: {rem_resp.status_code}, Body: {rem_resp.text.strip()}")
                     except Exception as re_err:
                         print(f"[Async BIM Error] RemovePrinter failed for PC {pc_name}: {re_err}")
@@ -323,7 +323,7 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                                 "Functions": "AddPrinter",
                                 "PrinterName": f"{substitute_pr_no}/01"
                             }
-                            add_resp = requests.post(base_url, data=add_data, headers=headers, timeout=15)
+                            add_resp = requests.post(base_url, data=add_data, headers=headers, timeout=15, verify=False)
                             print(f"[Async BIM] AddPrinter {substitute_pr_no}/01 to {pc_ip} - Status: {add_resp.status_code}, Body: {add_resp.text.strip()}")
                         except Exception as add_err:
                             print(f"[Async BIM Error] AddPrinter failed for PC {pc_name}: {add_err}")
@@ -420,10 +420,20 @@ def add_service():
 
         # Update faulty printer in DB (always set location_code and location to have correct display everywhere)
         if return_date:
-            # Servisten dönen yazıcı depoya gider ama orijinal mahal bilgisi korunur
-            clean_loc = current_location.replace('SERVİSTE-', '').replace('DEPO-', '').strip() or 'BİLİNMİYOR'
-            depo_location = f"DEPO-{clean_loc}"
-            cursor.execute("UPDATE printers SET is_faulty=0, in_service=0, warehouse=1, on_field=0, location_code=? WHERE pr_no=?", (depo_location, pr_no))
+            # Servisten dönen yazıcı kontrol edilene kadar KONTROLDE bekler
+            clean_loc = current_location.replace('SERVİSTE-', '').replace('DEPO-', '').replace('ARIZALI-', '').replace('KONTROLDE-', '').strip() or 'BİLİNMİYOR'
+            if has_substitute:
+                kontrol_location = "KONTROLDE"
+            else:
+                kontrol_location = f"KONTROLDE-{clean_loc}"
+            cursor.execute("UPDATE printers SET is_faulty=0, in_service=0, warehouse=0, on_field=0, location_code=? WHERE pr_no=?", (kontrol_location, pr_no))
+            
+            # Since we inserted it directly as returned, mark it as uncontrolled (requires checking first)
+            try:
+                cursor.execute("ALTER TABLE printer_service ADD is_controlled BIT DEFAULT 0")
+            except:
+                pass
+            cursor.execute("UPDATE printer_service SET is_controlled=0 WHERE pr_no=? AND return_date IS NOT NULL", (pr_no,))
         else:
             loc = current_location
             if has_substitute:
@@ -583,22 +593,59 @@ def update_service(record_id):
         cursor.execute(update_sql, values)
 
         # Update Printer status and location
+        clean_loc = current_location.replace('SERVİSTE-', '').replace('DEPO-', '').replace('ARIZALI-', '').replace('KONTROLDE-', '').strip() or 'BİLİNMİYOR'
+        final_new_location = current_location
+
         if is_returning:
-            # Servisten dönen yazıcı depoya gider ama orijinal mahal bilgisi korunur
-            clean_loc = current_location.replace('SERVİSTE-', '').replace('DEPO-', '').strip() or 'BİLİNMİYOR'
-            depo_location = f"DEPO-{clean_loc}"
-            cursor.execute("UPDATE printers SET is_faulty=0, in_service=0, warehouse=1, on_field=0, location_code=? WHERE pr_no=?", (depo_location, pr_no))
-        else:
-            loc = current_location
+            # Servisten dönen yazıcı kontrol deposuna (KONTROLDE) gider
             if has_substitute:
-                # İkame varsa arızalı yazıcı direkt SERVİSTE olur, kendi mahalini kaybeder.
-                new_location = "SERVİSTE"
+                kontrol_location = "KONTROLDE"
             else:
-                # İkame yoksa arızalı yazıcı SERVİSTE-Mahal olur.
-                clean_loc = loc.replace('SERVİSTE-', '').replace('DEPO-', '').strip() or loc
-                new_location = f"SERVİSTE-{clean_loc}" if not loc.startswith('SERVİSTE-') and loc != 'SERVİSTE' else loc
+                kontrol_location = f"KONTROLDE-{clean_loc}"
                 
-            cursor.execute("UPDATE printers SET is_faulty=?, in_service=?, warehouse=?, on_field=?, location_code=? WHERE pr_no=?", (*p_status, new_location, pr_no))
+            cursor.execute("UPDATE printers SET is_faulty=0, in_service=0, warehouse=0, on_field=0, location_code=? WHERE pr_no=?", (kontrol_location, pr_no))
+            final_new_location = kontrol_location
+            
+            # Sütun eklendiğinde değeri sıfırla
+            try:
+                cursor.execute("UPDATE printer_service SET is_controlled=0 WHERE id=?", (record_id,))
+            except Exception:
+                pass
+        else:
+            status_str = str(data.get('status', '')).strip().upper()
+            if status_str == 'SERVİSTE' or status_str == 'SERVISTE':
+                if has_substitute:
+                    new_location = "SERVİSTE"
+                else:
+                    new_location = f"SERVİSTE-{clean_loc}"
+            elif status_str == 'ARIZALI' or status_str == 'ARIZALI':
+                if has_substitute:
+                    new_location = "ARIZALI"
+                else:
+                    new_location = f"ARIZALI-{clean_loc}"
+            else:
+                # Durum Tamamlandı. Zaten önceden dönmüş bir kayıt (is_returning=False).
+                # is_controlled durumunu oku ve ona göre lokasyon belirle
+                cursor.execute("SELECT is_controlled FROM printer_service WHERE id=?", (record_id,))
+                ctrl_row = cursor.fetchone()
+                is_ctrl = 0
+                if ctrl_row and ctrl_row[0]:
+                    is_ctrl = 1
+                    
+                if is_ctrl == 1:
+                    if has_substitute:
+                        new_location = "DEPO"
+                    else:
+                        new_location = f"DEPO-{clean_loc}"
+                else:
+                    if has_substitute:
+                        new_location = "KONTROLDE"
+                    else:
+                        new_location = f"KONTROLDE-{clean_loc}"
+                        
+                cursor.execute("UPDATE printers SET is_faulty=0, in_service=0, warehouse=?, on_field=0, location_code=? WHERE pr_no=?", (1 if is_ctrl else 0, new_location, pr_no))
+                
+            final_new_location = new_location
 
             if has_substitute and substitute_pr_no:
                 sub_row = find_printer_row(cursor, substitute_pr_no)
@@ -612,6 +659,14 @@ def update_service(record_id):
                                    (current_location, sub_row[0]))
 
         conn.commit()
+        
+        # Trigger CUPS synchronization
+        try:
+            from modules.inventory_printers import sync_printer_to_cups_internal
+            sync_printer_to_cups_internal(pr_no, final_new_location, cursor, conn)
+        except Exception as e:
+            print(f"[CUPS SYNC ERROR during update_service] {e}")
+
         conn.close()
 
         # Trigger background automations
@@ -643,6 +698,82 @@ def update_service(record_id):
             "error": str(e)
         }), 500
 
+@service_manager_bp.route('/toggle_control/<int:record_id>', methods=['POST'])
+@require_auth
+def toggle_control(record_id):
+    try:
+        user_role = request.current_user.get('role', '')
+        if user_role not in ('ADMIN', 'DEPOT'):
+            return jsonify({"success": False, "error": "Bu işlem için yetkiniz bulunmamaktadır."}), 403
+
+        data = request.json
+        new_state = 1 if data.get('is_controlled') else 0
+
+        # Eğer Depocu ise ve tiki kaldırmaya (0 yapmaya) çalışıyorsa engelle
+        if user_role == 'DEPOT' and new_state == 0:
+            return jsonify({"success": False, "error": "İşaretlenmiş bir kontrolü sadece Admin kaldırabilir!"}), 403
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"success": False, "error": "Database connection failed"}), 500
+        cursor = conn.cursor()
+
+        # Tabloda is_controlled kolonu yoksa eklemeyi dene (İlk çalışma için)
+        try:
+            cursor.execute("ALTER TABLE printer_service ADD is_controlled BIT DEFAULT 0")
+            conn.commit()
+        except Exception:
+            pass
+
+        # Mevcut kaydı bul
+        cursor.execute("SELECT pr_no, location_code, has_substitute FROM printer_service WHERE id = ?", (record_id,))
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({"success": False, "error": "Kayıt bulunamadı."}), 404
+            
+        pr_no = row[0]
+        existing_loc = row[1] or 'BİLİNMİYOR'
+        has_substitute = bool(row[2])
+        clean_loc = existing_loc.replace('SERVİSTE-', '').replace('DEPO-', '').replace('ARIZALI-', '').replace('KONTROLDE-', '').strip() or 'BİLİNMİYOR'
+
+        # printer_service tablosunu güncelle
+        cursor.execute("UPDATE printer_service SET is_controlled = ? WHERE id = ?", (new_state, record_id))
+
+        final_new_location = existing_loc
+        if new_state == 1:
+            # Kontrol edildi (Tik atıldı) -> DEPO'ya al
+            if has_substitute:
+                depo_location = "DEPO"
+            else:
+                depo_location = f"DEPO-{clean_loc}"
+            cursor.execute("UPDATE printers SET is_faulty=0, in_service=0, warehouse=1, on_field=0, location_code=? WHERE pr_no=?", (depo_location, pr_no))
+            final_new_location = depo_location
+        else:
+            # Kontrol iptal edildi (Admin tiki kaldırdı) -> KONTROLDE'ye geri al
+            if has_substitute:
+                kontrol_location = "KONTROLDE"
+            else:
+                kontrol_location = f"KONTROLDE-{clean_loc}"
+            cursor.execute("UPDATE printers SET is_faulty=0, in_service=0, warehouse=0, on_field=0, location_code=? WHERE pr_no=?", (kontrol_location, pr_no))
+            final_new_location = kontrol_location
+
+        conn.commit()
+        
+        # Trigger CUPS synchronization
+        try:
+            from modules.inventory_printers import sync_printer_to_cups_internal
+            sync_printer_to_cups_internal(pr_no, final_new_location, cursor, conn)
+        except Exception as e:
+            print(f"[CUPS SYNC ERROR during toggle_control] {e}")
+
+        conn.close()
+
+        return jsonify({"success": True, "new_state": new_state})
+    except Exception as e:
+        print("TOGGLE CONTROL ERROR:", str(e))
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @service_manager_bp.route('/delete/<int:record_id>', methods=['DELETE'])
 @require_admin
 def delete_service(record_id):
@@ -672,7 +803,7 @@ def export_pdf():
             SELECT s.pr_no, s.serial_no, s.mac, s.model, s.fault_description, s.status, s.sent_date, s.return_date
             FROM printer_service s
             WHERE s.is_deleted = 0 
-              AND s.return_date IS NULL
+              AND (s.return_date IS NULL OR CAST(s.return_date AS DATE) = CAST(GETDATE() AS DATE))
             ORDER BY CASE WHEN s.acquisition_date IS NULL THEN 0 ELSE 1 END DESC, s.acquisition_date DESC
         """
         cursor.execute(query)
@@ -701,6 +832,7 @@ def export_pdf():
         # Convert to list of lists for mutability
         rows_list = [list(r) for r in rows]
         service_pr_nums = set()
+        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
         
         # 1. Fill empty fields in existing service records
         for r in rows_list:
@@ -716,6 +848,14 @@ def export_pdf():
                         r[2] = p_detail['mac'] or ''
                     if not r[3] or str(r[3]).strip() in ('', 'None', 'null', '-', '0', '0.0'):
                         r[3] = p_detail['model'] or ''
+
+            # Status updates for today's transactions
+            sent_d = r[6]
+            ret_d = r[7]
+            if sent_d and str(sent_d).startswith(today_str):
+                r[5] = "Servise Teslim Edildi"
+            if ret_d and str(ret_d).startswith(today_str):
+                r[5] = "Teslim Alındı"
 
         # 2. Add printers marked as faulty/in_service that do not have active service records
         for num, p_detail in printers_map.items():
@@ -845,7 +985,7 @@ def export_pdf():
             seri = str(row[1] or '')
             mac = str(row[2] or '')
             model = str(row[3] or '')[:30]
-            desc = str(row[4] or '')[:65]
+            desc = str(row[4] or '') # Truncation kaldirildi
             
             # Dinamik Status Hesaplama
             status_raw = str(row[5] or '')
@@ -868,11 +1008,35 @@ def export_pdf():
                 status_text = status_raw.upper()
                 status_color = (100, 100, 100)
 
-            # Satir Yuksekligi
-            line_h = 8
+            # Satir Yuksekligi (Tek satir icin)
+            min_row_h = 8
+            text_h = 4  # Coklu satirlar arasi yazi yuksekligi
+            
+            # Aciklama icin satir sayisini hesapla
+            pdf.set_font(font_name, '', 9)
+            lines = 0
+            for paragraph in desc.split('\n'):
+                words = paragraph.split()
+                if not words:
+                    lines += 1
+                    continue
+                current_line = ""
+                p_lines = 1
+                for word in words:
+                    if pdf.get_string_width(current_line + word) > col_widths[5] - 2:
+                        p_lines += 1
+                        current_line = word + " "
+                    else:
+                        current_line += word + " "
+                lines += p_lines
+            
+            if lines == 0:
+                lines = 1
+            
+            row_h = max(min_row_h, (text_h * lines) + 2)
 
             # Sayfa sonu kontrolu: tablo imza footer alanina girmesin.
-            if pdf.get_y() + line_h > pdf.page_break_trigger:
+            if pdf.get_y() + row_h > pdf.page_break_trigger:
                 pdf.add_page()
                 add_table_header()
             
@@ -880,36 +1044,45 @@ def export_pdf():
             
             # 0. NO (Beyaz)
             pdf.set_fill_color(255, 255, 255)
-            pdf.cell(col_widths[0], line_h, no_str, border=1, align='C', fill=True)
+            pdf.cell(col_widths[0], row_h, no_str, border=1, align='C', fill=True)
             
             # 1. PR NO (Acik Yesil Arkaplan)
             pdf.set_fill_color(200, 230, 201) 
-            pdf.cell(col_widths[1], line_h, pr_no, border=1, align='C', fill=True)
+            pdf.cell(col_widths[1], row_h, pr_no, border=1, align='C', fill=True)
             
             # Beyaza don
             pdf.set_fill_color(255, 255, 255)
             
             # 2. SERI NO
-            pdf.cell(col_widths[2], line_h, seri, border=1, align='C', fill=True)
+            pdf.cell(col_widths[2], row_h, seri, border=1, align='C', fill=True)
             
             # 3. MAC ADRESI
-            pdf.cell(col_widths[3], line_h, mac, border=1, align='C', fill=True)
+            pdf.cell(col_widths[3], row_h, mac, border=1, align='C', fill=True)
             
             # 4. YAZICI MODELI
-            pdf.cell(col_widths[4], line_h, model, border=1, align='C', fill=True)
+            pdf.cell(col_widths[4], row_h, model, border=1, align='C', fill=True)
             
-            # 5. ARIZA ACIKLAMASI
-            pdf.cell(col_widths[5], line_h, desc, border=1, align='L', fill=True)
+            # 5. ARIZA ACIKLAMASI (MultiCell ile kaydirma)
+            x = pdf.get_x()
+            y = pdf.get_y()
+            # Arka plan ve cerceveyi ciz
+            pdf.cell(col_widths[5], row_h, "", border=1, fill=True)
+            # Metni icine yazdir (multi_cell y eksenini asagi kaydirir)
+            pdf.set_xy(x, y + (row_h - (text_h * lines)) / 2) # Dikey ortalama icin hafif pay birak
+            pdf.multi_cell(col_widths[5], text_h, desc, border=0, align='L', fill=False)
+            
+            # X, Y koordinatlarini hucre sonuna geri al
+            pdf.set_xy(x + col_widths[5], y)
             
             # 6. TESLIMAT DURUMU (Mavi yazi rengi)
             pdf.set_text_color(*status_color)
             pdf.set_font(font_name, 'B', 8)
-            pdf.cell(col_widths[6], line_h, status_text, border=1, align='C', fill=True)
+            pdf.cell(col_widths[6], row_h, status_text, border=1, align='C', fill=True)
             
-            # Satir sonu, ayarlari sifirla
+            # Satir sonu, ayarlari sifirla ve sonraki satira gec
             pdf.set_text_color(0, 0, 0)
             pdf.set_font(font_name, '', 9)
-            pdf.ln()
+            pdf.set_xy(10, y + row_h)
             
         pdf_bytes = pdf.output()
         
@@ -948,7 +1121,7 @@ def export_form():
                    s.location_code
             FROM printer_service s
             WHERE s.is_deleted = 0 
-              AND s.return_date IS NULL
+              AND (s.return_date IS NULL OR CAST(s.return_date AS DATE) = CAST(GETDATE() AS DATE))
             ORDER BY CASE WHEN s.acquisition_date IS NULL THEN 0 ELSE 1 END DESC, s.acquisition_date DESC
         """
         cursor.execute(query)
@@ -976,6 +1149,7 @@ def export_form():
                 }
 
         service_pr_nums = set()
+        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
         
         # 1. Fill empty fields in existing service records
         for r in rows:
@@ -993,6 +1167,14 @@ def export_form():
                         r['model'] = p_detail['model'] or ''
                     if not r.get('location_code') or str(r['location_code']).strip() in ('', 'None', 'null', '-', '0', '0.0'):
                         r['location_code'] = p_detail['location_code'] or ''
+
+            # Status updates for today's transactions
+            sent_d = r.get('sent_date')
+            ret_d = r.get('return_date')
+            if sent_d and str(sent_d).startswith(today_str):
+                r['status'] = 'Servise Teslim Edildi'
+            if ret_d and str(ret_d).startswith(today_str):
+                r['status'] = 'Teslim Alındı'
 
         # 2. Add printers marked as faulty/in_service that do not have active service records
         for num, p_detail in printers_map.items():

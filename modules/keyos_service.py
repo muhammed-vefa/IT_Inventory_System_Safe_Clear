@@ -16,17 +16,17 @@ import socket
 # 'getaddrinfo failed' hatası vermesin diye IP'yi manuel çözümlüyoruz.
 _orig_getaddrinfo = socket.getaddrinfo
 
-# .env'den ayarları çek (veya varsayılan ornek ayarlarını kullan)
+# .env'den ayarları çek (veya varsayılan Kocaeli ayarlarını kullan)
 from core.integrations import get_integration_config
 from urllib.parse import urlparse
 
 def get_keyos_domain():
     keyos_cfg = get_integration_config('KEYOS')
     if keyos_cfg is None:
-        return 'keyosmgt.ornek-kurum.com'
-    return urlparse(keyos_cfg.get('base_url', 'http://keyosmgt.ornek-kurum.com')).hostname or 'keyosmgt.ornek-kurum.com'
+        return 'keyosmgt.kocaelish.com'
+    return urlparse(keyos_cfg.get('base_url', 'http://keyosmgt.kocaelish.com')).hostname or 'keyosmgt.kocaelish.com'
 
-KEYOS_PATCH_IP = os.getenv("KEYOS_PATCH_IP", "192.168.Y.Y")
+KEYOS_PATCH_IP = os.getenv("KEYOS_PATCH_IP", "10.241.1.45")
 
 def get_keyos_login_url():
     return os.getenv("get_keyos_login_url()", f"https://{get_keyos_domain()}/login")
@@ -55,12 +55,17 @@ def _first_value(row, keys, default='-'):
 
 def _normalize_os_flags(os_text, version_text=''):
     val = str(os_text or '').upper() + ' ' + str(version_text or '').upper()
+    val = val.strip()
+    if not val:
+        return None, None
+        
     if 'WINDOWS' in val or 'WIN' in val:
         return 1, 0
-    if 'KEYOS' in val or 'KEY OS' in val or 'LINUX' in val:
+    if 'KEYOS' in val or 'KEY OS' in val or 'LINUX' in val or 'PARDUS' in val:
         return 0, 1
-    # Eğer belli değilse eski durumu bozmamak için null falan dönülebilirdi ama mevcut yapıya göre KeyOS varsayılmış
-    return 0, 1
+        
+    # Eğer belli değilse mevcut durumu bozmamak için None döner
+    return None, None
 
 def _table_columns(table_name):
     try:
@@ -69,12 +74,12 @@ def _table_columns(table_name):
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_NAME = ?
         """, (table_name,))
-        return {str(r.get('COLUMN_NAME')).lower() for r in rows} if rows else set()
+        return {str(r.get('column_name')).lower() for r in rows} if rows else set()
     except Exception as e:
         print(f"[KeyOS] column scan error: {e}")
         return set()
 
-def _safe_update_pc_from_keyos(pc_id, details):
+def _safe_update_pc_from_keyos(pc_id, details, db_last_active=None):
     """Schema değiştirmeden sadece mevcut kolonları günceller."""
     cols = _table_columns('pcs')
     updates = []
@@ -89,16 +94,19 @@ def _safe_update_pc_from_keyos(pc_id, details):
     add('mac', details.get('mac'))
     add('connected_printers', details.get('printers'))
 
-    win_flag, keyos_flag = _normalize_os_flags(details.get('os'), details.get('keyos_version'))
-    add('windows', win_flag)
-    add('keyos', keyos_flag)
-
-    # Canlı DB’de varsa aktiflik/OS metni alanlarını doldur; yoksa sessizce geç.
-    add('keyos_last_active', details.get('last_active'))
-    add('last_active', details.get('last_active'))
-    add('operating_system', details.get('os'))
-    add('os_name', details.get('os'))
-    add('keyos_version', details.get('keyos_version'))
+    new_last_active = details.get('last_active')
+    
+    # KeyOS her zaman last_active sütununa yazar
+    if new_last_active:
+        add('last_active', new_last_active)
+        add('operating_system', details.get('os'))
+        add('os_name', details.get('os'))
+        add('keyos_version', details.get('keyos_version'))
+        
+        win_flag, keyos_flag = _normalize_os_flags(details.get('os'), details.get('keyos_version'))
+        if win_flag is not None and keyos_flag is not None:
+            add('windows', win_flag)
+            add('keyos', keyos_flag)
 
     if not updates:
         return
@@ -212,7 +220,7 @@ class KeyOSClient:
                     "printers": record.get('printers', '-').strip(),
                     "last_update": record.get('lastUpdatedDateTime', '-').strip(),
                     "last_active": _first_value(record, ['lastActiveDateTime', 'lastSeenDateTime', 'lastUpdatedDateTime', 'updatedAt']),
-                    "ip": record.get('ethernetIPAddress', '-').strip(),
+                    "ip": _first_value(record, ['ethernetIPAddress', 'wifiIPAddress', 'ipAddress', 'ip', 'IPv4']),
                     "os": _first_value(record, ['operatingSystem', 'operatingSystemName', 'osName', 'os', 'keyOSVersion']),
                     "keyos_version": _first_value(record, ['keyOSVersion', 'version'])
                 }
@@ -237,9 +245,28 @@ def format_device_no(no_str):
     return s.upper()
 
 @keyos_service_bp.route('/manual_sync', methods=['POST'])
+@require_auth
 def sync_all():
-    """Kullanıcı arayüzünden manuel tetiklenen eşitleme (Veritabanını günceller)."""
-    return perform_keyos_sync(auto_update=True)
+    """Kullanıcı arayüzünden manuel tetiklenen eşitleme (Önce KeyOS, sonra DC)."""
+    keyos_res = perform_keyos_sync(auto_update=True)
+    
+    try:
+        from modules.desktop_central_service import perform_dc_sync
+        dc_res = perform_dc_sync()
+        dc_msg = dc_res.get('message', 'DC tamamlandı.')
+    except Exception as e:
+        dc_msg = f"DC hatası: {e}"
+        
+    try:
+        if isinstance(keyos_res, dict):
+            return {"success": True, "message": f"[KeyOS] {keyos_res.get('message', 'OK')} | [DC] {dc_msg}"}
+        else:
+            data = keyos_res.get_json()
+            if data and "message" in data:
+                data["message"] = f"[KeyOS] {data['message']} | [DC] {dc_msg}"
+            return jsonify(data)
+    except:
+        return keyos_res
 
 def perform_keyos_sync(auto_update=True):
     """Tüm envanteri KeyOS ile senkronize eder. auto_update=False ise sadece uyumsuzlukları tespit eder."""
@@ -269,7 +296,7 @@ def perform_keyos_sync(auto_update=True):
         
         # --- Ekstra: Manuel senkronizasyonda son aktiflik durumlarını da güncelle ---
         try:
-            import datetime, json, os
+            import datetime, json
             parsed_data = []
             for row in keyos_data:
                 serial_save = str(row.get('serialNumber', '')).strip().upper()
@@ -277,7 +304,7 @@ def perform_keyos_sync(auto_update=True):
                     parsed_data.append({
                         "Seri_No": serial_save,
                         "Hostname": str(row.get('hostName', '-')).strip(),
-                        "IP_Adresi": str(row.get('ethernetIPAddress', '-')).strip(),
+                        "IP_Adresi": _first_value(row, ['ethernetIPAddress', 'wifiIPAddress', 'ipAddress', 'ip', 'IPv4']),
                         "MAC_Adresi": str(row.get('ethernetMACAddress', '-')).strip(),
                         "Bagli_Yazicilar": str(row.get('printers', '-')).strip(),
                         "KeyOS_Versiyon": str(row.get('keyOSVersion', '-')).strip(),
@@ -307,14 +334,25 @@ def perform_keyos_sync(auto_update=True):
                     "hostname": str(row.get('hostName', '-')).strip(),
                     "mac": str(row.get('ethernetMACAddress', '-')).strip(),
                     "printers": str(row.get('printers', '-')).strip(),
-                    "ip": str(row.get('ethernetIPAddress', '-')).strip(),
+                    "ip": _first_value(row, ['ethernetIPAddress', 'wifiIPAddress', 'ipAddress', 'ip', 'IPv4']),
                     "last_active": _first_value(row, ['lastActiveDateTime', 'lastSeenDateTime', 'lastUpdatedDateTime', 'updatedAt']),
                     "os": _first_value(row, ['operatingSystem', 'operatingSystemName', 'osName', 'os', 'keyOSVersion']),
                     "keyos_version": _first_value(row, ['keyOSVersion', 'version'])
                 }
 
-        # Kendi veritabanımızdaki cihazları al
-        inventory = query_db("SELECT id, pc_no, pc_serial, hostname FROM pcs WHERE pc_serial IS NOT NULL AND pc_serial != '-' AND TRIM(pc_serial) != ''")
+        # Ensure last_active exists silently
+        try:
+            from modules.inventory_core import check_column_exists, _SCHEMA_CACHE
+            if not check_column_exists('pcs', 'last_active'):
+                try:
+                    query_db("ALTER TABLE pcs ADD last_active VARCHAR(50)")
+                except Exception:
+                    pass
+                if 'pcs' in _SCHEMA_CACHE:
+                    del _SCHEMA_CACHE['pcs']
+        except Exception:
+            pass
+        inventory = query_db("SELECT id, pc_no, pc_serial, hostname, windows, keyos, last_active FROM pcs WHERE pc_serial IS NOT NULL AND pc_serial != '-' AND TRIM(pc_serial) != ''")
         if not inventory:
             return jsonify({"message": "Sorgulanacak cihaz bulunamadı."})
             
@@ -331,8 +369,22 @@ def perform_keyos_sync(auto_update=True):
             if details:
                 # Update DB sadece auto_update True ise yapilir
                 if auto_update:
-                    _safe_update_pc_from_keyos(pc['id'], details)
+                    _safe_update_pc_from_keyos(pc['id'], details, pc.get('last_active'))
+                    updated_count += 1
                 
+                # Os String tespit et (rapor icin)
+                win_flag, keyos_flag = _normalize_os_flags(details.get('os'), details.get('keyos_version'))
+                os_str = "Bilinmiyor"
+                if win_flag:
+                    os_str = "Windows"
+                elif keyos_flag:
+                    os_str = "KeyOS/Pardus"
+                    
+                os_changed = False
+                if win_flag is not None and keyos_flag is not None:
+                    if win_flag != pc.get('windows', 0) or keyos_flag != pc.get('keyos', 0):
+                        os_changed = True
+
                 # Check Hostname mismatch
                 if details['hostname'].upper() != (pc['hostname'] or '').upper():
                     mismatches.append({
@@ -348,7 +400,9 @@ def perform_keyos_sync(auto_update=True):
                     "serial": pc['pc_serial'],
                     "ip": details['ip'],
                     "mac": details['mac'],
-                    "printers": details['printers']
+                    "printers": details['printers'],
+                    "os": os_str,
+                    "os_changed": os_changed
                 })
                 updated_count += 1
             else:
@@ -424,6 +478,37 @@ def last_report():
 def check_all_mismatches():
     # Return empty list for now, as mismatches are computed during sync
     return jsonify({"success": True, "mismatches": []})
+
+@keyos_service_bp.route('/check/<serial>', methods=['GET'])
+@require_auth
+def check_keyos_single(serial):
+    """Tekil bir seri numarasını KeyOS MGT üzerinden canlı sorgular."""
+    try:
+        user_id = request.current_user.get('user_id')
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT keyos_user, keyos_pass FROM users WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row or not row[0] or not row[1]:
+            return jsonify({"success": False, "error": "Lütfen profil ayarlarınızdan KeyOS MGT yetkili bilgilerinizi kaydedin."}), 400
+            
+        keyos_u = row[0]
+        enc_pass = row[1]
+        keyos_p = decrypt_password(enc_pass)
+
+        client = KeyOSClient(keyos_u, keyos_p)
+        if not client.login():
+            return jsonify({"success": False, "error": "KeyOS Girişi Başarısız! Lütfen bilgilerinizi kontrol edin."}), 401
+            
+        data = client.query_serial(serial)
+        if not data:
+            return jsonify({"success": False, "error": f"'{serial}' KeyOS üzerinde bulunamadı."}), 404
+            
+        return jsonify({"success": True, **data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @keyos_service_bp.route('/update', methods=['POST'])
 @require_auth
@@ -563,6 +648,140 @@ def update_keyos():
         import traceback
         print(f"[KEYOS UPDATE API ERROR] {traceback.format_exc()}")
         return jsonify({"success": False, "error": f"Güncelleme hatası: {str(e)}"}), 500
+
+
+def push_hostname_to_keyos(user_id, serial, hostname, location_code):
+    """
+    Dahili fonksiyon: Envanter güncellemesi sırasında mahal değiştiğinde
+    otomatik olarak KeyOS MGT üzerinde hostname ve mahal güncellemesi yapar.
+    
+    Bu fonksiyon bir HTTP endpoint değildir; inventory_core.py tarafından
+    doğrudan import edilerek çağrılır.
+    
+    Returns: (success: bool, message: str)
+    """
+    import threading
+    
+    def _do_keyos_push(uid, ser, host, loc):
+        try:
+            # 1. Kullanıcının kayıtlı KeyOS bilgilerini çek
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT keyos_user, keyos_pass FROM users WHERE id = ?", (uid,))
+            row = cursor.fetchone()
+            conn.close()
+            
+            if not row or not row[0] or not row[1]:
+                print(f"[KeyOS Auto-Sync] Kullanıcı #{uid} için kayıtlı KeyOS yetkisi bulunamadı. Atlanıyor.")
+                return
+                
+            keyos_u = row[0]
+            keyos_p = decrypt_password(row[1])
+            
+            # 2. KeyOS'a giriş yap
+            client = KeyOSClient(keyos_u, keyos_p)
+            if not client.login():
+                print(f"[KeyOS Auto-Sync] KeyOS girişi başarısız! Kullanıcı: {keyos_u}")
+                return
+                
+            # 3. Cihazı seri numarasıyla bul
+            api_url = get_keyos_login_url().replace("/login", "/computers/getDataTable")
+            ajax_payload = {
+                'draw': 1, 'start': 0, 'length': 10000,
+                'search[value]': '', 'search[regex]': 'false'
+            }
+            resp = client.session.post(api_url, data=ajax_payload, timeout=30, verify=False)
+            if resp.status_code != 200:
+                print(f"[KeyOS Auto-Sync] KeyOS cihaz listesi çekilemedi. HTTP {resp.status_code}")
+                return
+                
+            data_list = resp.json().get('data', [])
+            computer_id = None
+            target_serial = ser.strip().upper()
+            for row_c in data_list:
+                if str(row_c.get('serialNumber', '')).strip().upper() == target_serial:
+                    computer_id = row_c.get('id')
+                    break
+                    
+            if not computer_id:
+                print(f"[KeyOS Auto-Sync] '{ser}' seri numaralı cihaz KeyOS'ta bulunamadı.")
+                return
+                
+            # 4. Mahal adını KeyOS formatına çevir (nokta -> tire)
+            place_id_name = str(loc).replace('.', '-').strip().upper()
+            
+            # 5. Düzenleme sayfasından mahal ID'sini bul
+            edit_url = get_keyos_login_url().replace("/login", f"/updateComputer?{computer_id}")
+            place_id_val = None
+            
+            import time
+            for attempt in range(1, 4):
+                r_edit = client.session.get(edit_url, timeout=30, verify=False)
+                if r_edit.status_code == 200:
+                    soup = BeautifulSoup(r_edit.text, 'html.parser')
+                    place_select = soup.find('select', attrs={'name': 'placeId'})
+                    if place_select:
+                        for opt in place_select.find_all('option'):
+                            if opt.get_text(strip=True).strip().upper() == place_id_name:
+                                place_id_val = opt.get('value')
+                                break
+                if place_id_val:
+                    break
+                if attempt < 3:
+                    time.sleep(2.0)
+                    
+            # 6. Mahal yoksa oluştur
+            if not place_id_val:
+                add_url = get_keyos_login_url().replace("/login", "/addPlace/add")
+                add_headers = {
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    "X-Requested-With": "XMLHttpRequest"
+                }
+                client.session.post(add_url, data=json.dumps({"name": place_id_name}), headers=add_headers, timeout=30, verify=False)
+                
+                # Yeni mahalin ID'sini al
+                r_edit2 = client.session.get(edit_url, timeout=30, verify=False)
+                if r_edit2.status_code == 200:
+                    soup2 = BeautifulSoup(r_edit2.text, 'html.parser')
+                    ps2 = soup2.find('select', attrs={'name': 'placeId'})
+                    if ps2:
+                        for opt in ps2.find_all('option'):
+                            if opt.get_text(strip=True).strip().upper() == place_id_name:
+                                place_id_val = opt.get('value')
+                                break
+                                
+            if not place_id_val:
+                print(f"[KeyOS Auto-Sync] '{place_id_name}' mahali KeyOS'ta bulunamadı/oluşturulamadı.")
+                return
+                
+            # 7. Güncellemeyi gönder
+            update_url = get_keyos_login_url().replace("/login", "/updateComputer/update")
+            update_payload = {
+                "id": str(computer_id),
+                "serialNumber": ser,
+                "placeId": str(place_id_val),
+                "hostName": host
+            }
+            update_headers = {
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest"
+            }
+            r_update = client.session.post(update_url, data=json.dumps(update_payload), headers=update_headers, timeout=30, verify=False)
+            
+            if r_update.status_code == 200 and "success" in r_update.text:
+                print(f"[KeyOS Auto-Sync] BAŞARILI: {ser} -> Hostname: {host}, Mahal: {place_id_name}")
+            else:
+                print(f"[KeyOS Auto-Sync] BAŞARISIZ: {ser} -> {r_update.text}")
+                
+        except Exception as ex:
+            print(f"[KeyOS Auto-Sync] HATA: {ex}")
+    
+    # Arka planda çalıştır - kullanıcıyı bekletme
+    t = threading.Thread(target=_do_keyos_push, args=(user_id, serial, hostname, location_code), daemon=True)
+    t.start()
+    print(f"[KeyOS Auto-Sync] Arka plan görevi başlatıldı: {serial} -> {hostname}")
+    return True, "KeyOS güncelleme görevi arka planda başlatıldı."
+
 
 @keyos_service_bp.route('/bulk_update', methods=['POST'])
 @require_auth
@@ -738,7 +957,7 @@ def fetch_keyos_weekly_status():
                 parsed_data.append({
                     "Seri_No": serial,
                     "Hostname": str(row.get('hostName', '-')).strip(),
-                    "IP_Adresi": str(row.get('ethernetIPAddress', '-')).strip(),
+                    "IP_Adresi": _first_value(row, ['ethernetIPAddress', 'wifiIPAddress', 'ipAddress', 'ip', 'IPv4']),
                     "MAC_Adresi": str(row.get('ethernetMACAddress', '-')).strip(),
                     "Bagli_Yazicilar": str(row.get('printers', '-')).strip(),
                     "KeyOS_Versiyon": str(row.get('keyOSVersion', '-')).strip(),
@@ -782,6 +1001,92 @@ def get_weekly_excel():
             data = json.load(f)
             
         devices = data.get("devices", [])
+        
+        dc_data = {}
+        try:
+            from modules.desktop_central_service import scrape_desktop_central_computers
+            dc_data = scrape_desktop_central_computers() or {}
+            print(f"[EXCEL] DC'den {len(dc_data)} cihaz cekildi.")
+        except Exception as dc_err:
+            print(f"[EXCEL DC ERROR] {dc_err}")
+        
+        try:
+            from core.database_sql import query_db
+            db_pcs = query_db("""
+                SELECT p.pc_no, p.hostname, p.ip, p.mac, p.pc_serial, p.last_active, 
+                       p.windows, p.keyos, p.connected_printers, m.location_name 
+                FROM pcs p 
+                LEFT JOIN mahal_list m ON p.location_code = m.location_code 
+                WHERE p.is_deleted = 0 OR p.is_deleted IS NULL
+            """) or []
+            
+            # KeyOS cihazlarını DB verileriyle zenginleştir
+            for d in devices:
+                serial = str(d.get("Seri_No", "")).strip().upper()
+                mac = str(d.get("MAC_Adresi", "")).strip().upper()
+                
+                db_pc = None
+                if serial and serial != "-":
+                    db_pc = next((pc for pc in db_pcs if str(pc.get("pc_serial", "")).strip().upper() == serial), None)
+                if not db_pc and mac and mac != "-":
+                    db_pc = next((pc for pc in db_pcs if str(pc.get("mac", "")).strip().upper() == mac), None)
+                
+                pc_no_str = ""
+                mahal_str = ""
+                hostname_str = str(d.get("Hostname", "-")).strip()
+                
+                if db_pc:
+                    raw_pc_no = str(db_pc.get("pc_no") or "").strip()
+                    if raw_pc_no.isdigit():
+                        pc_no_str = f"PC-{raw_pc_no.zfill(3)}"
+                    elif raw_pc_no:
+                        pc_no_str = raw_pc_no.upper()
+                        
+                    mahal_str = str(db_pc.get("location_name") or "-").strip()
+                    if hostname_str == "-" and db_pc.get("hostname"):
+                        hostname_str = str(db_pc.get("hostname")).strip()
+                        
+                    db_pc["_processed"] = True
+                
+                d["PC NO"] = pc_no_str
+                d["MAHAL"] = mahal_str
+                d["Hostname"] = hostname_str
+                d["KEYOS Son_Guncelleme"] = d.get("Son_Guncelleme", "-")
+                
+                # Desktop Central aktiflik bilgisini JSON'dan al
+                ip_adresi = str(d.get("IP_Adresi", "")).strip()
+                if ip_adresi in dc_data:
+                    d["Desktop_Central_Aktiflik"] = dc_data[ip_adresi].get("last_contact", "-")
+                else:
+                    d["Desktop_Central_Aktiflik"] = "-"
+                
+            # İşlenmemiş Windows makinelerini (DC) ekle
+            for pc in db_pcs:
+                if not pc.get("_processed") and pc.get("windows") == 1:
+                    raw_pc_no = str(pc.get("pc_no") or "").strip()
+                    pc_no_str = ""
+                    if raw_pc_no.isdigit():
+                        pc_no_str = f"PC-{raw_pc_no.zfill(3)}"
+                    elif raw_pc_no:
+                        pc_no_str = raw_pc_no.upper()
+                        
+                    devices.append({
+                        "PC NO": pc_no_str,
+                        "MAHAL": str(pc.get("location_name") or "-").strip(),
+                        "Hostname": str(pc.get("hostname") or "-").strip(),
+                        "Seri_No": str(pc.get("pc_serial") or "-").strip(),
+                        "IP_Adresi": str(pc.get("ip") or "-").strip(),
+                        "MAC_Adresi": str(pc.get("mac") or "-").strip(),
+                        "KEYOS Son_Guncelleme": "-",
+                        "Desktop_Central_Aktiflik": dc_data.get(str(pc.get("ip") or "").strip(), {}).get("last_contact", str(pc.get("last_active") or "-")).strip(),
+                        "Aktif": "-",
+                        "KeyOS_Versiyon": "-",
+                        "Bagli_Yazicilar": str(pc.get("connected_printers") or "-").strip()
+                    })
+                    
+        except Exception as db_err:
+            print(f"[EXCEL DB ERROR] {db_err}")
+
         if not devices:
             return jsonify({"success": False, "error": "Raporda cihaz bulunamadı."}), 404
             
@@ -789,24 +1094,33 @@ def get_weekly_excel():
         
         # Excel sütun sıralamasını ayarla
         columns_order = [
-            "Seri_No", "Hostname", "IP_Adresi", "MAC_Adresi", 
-            "Son_Guncelleme", "Aktif", "KeyOS_Versiyon", "Bagli_Yazicilar"
+            "PC NO", "MAHAL", "Hostname", "Seri_No", "IP_Adresi", "MAC_Adresi", 
+            "KEYOS Son_Guncelleme", "Desktop_Central_Aktiflik", "Aktif", "KeyOS_Versiyon", "Bagli_Yazicilar"
         ]
+        
+        # Eksik sütun varsa tamamla (hata vermemesi için)
+        for col in columns_order:
+            if col not in df.columns:
+                df[col] = "-"
+                
         df = df[columns_order]
         
         # Excel'i hafızada oluştur
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, sheet_name='KeyOS Cihazlar', index=False)
+            df.to_excel(writer, sheet_name='KeyOS ve DC Cihazlar', index=False)
             
             # Sütun genişliklerini ayarla (opsiyonel)
-            worksheet = writer.sheets['KeyOS Cihazlar']
-            worksheet.set_column('A:A', 15)  # Seri No
-            worksheet.set_column('B:B', 20)  # Hostname
-            worksheet.set_column('C:D', 18)  # IP / MAC
-            worksheet.set_column('E:E', 20)  # Son Güncelleme
-            worksheet.set_column('F:F', 10)  # Aktif
-            worksheet.set_column('G:H', 20)  # Versiyon / Yazıcılar
+            worksheet = writer.sheets['KeyOS ve DC Cihazlar']
+            worksheet.set_column('A:A', 15)  # PC NO
+            worksheet.set_column('B:B', 30)  # MAHAL
+            worksheet.set_column('C:C', 20)  # Hostname
+            worksheet.set_column('D:D', 15)  # Seri No
+            worksheet.set_column('E:F', 18)  # IP / MAC
+            worksheet.set_column('G:G', 22)  # KEYOS Son Guncelleme
+            worksheet.set_column('H:H', 25)  # DC Aktiflik
+            worksheet.set_column('I:I', 10)  # Aktif
+            worksheet.set_column('J:K', 20)  # Versiyon / Yazıcılar
             
         output.seek(0)
         

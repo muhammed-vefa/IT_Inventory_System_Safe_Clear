@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from core.database_sql import query_db
-from core.auth import require_admin
+from core.auth import require_admin, require_editor
 
 areas_manager_bp = Blueprint('areas_manager', __name__)
 
@@ -18,7 +18,7 @@ def get_all():
         return jsonify({"error": str(e)}), 500
 
 @areas_manager_bp.route('/add', methods=['POST'])
-@require_admin
+@require_editor
 def add_area():
     try:
         data = request.json

@@ -286,7 +286,7 @@ def get_stats():
         })
     except Exception as e:
         print(f"[API ERROR] stats: {e}")
-        return jsonify({}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 # =====================================================
@@ -467,6 +467,7 @@ def update_inventory():
         if not record_label: record_label = str(record_id)
 
         # Automatic Hostname generation on location_code change
+        _keyos_auto_sync_data = None  # Mahal değişirse KeyOS otomatik senkronizasyon bilgisi
         if table_name == 'pcs':
             new_loc = data.get('location_code')
             old_loc = old_data.get('location_code')
@@ -497,6 +498,18 @@ def update_inventory():
                         
                         # Add to data to be updated
                         data['hostname'] = generated_host
+                        
+                        # Mahal değişikliği varsa KeyOS Auto-Sync verisi hazırla
+                        if new_loc and new_loc != old_loc:
+                            pc_serial = old_data.get('pc_serial', '')
+                            user_id = request.current_user.get('user_id')
+                            if pc_serial and str(pc_serial).strip() not in ('', '-', 'None', 'NULL') and user_id:
+                                _keyos_auto_sync_data = {
+                                    'user_id': user_id,
+                                    'serial': str(pc_serial).strip(),
+                                    'hostname': generated_host,
+                                    'location_code': target_loc
+                                }
 
         # 2. GUNCELLENEBILIR ALANLAR (tablo bazli - English DB Column names)
         allowed_fields_map = {
@@ -739,7 +752,27 @@ def update_inventory():
         conn.commit()
         conn.close()
         
-        return jsonify({"success": True, "message": "Cihaz guncellendi."})
+        # KeyOS Auto-Sync: Mahal değişikliği varsa arka planda KeyOS MGT'yi güncelle
+        keyos_sync_msg = None
+        if _keyos_auto_sync_data:
+            try:
+                from modules.keyos_service import push_hostname_to_keyos
+                push_hostname_to_keyos(
+                    _keyos_auto_sync_data['user_id'],
+                    _keyos_auto_sync_data['serial'],
+                    _keyos_auto_sync_data['hostname'],
+                    _keyos_auto_sync_data['location_code']
+                )
+                keyos_sync_msg = f"KeyOS MGT üzerinde de güncelleme arka planda başlatıldı."
+            except Exception as ks_e:
+                print(f"[KeyOS Auto-Sync Trigger Error] {ks_e}")
+                keyos_sync_msg = f"KeyOS otomatik güncelleme başlatılamadı: {str(ks_e)}"
+        
+        resp_msg = "Cihaz guncellendi."
+        if keyos_sync_msg:
+            resp_msg += f" {keyos_sync_msg}"
+        
+        return jsonify({"success": True, "message": resp_msg})
     except Exception as e:
         print(f"[UPDATE ERROR] {e}")
         return jsonify({"error": str(e)}), 500

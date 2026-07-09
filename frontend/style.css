@@ -280,6 +280,23 @@ textarea.search-bar {
 
 .search-wrapper .search-bar {
     padding-right: 35px !important; /* X butonu için yer aç */
+    padding-left: 35px !important; /* Mercek butonu için yer aç */
+}
+
+.search-icon {
+    position: absolute;
+    left: 12px;
+    color: var(--accent);
+    cursor: pointer;
+    opacity: 0.7;
+    transition: all 0.2s;
+    font-size: 1rem;
+    z-index: 5;
+}
+
+.search-icon:hover {
+    opacity: 1;
+    transform: scale(1.1);
 }
 
 .clear-search {
@@ -1193,7 +1210,7 @@ textarea.search-bar {
     padding: 15px;
     font-size: 0.85rem;
     color: var(--text-secondary);
-    max-height: 250px;
+    height: 250px;
     overflow-y: auto;
 }
 
@@ -2579,7 +2596,6 @@ input[type=search]::-webkit-search-cancel-button { -webkit-appearance: searchfie
     /* Gridleri tek sütun yap */
     .grid, .form-row-2, .form-row-3, .form-row-4, #inventory-grid, #printers-grid, #docs-grid, #user-grid {
         grid-template-columns: 1fr !important;
-        display: grid !important;
         gap: 15px !important;
         width: 100% !important;
         box-sizing: border-box !important;

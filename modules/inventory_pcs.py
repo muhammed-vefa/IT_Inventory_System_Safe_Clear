@@ -53,7 +53,8 @@ def get_pcs():
             "pr6900", "pr5200", "pr8690", "by_serial", "bo_serial", "scanner_serial", 
             "description", "last_counted_at", "counted_by", "hostname", "device_type", 
             "last_edit_date", "last_edit_user", "hostname_mismatch", "created_at",
-            "connected_printers", "keyos", "rdp_address", "rdp_reason", "is_deleted"
+            "connected_printers", "keyos", "rdp_address", "rdp_reason", "is_deleted",
+            "last_active"
         ]
         cols = get_safe_columns(table, requested)
         include_archived = request.args.get('include_archived') == 'true'
@@ -75,19 +76,10 @@ def get_pcs():
         if items:
             items = [map_db_to_frontend(item, "pcs") for item in items]
             
-            # --- KeyOS Last Active Merge ---
-            try:
-                keyos_map = get_cached_keyos_map()
-                for item in items:
-                    sn = str(item.get("pc_serial", "")).strip().upper()
-                    ip = str(item.get("ip", "")).strip()
-                    host = str(item.get("hostname", "")).strip().upper()
-                    
-                    k_val = keyos_map.get(sn) or keyos_map.get(ip) or keyos_map.get(host)
-                    if k_val:
-                        item["keyos_last_active"] = k_val
-            except Exception as e:
-                print(f"[KeyOS Merge Error] {e}")
+            # --- Single Source of Truth ---
+            # DB'deki last_active en guncel olanidir (KeyOS veya DC tarafindan guncellenir)
+            for item in items:
+                item["keyos_last_active"] = item.get("last_active")
 
         return success_response(items if items is not None else [])
     except Exception as e:

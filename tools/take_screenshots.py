@@ -27,7 +27,7 @@ async def main():
         page = await context.new_page()
         
         print("Sayfaya gidiliyor...")
-        await page.goto("http://sys.ornek-kurum.com/")
+        await page.goto("http://sys.kocaelish.com/")
         
         # Wait for login form
         await page.wait_for_selector("#login-user")

@@ -2,7 +2,7 @@
 
 ## Proje Bilgisi
 
-Bu yazılım, Canan Yıldız tarafından kurum içi iş süreçlerini kolaylaştırmak, teknik takip ve envanter yönetimini düzenli hale getirmek amacıyla geliştirilmiştir.
+Bu yazılım, Muhammed Vefa Arabacı tarafından kurum içi iş süreçlerini kolaylaştırmak, teknik takip ve envanter yönetimini düzenli hale getirmek amacıyla geliştirilmiştir.
 
 Yazılım; kaynak kod, arayüz tasarımı, veri yapısı, dokümantasyon ve sistem içerikleriyle birlikte kurum içi kullanım kapsamında değerlendirilmelidir.
 

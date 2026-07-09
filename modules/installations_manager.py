@@ -377,9 +377,9 @@ if ($PSCommandPath -and (Test-Path $PSCommandPath)) {
 }
 """
     
-    host = request.headers.get('X-Forwarded-Host', request.headers.get('Host', 'sys.ornek-kurum.com'))
+    host = request.headers.get('X-Forwarded-Host', request.headers.get('Host', 'sys.kocaelish.com'))
     if '127.0.0.1' in host or 'localhost' in host:
-        host = 'sys.ornek-kurum.com'
+        host = 'sys.kocaelish.com'
     scheme = request.headers.get('X-Forwarded-Proto', 'http')
     base_url = f"{scheme}://{host}/api/isvec"
     
@@ -546,9 +546,9 @@ if ($PSCommandPath -and (Test-Path $PSCommandPath)) {
     Remove-Item -Path $PSCommandPath -Force -ErrorAction SilentlyContinue
 }
 """
-    host = request.headers.get('X-Forwarded-Host', request.headers.get('Host', 'sys.ornek-kurum.com'))
+    host = request.headers.get('X-Forwarded-Host', request.headers.get('Host', 'sys.kocaelish.com'))
     if '127.0.0.1' in host or 'localhost' in host:
-        host = 'sys.ornek-kurum.com'
+        host = 'sys.kocaelish.com'
     scheme = request.headers.get('X-Forwarded-Proto', 'http')
     encoded_app_id = urllib.parse.quote(app_id)
     base_url = f"{scheme}://{host}/api/isvec/" + encoded_app_id

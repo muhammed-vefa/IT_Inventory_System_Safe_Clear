@@ -74,11 +74,11 @@ Bu dosya, yapay zeka ajanlarının (Antigravity) geçmişte çözdüğü spesifi
 ## 🖥️ Önemli Kodlar ve Entegrasyon API Protokolleri
 
 ### 1. BİM Entegrasyonu (Yazıcı Ekleme / Kaldırma) API İstekleri
-Sistem, yazıcı ekleme ve kaldırma işlemleri için ornek Sağlık Hizmetleri BİM sunucusundaki `Handler.ashx` endpoint'i ile haberleşir.
+Sistem, yazıcı ekleme ve kaldırma işlemleri için Kocaeli Sağlık Hizmetleri BİM sunucusundaki `Handler.ashx` endpoint'i ile haberleşir.
 
 #### A. Giriş (Login) Aşaması
 BİM API üzerinde işlem yapabilmek için önce bir oturum (session ID) alınması gerekir:
-* **URL**: `http://bim.ornek-kurum.com/Handler.ashx`
+* **URL**: `http://bim.kocaelish.com/Handler.ashx`
 * **Yöntem**: POST
 * **İstek Gövdesi (Form Data / URL Encoded)**:
   ```json
@@ -92,13 +92,13 @@ BİM API üzerinde işlem yapabilmek için önce bir oturum (session ID) alınma
 
 #### B. Yazıcı Ekleme (AddPrinter)
 Bilgisayara yeni bir ağ yazıcısı tanımlamak için gönderilen istek:
-* **URL**: `http://bim.ornek-kurum.com/Handler.ashx`
+* **URL**: `http://bim.kocaelish.com/Handler.ashx`
 * **Yöntem**: POST
 * **İstek Başlıkları (Headers)**:
   * `IPASession`: `<Login aşamasında alınan session_id>`
   * `User-Agent`: `Mozilla/5.0 (Windows NT 10.0; Win64; x64)...`
-  * `Referer`: `http://bim.ornek-kurum.com/`
-  * `Origin`: `http://bim.ornek-kurum.com`
+  * `Referer`: `http://bim.kocaelish.com/`
+  * `Origin`: `http://bim.kocaelish.com`
 * **İstek Gövdesi (Form Data / URL Encoded)**:
   ```json
   {
@@ -111,7 +111,7 @@ Bilgisayara yeni bir ağ yazıcısı tanımlamak için gönderilen istek:
 
 #### C. Yazıcı Kaldırma (RemovePrinter)
 Bilgisayardan tanımlı bir ağ yazıcısını silmek için gönderilen istek:
-* **URL**: `http://bim.ornek-kurum.com/Handler.ashx`
+* **URL**: `http://bim.kocaelish.com/Handler.ashx`
 * **Yöntem**: POST
 * **İstek Başlıkları**: Aynı (`IPASession`, `User-Agent`, `Referer`, `Origin`)
 * **İstek Gövdesi (Form Data / URL Encoded)**:

@@ -92,6 +92,7 @@ from modules.desktop_central_service import desktop_central_service_bp
 # Blueprint Kayitlari
 # Inventory Blueprints
 app.register_blueprint(inventory_core_bp, url_prefix='/api/inventory')
+app.register_blueprint(inventory_core_bp, url_prefix='/api/dashboard', name='inventory_core_dashboard') # Alias for cached frontend
 app.register_blueprint(inventory_pcs_bp, url_prefix='/api/inventory')
 app.register_blueprint(inventory_tablets_bp, url_prefix='/api/inventory')
 app.register_blueprint(inventory_queing_bp, url_prefix='/api/inventory')
@@ -212,9 +213,9 @@ from core.auth import require_auth
 @app.route('/api/config')
 def get_config():
     import os
-    domain = os.getenv("HOSPITAL_DOMAIN", "ornek-kurum.com")
+    domain = os.getenv("HOSPITAL_DOMAIN", "kocaelish.com")
     return jsonify({
-        "hospital_name": os.getenv("HOSPITAL_NAME", "Örnektepe Devlet Hastanesi"),
+        "hospital_name": os.getenv("HOSPITAL_NAME", "Kocaeli Şehir Hastanesi"),
         "hospital_domain": domain,
         "links": {
             "bim": os.getenv("LINK_BIM", f"http://bim.{domain}/"),
@@ -232,11 +233,27 @@ def get_config():
         }
     })
 
-@app.route('/api/dashboard/stats')
-@require_auth
-def dashboard_stats():
-    from modules.inventory_core import get_stats
-    return get_stats()
+@app.route('/api/debug_db_state')
+def debug_db_state():
+    from core.database_sql import query_db
+    try:
+        rows = query_db("SELECT id, pc_no, ip, windows, keyos, last_active, keyos_last_active FROM pcs WHERE pc_no IN ('PC-005', 'PC-014', 'PC-006', 'PC-007')")
+        return {"success": True, "data": rows}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/api/debug_pc_14')
+def debug_pc_14():
+    from core.database_sql import query_db
+    try:
+        row = query_db("SELECT id, pc_no, ip, windows, keyos, last_active FROM pcs WHERE ip = '10.241.22.22'")
+        from modules.inventory_core import _SCHEMA_CACHE
+        return jsonify({
+            "cache": list(_SCHEMA_CACHE.get('pcs', [])),
+            "db_row": row
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 @app.route('/')
 def index():

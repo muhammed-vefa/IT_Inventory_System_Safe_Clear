@@ -64,7 +64,7 @@ async def main():
         page = await context.new_page()
         
         print("Sisteme giriliyor...")
-        await page.goto("http://sys.ornek-kurum.com/")
+        await page.goto("http://sys.kocaelish.com/")
         await page.wait_for_timeout(2000)
         
         # Giriş Ekranı

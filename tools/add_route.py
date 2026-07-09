@@ -45,7 +45,7 @@ def batch_action():
                 failed_targets.append(f"{p_name} (IP yok)")
                 continue
 
-            base_url = "http://bim.ornek-kurum.com/Handler.ashx"
+            base_url = "http://bim.kocaelish.com/Handler.ashx"
             login_data = {
                 "Functions": "Login",
                 "UserName": bim_user,
@@ -56,7 +56,7 @@ def batch_action():
             }
             
             try:
-                login_resp = requests.post(base_url, data=login_data, headers=browser_headers, timeout=10)
+                login_resp = requests.post(base_url, data=login_data, headers=browser_headers, timeout=10, verify=False)
                 if login_resp.status_code != 200 or login_resp.text.strip() == "Error" or not login_resp.text.strip():
                     failed_targets.append(f"{p_name} (BIM Giris Basarisiz)")
                     continue
@@ -81,7 +81,7 @@ def batch_action():
                 }
 
             try:
-                cmd_resp = requests.post(base_url, data=send_data, headers=browser_headers, timeout=15)
+                cmd_resp = requests.post(base_url, data=send_data, headers=browser_headers, timeout=15, verify=False)
                 if cmd_resp.status_code != 200 or "Error" in cmd_resp.text:
                     failed_targets.append(f"{p_name} (BIM Hatasi: {cmd_resp.text.strip()})")
                     continue

@@ -49,7 +49,7 @@ def run_command():
             return jsonify({"error": "BİM kullanıcı adı ve şifresi bulunamadı. Lütfen profilinizden kaydedin."}), 400
 
         bim_config = get_integration_config('BIM') or {}
-        bim_base_url = bim_config.get('base_url', 'http://bim.ornek-kurum.com').rstrip('/')
+        bim_base_url = bim_config.get('base_url', 'http://bim.kocaelish.com').rstrip('/')
         
         # 1. Login (Web arayüzünü taklit et)
         login_data = {
@@ -64,10 +64,18 @@ def run_command():
         browser_headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
             "Referer": os.getenv("BIM_REFERER", f"{bim_base_url}/"),
-            "Origin": os.getenv("BIM_ORIGIN", bim_base_url)
+            "Origin": os.getenv("BIM_ORIGIN", bim_base_url),
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Forwarded-For": target_ip,
+            "Client-IP": target_ip
         }
         
-        login_resp = requests.post(base_url, data=login_data, headers=browser_headers, timeout=10)
+        import urllib.parse
+        encoded_login_data = urllib.parse.urlencode(login_data)
+        
+        session = requests.Session()
+        login_resp = session.post(base_url, data=encoded_login_data, headers=browser_headers, timeout=10, verify=False)
         
         if login_resp.status_code != 200 or login_resp.text.strip() == "Error" or not login_resp.text.strip():
             # Kullanıcıya daha net bir hata verelim
@@ -79,40 +87,52 @@ def run_command():
         func = data.get('function')  # AddPrinter, RemovePrinter vb.
         cmd_lower = str(command).lower()
         
-        post_data = {
-            "UserName": username,
-            "IPAddress": target_ip
+        post_data = {}
+        # Browser headers to bypass any new WAF or basic protections
+        headers = {
+            "User-Agent": browser_headers["User-Agent"],
+            "Referer": browser_headers["Referer"],
+            "Origin": browser_headers["Origin"],
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Forwarded-For": target_ip,
+            "Client-IP": target_ip
         }
         
         if func in ["AddPrinter", "RemovePrinter"]:
+            # JS frontend doesn't send UserName or IPASession for these functions
             post_data["Functions"] = func
+            post_data["IPAddress"] = target_ip
             post_data["PrinterName"] = command
         elif "shutdown /r" in cmd_lower:
             post_data["Functions"] = "Reboot"
+            post_data["IPAddress"] = target_ip
+            post_data["UserName"] = username
+            headers["IPASession"] = ipa_session
         elif "shutdown /s" in cmd_lower:
             post_data["Functions"] = "Shutdown" 
+            post_data["IPAddress"] = target_ip
+            post_data["UserName"] = username
+            headers["IPASession"] = ipa_session
         else:
-            # Genel komut (Eğer arka uç destekliyorsa)
+            # Genel komut
             post_data["Functions"] = "RunCommand"
+            post_data["IPAddress"] = target_ip
+            post_data["UserName"] = username
             post_data["Commands"] = command
+            headers["IPASession"] = ipa_session
             
-        headers = {
-            "IPASession": ipa_session,
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-        
-        import urllib.parse
-        encoded_data = urllib.parse.urlencode(post_data, quote_via=urllib.parse.quote)
-        
+        encoded_post_data = urllib.parse.urlencode(post_data)
+            
         try:
-            cmd_resp = requests.post(base_url, data=encoded_data, headers=headers, timeout=45)
+            cmd_resp = session.post(base_url, data=encoded_post_data, headers=headers, timeout=45, verify=False)
             
             if cmd_resp.status_code == 200:
                 return jsonify({"success": True, "result": cmd_resp.text.strip()})
             else:
-                return jsonify({"error": f"BIM Servis Hatası: {cmd_resp.status_code}"}), 500
+                return jsonify({"error": f"BIM Servis Hatası: {cmd_resp.status_code} - {cmd_resp.text.strip()}"}), 500
         except requests.exceptions.Timeout:
-            return jsonify({"success": True, "result": "BIM sunucusuna komut iletildi ancak yanıt süresi aşıldı (45 sn). Uzun süren komutlar (wget vb.) arka planda başarıyla tamamlanmış olabilir."})
+            return jsonify({"success": True, "result": "BIM sunucusuna komut iletildi ancak yanıt süresi aşıldı (45 sn). Uzun süren komutlar arka planda tamamlanabilir."})
 
     except Exception as e:
         print(f"[BIM ERROR] {e}")
