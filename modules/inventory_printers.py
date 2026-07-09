@@ -309,7 +309,7 @@ def query_cups():
         updated_count = 0
         first = 0
         last_page_first_printer = None
-        cups_config = get_integration_config('CUPS') or {}; cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/'); from urllib.parse import urlparse; cups_host = urlparse(cups_base_url).hostname or '192.168.X.X'
+        cups_config = get_integration_config('CUPS') or {}; cups_base_url = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/'); from urllib.parse import urlparse; cups_host = urlparse(cups_base_url).hostname or '10.241.X.X'
         
         while True:
             cups_url = f"{cups_base_url}/printers/?FIRST={first}"
@@ -410,6 +410,46 @@ def query_cups():
         print(f"[CUPS ERROR] {e}")
         return jsonify({"error": str(e)}), 500
 
+def sync_printer_to_cups_internal(pr_no, mahal, cursor=None, conn=None):
+    import requests
+    cups_mahal = str(mahal).replace(".", "-")
+    cups_config = get_integration_config('CUPS') or {}
+    cups_base_url = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/')
+    cups_admin_url = f"{cups_base_url}/admin/"
+    post_data = {
+        "OP": "modify-printer",
+        "PRINTER_NAME": pr_no,
+        "PRINTER_LOCATION": cups_mahal,
+        "printer_is_shared": "1",
+        "confirm": "Yes"
+    }
+    
+    cups_success = False
+    error_detail = ""
+    for attempt in range(3):
+        try:
+            resp = requests.post(cups_admin_url, data=post_data, timeout=5, verify=False)
+            if resp.status_code == 200:
+                cups_success = True
+                break
+            else:
+                error_detail = f"Status: {resp.status_code}"
+        except Exception as e:
+            error_detail = str(e)
+            continue
+            
+    if cursor and conn:
+        if cups_success:
+            cursor.execute("INSERT INTO sync_status (operation, status, details) VALUES (?, ?, ?)", 
+                           ("CUPS_SYNC", "SUCCESS", f"Printer: {pr_no} synced successfully to {cups_mahal}"))
+            conn.commit()
+        else:
+            cursor.execute("INSERT INTO sync_status (operation, status, details) VALUES (?, ?, ?)", 
+                           ("CUPS_SYNC", "FAILED_COMPENSATED", f"Printer: {pr_no}, Error: {error_detail}"))
+            conn.commit()
+            
+    return cups_success, error_detail
+
 @inventory_printers_bp.route('/cups/update_mahal', methods=['POST'])
 @require_editor
 def update_cups_mahal():
@@ -435,46 +475,17 @@ def update_cups_mahal():
 
         cursor.execute("UPDATE printers SET location_code = ? WHERE pr_no = ?", (mahal, pr_no))
         
-        cups_mahal = mahal.replace(".", "-")
-        
-        import requests
-        cups_config = get_integration_config('CUPS') or {}; cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/'); cups_admin_url = f"{cups_base_url}/admin/"
-        post_data = {
-            "OP": "modify-printer",
-            "PRINTER_NAME": pr_no,
-            "PRINTER_LOCATION": cups_mahal,
-            "printer_is_shared": "1",
-            "confirm": "Yes"
-        }
-        
-        cups_success = False
-        error_detail = ""
-        for attempt in range(3):
-            try:
-                resp = requests.post(cups_admin_url, data=post_data, timeout=5, verify=False)
-                if resp.status_code == 200:
-                    cups_success = True
-                    break
-                else:
-                    error_detail = f"Status: {resp.status_code}"
-            except Exception as e:
-                error_detail = str(e)
-                continue
+        cups_success, error_detail = sync_printer_to_cups_internal(pr_no, mahal, cursor, conn)
         
         if cups_success:
-            conn.commit()
-            cursor.execute("INSERT INTO sync_status (operation, status, details) VALUES (?, ?, ?)", 
-                           ("CUPS_SYNC", "SUCCESS", f"Printer: {pr_no} synced successfully"))
             conn.commit()
             from modules.logs_manager import log_change
             log_change("printers", pr_no, pr_no, "location_code", old_location, mahal, "system", "Admin")
             return jsonify({"success": True, "message": "SQL ve CUPS başarıyla güncellendi."})
         else:
-            conn.rollback()
-            cursor.execute("INSERT INTO sync_status (operation, status, details) VALUES (?, ?, ?)", 
-                           ("CUPS_SYNC", "FAILED_COMPENSATED", f"Printer: {pr_no}, Error: {error_detail}"))
-            conn.commit()
-        conn.rollback()
+            conn.rollback() # Rollback printer location update
+            return jsonify({"error": f"CUPS Hatası: {error_detail}"}), 500
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
@@ -497,7 +508,7 @@ def update_cups_printer_location_wizard(pr_no, new_location):
     if clean_digits:
         pr_no = f"PR-{clean_digits.zfill(3)}"
 
-    cups_config = get_integration_config('CUPS') or {}; CUPS_URL = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
+    cups_config = get_integration_config('CUPS') or {}; CUPS_URL = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/')
     CUPS_USER = cups_config.get('auth_username') or 'root'
     CUPS_PASS = cups_config.get('auth_password') or '1234qqqQ'
     TIMEOUT = 30
@@ -770,7 +781,7 @@ def list_cups_printers():
         last_page_first_printer = None
         show_all = request.args.get('show_all', 'false') == 'true'
         cups_config = get_integration_config('CUPS') or {}
-        cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
+        cups_base_url = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/')
 
         while True:
             cups_url = f"{cups_base_url}/printers/?FIRST={first}"
@@ -850,18 +861,26 @@ def cups_print_job():
     import struct
     import requests as http_req
 
-    cups_config = get_integration_config('CUPS') or {}; CUPS_URL = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
+    cups_config = get_integration_config('CUPS') or {}; CUPS_URL = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/')
     ALLOWED_TYPES = {
         'application/pdf': 'application/pdf',
         'image/png': 'image/png',
         'image/jpeg': 'image/jpeg',
-        'image/jpg': 'image/jpeg'
+        'image/jpg': 'image/jpeg',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'convert_docx',
+        'application/msword': 'convert_docx',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'convert_xlsx',
+        'application/vnd.ms-excel': 'convert_xlsx'
     }
     MAX_SIZE = 10 * 1024 * 1024  # 10 MB
 
     try:
         printer_name_raw = request.form.get('printer_name')
         copies = int(request.form.get('copies', 1))
+        orientation = request.form.get('orientation', 'portrait')
+        duplex = request.form.get('duplex', 'one-sided')
+        scaling = request.form.get('scaling', 'none')
+        media = request.form.get('media', 'iso_a4_210x297mm')
 
         if not printer_name_raw:
             return jsonify({"error": "Yazıcı adı belirtilmedi."}), 400
@@ -909,8 +928,53 @@ def cups_print_job():
         if len(file_data) == 0:
             return jsonify({"error": "Dosya boş."}), 400
 
+        if doc_format.startswith('convert_'):
+            import tempfile
+            import os
+            import pythoncom
+            import win32com.client
+
+            pythoncom.CoInitialize()
+            temp_dir = tempfile.mkdtemp()
+            ext = '.docx' if doc_format == 'convert_docx' else '.xlsx'
+            in_path = os.path.join(temp_dir, 'input' + ext)
+            out_path = os.path.join(temp_dir, 'output.pdf')
+            
+            with open(in_path, 'wb') as f:
+                f.write(file_data)
+            
+            try:
+                if doc_format == 'convert_docx':
+                    word = win32com.client.Dispatch("Word.Application")
+                    word.Visible = False
+                    doc = word.Documents.Open(in_path)
+                    doc.SaveAs(out_path, FileFormat=17) # wdFormatPDF
+                    doc.Close()
+                    word.Quit()
+                else:
+                    excel = win32com.client.Dispatch("Excel.Application")
+                    excel.Visible = False
+                    wb = excel.Workbooks.Open(in_path)
+                    wb.ExportAsFixedFormat(0, out_path) # xlTypePDF
+                    wb.Close()
+                    excel.Quit()
+                
+                with open(out_path, 'rb') as f:
+                    file_data = f.read()
+                doc_format = 'application/pdf'
+            except Exception as e:
+                return jsonify({"error": f"Dönüştürme hatası: {str(e)}"}), 500
+            finally:
+                pythoncom.CoUninitialize()
+                try:
+                    if os.path.exists(in_path): os.remove(in_path)
+                    if os.path.exists(out_path): os.remove(out_path)
+                    if os.path.exists(temp_dir): os.rmdir(temp_dir)
+                except:
+                    pass
+
         from urllib.parse import urlparse
-        cups_host = urlparse(CUPS_URL).hostname or '192.168.X.X'
+        cups_host = urlparse(CUPS_URL).hostname or '10.241.X.X'
         printer_uri = f"ipp://{cups_host}:49631/printers/{printer_name}"
         job_name = file.filename or "mobile-print-job"
         username = "it-envanter"
@@ -923,6 +987,10 @@ def cups_print_job():
         def ipp_int_attr(tag, name, value):
             n = name.encode('utf-8')
             return struct.pack('>bH', tag, len(n)) + n + struct.pack('>Hi', 4, value)
+            
+        def ipp_bool_attr(tag, name, value):
+            n = name.encode('utf-8')
+            return struct.pack('>bH', tag, len(n)) + n + struct.pack('>Hb', 1, 1 if value else 0)
 
         # IPP header: version 1.1, Print-Job (0x0002), request-id 1
         ipp_header = struct.pack('>bbHI', 1, 1, 0x0002, 1)
@@ -939,6 +1007,17 @@ def cups_print_job():
         # Job attributes group (tag 0x02)
         ipp_body += b'\x02'
         ipp_body += ipp_int_attr(0x21, 'copies', copies)
+        
+        if orientation == 'landscape':
+            ipp_body += ipp_int_attr(0x23, 'orientation-requested', 4) # 3=portrait, 4=landscape
+        else:
+            ipp_body += ipp_int_attr(0x23, 'orientation-requested', 3)
+            
+        ipp_body += ipp_str_attr(0x44, 'sides', duplex) # keyword attribute
+        ipp_body += ipp_str_attr(0x44, 'media', media)
+        
+        if scaling == 'fit':
+            ipp_body += ipp_bool_attr(0x22, 'fit-to-page', True)
 
         # End of attributes (tag 0x03)
         ipp_body += b'\x03'
@@ -1007,7 +1086,7 @@ def pause_reject_cups():
         
         from core.integrations import get_integration_config
         cups_config = get_integration_config('CUPS') or {}
-        cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
+        cups_base_url = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/')
         username = cups_config.get('auth_username') or cups_config.get('username', 'admin')
         password = cups_config.get('auth_password') or cups_config.get('password', '')
         
@@ -1063,7 +1142,7 @@ def resume_accept_cups():
         
         from core.integrations import get_integration_config
         cups_config = get_integration_config('CUPS') or {}
-        cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
+        cups_base_url = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/')
         username = cups_config.get('auth_username') or cups_config.get('username', 'admin')
         password = cups_config.get('auth_password') or cups_config.get('password', '')
         
@@ -1116,7 +1195,7 @@ def batch_action():
         data = request.json
         action = data.get('action') # 'add' or 'remove'
         bim_function = data.get('bim_function')
-        command = data.get('command')
+        command = data.get('command', '').strip()
         targets = data.get('targets', [])
         bim_user = data.get('bim_user')
         bim_pass = data.get('bim_pass')
@@ -1136,61 +1215,76 @@ def batch_action():
 
         for target in targets:
             pc_id = target.get('value')
+            target_ip_from_frontend = target.get('ip')
             cursor.execute("SELECT id, ip, pc_no FROM pcs WHERE id = ?", (pc_id,))
             pc_row = cursor.fetchone()
             if not pc_row:
                 failed_targets.append(f"PC ID {pc_id} bulunamadi.")
                 continue
             
-            p_id, p_ip, p_name = pc_row
+            p_id, db_ip, p_name = pc_row
+            p_ip = target_ip_from_frontend if target_ip_from_frontend else db_ip
             if not p_ip:
                 failed_targets.append(f"{p_name} (IP yok)")
                 continue
 
             bim_config = get_integration_config('BIM') or {}
-            bim_base_url = bim_config.get('base_url', 'http://bim.ornek-kurum.com').rstrip('/')
+            bim_base_url = bim_config.get('base_url', 'http://bim.kocaelish.com').rstrip('/')
             base_url = f"{bim_base_url}/Handler.ashx"
+            
             login_data = {
                 "Functions": "Login",
                 "UserName": bim_user,
                 "Password": bim_pass
             }
+            
             browser_headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+                "Referer": f"{bim_base_url}/",
+                "Origin": bim_base_url,
+                "X-Requested-With": "XMLHttpRequest",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Forwarded-For": p_ip,
+                "Client-IP": p_ip
             }
             
+            import urllib.parse
+            encoded_login_data = urllib.parse.urlencode(login_data)
+            
+            session = requests.Session()
+            
             try:
-                login_resp = requests.post(base_url, data=login_data, headers=browser_headers, timeout=10)
+                login_resp = session.post(base_url, data=encoded_login_data, headers=browser_headers, timeout=10, verify=False)
                 if login_resp.status_code != 200 or login_resp.text.strip() == "Error" or not login_resp.text.strip():
-                    failed_targets.append(f"{p_name} (BIM Giris Basarisiz)")
+                    failed_targets.append(f"{p_name} (BIM Giris Basarisiz - Yetki Yok veya Sifre Hatali)")
                     continue
                 ipa_session = login_resp.text.strip()
             except Exception as e:
                 failed_targets.append(f"{p_name} (BIM Login Hatasi)")
                 continue
 
-            send_data = {
-                "UserName": bim_user,
-                "IPAddress": p_ip
-            }
+            send_data = {}
             if bim_function in ["AddPrinter", "RemovePrinter"]:
                 send_data["Functions"] = bim_function
+                send_data["IPAddress"] = p_ip
                 send_data["PrinterName"] = command
             else:
                 send_data["Functions"] = "RunCommand"
+                send_data["IPAddress"] = p_ip
+                send_data["UserName"] = bim_user
                 send_data["Commands"] = command
 
-            headers = {
-                "IPASession": ipa_session,
-                "User-Agent": browser_headers["User-Agent"],
-                "Referer": f"{bim_base_url}/",
-                "Origin": bim_base_url
-            }
+            # Request headers remain exactly the same as login headers for jQuery match
+            headers = browser_headers.copy()
+            if "UserName" in send_data:
+                headers["IPASession"] = ipa_session
+
+            encoded_send_data = urllib.parse.urlencode(send_data)
 
             try:
-                cmd_resp = requests.post(base_url, data=send_data, headers=headers, timeout=15)
+                cmd_resp = session.post(base_url, data=encoded_send_data, headers=headers, timeout=15, verify=False)
                 if cmd_resp.status_code != 200 or "Error" in cmd_resp.text:
-                    failed_targets.append(f"{p_name} (BIM Hatasi: {cmd_resp.text.strip()})")
+                    failed_targets.append(f"{p_name} (BIM Hatasi: {cmd_resp.status_code} - {cmd_resp.text.strip()})")
                     continue
             except Exception as e:
                 failed_targets.append(f"{p_name} (BIM Cmd Hatasi)")
@@ -1338,7 +1432,7 @@ def get_live_status_by_id(printer_id):
         if q_name:
             try:
                 cups_config = get_integration_config('CUPS') or {}
-                cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
+                cups_base_url = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/')
                 resp = requests.get(f"{cups_base_url}/printers/{q_name}", timeout=3, verify=False)
                 html = resp.text.lower()
 
@@ -1429,7 +1523,7 @@ def toggle_cups_pause():
         import re
         from core.integrations import get_integration_config
         cups_config = get_integration_config('CUPS') or {}
-        cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
+        cups_base_url = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/')
         cups_user = cups_config.get('auth_username') or 'root'
         cups_pass = cups_config.get('auth_password') or '1234qqqQ'
         
@@ -1488,7 +1582,7 @@ def toggle_cups_reject():
         import re
         from core.integrations import get_integration_config
         cups_config = get_integration_config('CUPS') or {}
-        cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
+        cups_base_url = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/')
         cups_user = cups_config.get('auth_username') or 'root'
         cups_pass = cups_config.get('auth_password') or '1234qqqQ'
         

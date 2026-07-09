@@ -1624,7 +1624,7 @@ checkLoginStatus: function() {
                 let k_text = 'Bilinmiyor';
                 
                 if (k_active && k_active !== '-') {
-                    const kDate = new Date(k_active);
+                    const kDate = app.parseComplexDate(k_active);
                     if (!isNaN(kDate.getTime())) {
                         const diff = (new Date() - kDate) / (1000 * 60 * 60 * 24);
                         if (diff <= 1) {
@@ -2890,14 +2890,14 @@ checkLoginStatus: function() {
             for(let i=0; i < selected.length; i++) {
                 const target = selected[i];
                 const cmdInput = document.getElementById('batch-modal-cmd-display').value;
-                const printerName = cmdInput.split('/')[0];
+                const printerName = cmdInput.split('/')[0].trim();
                 const actionText = this.state.batchAction === 'add' ? 'tanımlaması yapıldı.' : 'kaldırıldı.';
                 const actionTextFail = this.state.batchAction === 'add' ? 'tanımlaması yapılamadı!' : 'kaldırılamadı!';
                 
                 this.showToast(`(${i+1}/${selected.length}) ${target.name} işleniyor...`, 'info');
                 
                 const bimFunction = (this.state.batchAction === 'add') ? 'AddPrinter' : 'RemovePrinter';
-                const cmd = document.getElementById('batch-modal-cmd-display').value;
+                const cmd = document.getElementById('batch-modal-cmd-display').value.trim();
 
                 try {
                     const resp = await this.apiRequest('/inventory/printers/batch_action', {
@@ -2908,7 +2908,7 @@ checkLoginStatus: function() {
                             bim_function: bimFunction,
                             command: cmd,
                             printer_id: printerId,
-                            targets: [{ type: 'pc', value: target.id }],
+                            targets: [{ type: 'pc', value: target.id, ip: target.ip }],
                             user: this.state.activeUser.name,
                             bim_user: bimUser,
                             bim_pass: bimPass
@@ -2927,6 +2927,11 @@ checkLoginStatus: function() {
                 } catch (err) {
                     failedTargets.push(`${target.name} (Bağlantı Hatası)`);
                     appendLog(`<b>${target.name}</b> (${target.ip}) cihazına erişilemedi! (Bağlantı Hatası)`, false);
+                }
+                
+                // BIM sunucusunu yormamak ve Rate Limit'e takılmamak için 1.5 saniye bekle
+                if (i < selected.length - 1) {
+                    await new Promise(r => setTimeout(r, 1500));
                 }
             }
             
@@ -3117,7 +3122,7 @@ checkLoginStatus: function() {
         
         const html = chunk.map((area, idx) => `
             <div class="card fade-in ${isAdmin ? 'area-card-admin' : ''}" style="border: 1px solid rgba(255,255,255,0.05); background: linear-gradient(145deg, rgba(20,30,40,0.4) 0%, rgba(10,15,20,0.6) 100%);">
-                <div class="flex-between" style="min-height: 50px; margin-bottom: 5px; align-items: center; cursor: pointer; user-select: none;" onclick="app.toggleAreaDetails(${area.id})">
+                <div class="flex-between" style="min-height: 50px; align-items: center; cursor: pointer; user-select: none;" onclick="app.toggleAreaDetails(${area.id})">
                     <span style="color: #00d2ff; font-weight: 800; font-size: 1.1rem; display: flex; align-items: center; gap: 10px;">
                         <i class="fas fa-folder" style="font-size: 1.3rem;"></i> ${area.name.toUpperCase()}
                     </span>
@@ -3126,9 +3131,9 @@ checkLoginStatus: function() {
                         <i class="fas fa-chevron-down" id="area-icon-${area.id}" style="opacity:0.5; transition: transform 0.3s; color:#fff;"></i>
                     </div>
                 </div>
-                <div style="height: 1px; background: rgba(255,255,255,0.08); width: 100%;"></div>
 
                 <div id="area-details-${area.id}" style="max-height: 0px; overflow: hidden; transition: max-height 0.3s ease, margin-top 0.3s ease; margin-top: 0px;">
+                    <div style="height: 1px; background: rgba(255,255,255,0.08); width: 100%; margin-top: 5px; margin-bottom: 5px;"></div>
                     <div class="flex-between mb-3" style="background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.03);">
                         <span style="color: var(--text-secondary); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;">${area.path || ''}</span>
                         <button class="btn-chip" style="background: rgba(255,255,255,0.1); padding: 4px 12px; font-size: 0.7rem; border-radius: 15px;" onclick="app.copyToClipboard('${(area.path || '').replace(/\\/g, '\\\\')}')">
@@ -5782,7 +5787,7 @@ rm -f "$C"; rmdir "$M" 2>/dev/null`;
                     </div>`;
             }
             return `
-            <div class="kb-card fade-in" id="kb-card-${n.id}">
+            <div class="kb-card fade-in ${window.innerWidth > 768 ? 'active' : ''}" id="kb-card-${n.id}">
                 <div class="kb-header" onclick="app.toggleKB(${n.id})">
                     <div class="kb-title-wrapper">
                         <i class="fas fa-folder" style="font-size: 1.3rem;"></i> 
@@ -5983,8 +5988,9 @@ rm -f "$C"; rmdir "$M" 2>/dev/null`;
             if (rawCommand.startsWith('{')) {
                 const parsed = JSON.parse(rawCommand);
                 if (parsed.type === 'multi') {
-                    // Tüm komutları && ile birleştirerek tek komut yapıyoruz
-                    commands = [parsed.commands.join(' && ')];
+                    // Eskiden && ile birleştiriyorduk, BIM değişikliğinden sonra bozduğu için tekrar sırayla gönderiyoruz
+                    commands = parsed.commands;
+                    delayMs = parsed.delay || 0;
                 }
             }
         } catch(e) { console.error(e); }
@@ -6011,11 +6017,15 @@ rm -f "$C"; rmdir "$M" 2>/dev/null`;
                 const result = resp;
                 if (result.error) throw new Error(result.error || 'Beklenmeyen hata');
 
-                this.showToast(`Komut ${i+1} iletildi: ${result.result || 'OK'}`);
-
-                this.showToast(`Komut iletildi: ${result.result || 'OK'}`);
+                this.showToast(`Komut ${i+1}/${commands.length} iletildi: ${result.result || 'OK'}`);
+                
+                // Eğer son komut değilse ve delayMs ayarlıysa bekle
+                if (delayMs > 0 && i < commands.length - 1) {
+                    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${delayMs/1000}sn bekleniyor...`;
+                    await new Promise(r => setTimeout(r, delayMs));
+                }
             }
-            this.showToast('Tüm komutlar sırayla iletildi.');
+            this.showToast('Tüm komutlar sırayla başarıyla iletildi.');
             document.getElementById('run-command-modal').style.display = 'none';
         } catch (e) {
             alert('Hata: ' + e.message);
@@ -6179,19 +6189,25 @@ rm -f "$C"; rmdir "$M" 2>/dev/null`;
         const fileInput = document.getElementById('kb-image');
         const contentContainer = document.getElementById('kb-content').parentElement;
         const contentLabel = contentContainer ? contentContainer.querySelector('label') : null;
+        const imgGroup = document.getElementById('kb-image-group');
+        const multiGroup = document.getElementById('kb-multi-command-group');
         
-        if (type === 'indir') {
+        if (type === 'kapanis' || type === 'sorun-giderme') {
+            if (imgGroup) imgGroup.style.display = 'none';
+            if (multiGroup) multiGroup.style.display = 'none';
+            if (contentLabel) contentLabel.innerText = 'İÇERİK / NOTLAR';
+        } else if (type === 'indir') {
+            if (imgGroup) imgGroup.style.display = (this.state.activeUser.role === 'ADMIN') ? 'block' : 'none';
+            if (multiGroup) multiGroup.style.display = 'flex';
             fileLabel.innerHTML = '<i class="fas fa-file-export"></i> DOSYA YÜKLE (Gerekli İndirmeler)';
             fileInput.removeAttribute('accept');
             if (contentLabel) contentLabel.innerText = 'DOSYA AÇIKLAMASI / NOTLAR';
-            const uploadArea = document.getElementById('kb-image').closest('.form-group');
-            if (uploadArea) uploadArea.style.display = (this.state.activeUser.role === 'ADMIN') ? 'block' : 'none';
         } else {
+            if (imgGroup) imgGroup.style.display = 'block';
+            if (multiGroup) multiGroup.style.display = 'flex';
             fileLabel.innerHTML = 'RESİM (Opsiyonel)';
             fileInput.setAttribute('accept', 'image/*');
             if (contentLabel) contentLabel.innerText = 'İÇERİK / KOMUTLAR / NOTLAR';
-            const uploadArea = document.getElementById('kb-image').closest('.form-group');
-            if (uploadArea) uploadArea.style.display = 'block';
         }
     },
     openDocModal: function(type) {
@@ -6207,7 +6223,7 @@ rm -f "$C"; rmdir "$M" 2>/dev/null`;
             }
             if (type === 'hasar-tespit') {
                 const bSorumlu = document.getElementById('ht-birim-sorumlusu');
-                if (bSorumlu) bSorumlu.value = 'Ahmet Yılmaz';
+                if (bSorumlu) bSorumlu.value = 'MURAT COŞKUN';
             }
         } else {
             // Generic fallback for placeholders
@@ -6727,7 +6743,7 @@ rm -f "$C"; rmdir "$M" 2>/dev/null`;
         // Printer Web Interface
         window.open('http://' + ip, '_blank');
         // CUPS Interface
-        window.open('https://print01.ornek-kurum.com:49631/printers/' + pr_no, '_blank');
+        window.open('https://print01.kocaelish.com:49631/printers/' + pr_no, '_blank');
     },
     deleteServiceRecord: async function(id) {
         if (!confirm('Bu servis kaydını silmek istediğinize emin misiniz?')) return;
@@ -10040,6 +10056,19 @@ app.submitMobilePrintJob = async function() {
         formData.append('printer_name', printerName);
         formData.append('copies', copies.toString());
         formData.append('file', file);
+        
+        // Gelişmiş Ayarlar
+        const orientation = document.getElementById('mobile-print-orientation');
+        if (orientation) formData.append('orientation', orientation.value);
+        
+        const duplex = document.getElementById('mobile-print-duplex');
+        if (duplex) formData.append('duplex', duplex.value);
+        
+        const scaling = document.getElementById('mobile-print-scaling');
+        if (scaling) formData.append('scaling', scaling.value);
+        
+        const media = document.getElementById('mobile-print-media');
+        if (media) formData.append('media', media.value);
         
         progressBar.style.width = '60%';
         progressText.textContent = 'CUPS sunucusuna iletiliyor...';
