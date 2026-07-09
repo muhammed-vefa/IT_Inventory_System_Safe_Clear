@@ -309,7 +309,7 @@ def query_cups():
         updated_count = 0
         first = 0
         last_page_first_printer = None
-        cups_config = get_integration_config('CUPS') or {}; cups_base_url = cups_config.get('base_url', 'http://192.168.1.21:49631').rstrip('/'); from urllib.parse import urlparse; cups_host = urlparse(cups_base_url).hostname or '192.168.1.21'
+        cups_config = get_integration_config('CUPS') or {}; cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/'); from urllib.parse import urlparse; cups_host = urlparse(cups_base_url).hostname or '192.168.X.X'
         
         while True:
             cups_url = f"{cups_base_url}/printers/?FIRST={first}"
@@ -438,7 +438,7 @@ def update_cups_mahal():
         cups_mahal = mahal.replace(".", "-")
         
         import requests
-        cups_config = get_integration_config('CUPS') or {}; cups_base_url = cups_config.get('base_url', 'http://192.168.1.21:49631').rstrip('/'); cups_admin_url = f"{cups_base_url}/admin/"
+        cups_config = get_integration_config('CUPS') or {}; cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/'); cups_admin_url = f"{cups_base_url}/admin/"
         post_data = {
             "OP": "modify-printer",
             "PRINTER_NAME": pr_no,
@@ -497,7 +497,7 @@ def update_cups_printer_location_wizard(pr_no, new_location):
     if clean_digits:
         pr_no = f"PR-{clean_digits.zfill(3)}"
 
-    cups_config = get_integration_config('CUPS') or {}; CUPS_URL = cups_config.get('base_url', 'http://192.168.1.21:49631').rstrip('/')
+    cups_config = get_integration_config('CUPS') or {}; CUPS_URL = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
     CUPS_USER = cups_config.get('auth_username') or 'root'
     CUPS_PASS = cups_config.get('auth_password') or '1234qqqQ'
     TIMEOUT = 30
@@ -770,7 +770,7 @@ def list_cups_printers():
         last_page_first_printer = None
         show_all = request.args.get('show_all', 'false') == 'true'
         cups_config = get_integration_config('CUPS') or {}
-        cups_base_url = cups_config.get('base_url', 'http://192.168.1.21:49631').rstrip('/')
+        cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
 
         while True:
             cups_url = f"{cups_base_url}/printers/?FIRST={first}"
@@ -850,7 +850,7 @@ def cups_print_job():
     import struct
     import requests as http_req
 
-    cups_config = get_integration_config('CUPS') or {}; CUPS_URL = cups_config.get('base_url', 'http://192.168.1.21:49631').rstrip('/')
+    cups_config = get_integration_config('CUPS') or {}; CUPS_URL = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
     ALLOWED_TYPES = {
         'application/pdf': 'application/pdf',
         'image/png': 'image/png',
@@ -910,7 +910,7 @@ def cups_print_job():
             return jsonify({"error": "Dosya boş."}), 400
 
         from urllib.parse import urlparse
-        cups_host = urlparse(CUPS_URL).hostname or '192.168.1.21'
+        cups_host = urlparse(CUPS_URL).hostname or '192.168.X.X'
         printer_uri = f"ipp://{cups_host}:49631/printers/{printer_name}"
         job_name = file.filename or "mobile-print-job"
         username = "it-envanter"
@@ -1007,7 +1007,7 @@ def pause_reject_cups():
         
         from core.integrations import get_integration_config
         cups_config = get_integration_config('CUPS') or {}
-        cups_base_url = cups_config.get('base_url', 'http://192.168.1.21:49631').rstrip('/')
+        cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
         username = cups_config.get('auth_username') or cups_config.get('username', 'admin')
         password = cups_config.get('auth_password') or cups_config.get('password', '')
         
@@ -1063,7 +1063,7 @@ def resume_accept_cups():
         
         from core.integrations import get_integration_config
         cups_config = get_integration_config('CUPS') or {}
-        cups_base_url = cups_config.get('base_url', 'http://192.168.1.21:49631').rstrip('/')
+        cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
         username = cups_config.get('auth_username') or cups_config.get('username', 'admin')
         password = cups_config.get('auth_password') or cups_config.get('password', '')
         
@@ -1338,7 +1338,7 @@ def get_live_status_by_id(printer_id):
         if q_name:
             try:
                 cups_config = get_integration_config('CUPS') or {}
-                cups_base_url = cups_config.get('base_url', 'http://192.168.1.21:49631').rstrip('/')
+                cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
                 resp = requests.get(f"{cups_base_url}/printers/{q_name}", timeout=3, verify=False)
                 html = resp.text.lower()
 
@@ -1429,7 +1429,7 @@ def toggle_cups_pause():
         import re
         from core.integrations import get_integration_config
         cups_config = get_integration_config('CUPS') or {}
-        cups_base_url = cups_config.get('base_url', 'http://192.168.1.21:49631').rstrip('/')
+        cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
         cups_user = cups_config.get('auth_username') or 'root'
         cups_pass = cups_config.get('auth_password') or '1234qqqQ'
         
@@ -1488,7 +1488,7 @@ def toggle_cups_reject():
         import re
         from core.integrations import get_integration_config
         cups_config = get_integration_config('CUPS') or {}
-        cups_base_url = cups_config.get('base_url', 'http://192.168.1.21:49631').rstrip('/')
+        cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
         cups_user = cups_config.get('auth_username') or 'root'
         cups_pass = cups_config.get('auth_password') or '1234qqqQ'
         

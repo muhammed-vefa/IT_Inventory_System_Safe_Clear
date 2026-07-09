@@ -145,7 +145,7 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
 
             print(f"[Async Automation] Started. user_id: {user_id}, pr_no: {pr_no}, sub_pr_no: {substitute_pr_no}, is_return: {is_return}")
 
-            cups_admin_url = 'http://192.168.1.21:49631/admin/'
+            cups_admin_url = 'http://192.168.X.X:49631/admin/'
 
             if is_return:
                 # --- RETURN FROM SERVICE FLOW ---

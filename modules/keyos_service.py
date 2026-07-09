@@ -26,7 +26,7 @@ def get_keyos_domain():
         return 'keyosmgt.ornek-kurum.com'
     return urlparse(keyos_cfg.get('base_url', 'http://keyosmgt.ornek-kurum.com')).hostname or 'keyosmgt.ornek-kurum.com'
 
-KEYOS_PATCH_IP = os.getenv("KEYOS_PATCH_IP", "192.168.1.45")
+KEYOS_PATCH_IP = os.getenv("KEYOS_PATCH_IP", "192.168.Y.Y")
 
 def get_keyos_login_url():
     return os.getenv("get_keyos_login_url()", f"https://{get_keyos_domain()}/login")

@@ -68,7 +68,7 @@ def update_cups_printer_location_wizard(pr_no, new_location):
     clean_digits = "".join(filter(str.isdigit, str(pr_no)))
     if clean_digits: pr_no = f"PR-{clean_digits.zfill(3)}"
 
-    CUPS_URL = "http://192.168.1.21:49631"
+    CUPS_URL = "http://192.168.X.X:49631"
     CUPS_USER = "root"
     CUPS_PASS = "1234qqqQ"
     TIMEOUT = 30
@@ -133,7 +133,7 @@ def update_cups_printer_location_wizard(pr_no, new_location):
 ```python
 # ÖRNEK: CUPS Pause ve Reject İşlemi (Backend)
 import requests
-cups_admin_url = 'http://192.168.1.21:49631/admin/'
+cups_admin_url = 'http://192.168.X.X:49631/admin/'
 
 # Pause (Durdur)
 requests.post(cups_admin_url, data={
@@ -201,7 +201,7 @@ cmd_resp = requests.post(base_url, data=encoded_data, headers={"Content-Type": "
 > **Amaç:** Tabletten/mobilden çıktı alırken yazıcı listesinin anında açılması için CUPS kuyruk isimlerini veritabanına önbellekleme (cache).
 
 ### Sorun
-Mobilden çıktı alınırken her seferinde CUPS sunucusuna (`http://192.168.1.21:49631`) sorgu atılarak yazıcı isimleri çekiliyordu. Bu işlem 1-2 saniye gecikmeye neden oluyordu.
+Mobilden çıktı alınırken her seferinde CUPS sunucusuna (`http://192.168.X.X:49631`) sorgu atılarak yazıcı isimleri çekiliyordu. Bu işlem 1-2 saniye gecikmeye neden oluyordu.
 
 ### Çözüm: `cups_queue_name` Sütunu
 `printers` tablosuna `cups_queue_name NVARCHAR(255)` sütunu eklendi. CUPS senkronizasyonu yapıldığında bu sütun otomatik dolar. Mobil yazdırma sırasında CUPS'a tekrar sorgu atılmaz, veritabanındaki değer direkt kullanılır.
@@ -258,7 +258,7 @@ def query_cups():
     first = 0
     last_page_first_printer = None
     cups_config = get_integration_config('CUPS') or {}
-    cups_base_url = cups_config.get('base_url', 'http://192.168.1.21:49631').rstrip('/')
+    cups_base_url = cups_config.get('base_url', 'http://192.168.X.X:49631').rstrip('/')
 
     # TÜM sayfaları tara (100'er yazıcı/sayfa)
     while True:

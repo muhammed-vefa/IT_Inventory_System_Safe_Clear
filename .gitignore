@@ -3,3 +3,12 @@ database/yedek/
 temp/
 Arşiv/
 data/
+
+# Security and Data rules
+.env
+*.db
+*.xlsx
+*.json
+database/data/
+database/yedek/
+logs/*.txt
