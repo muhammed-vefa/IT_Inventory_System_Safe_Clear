@@ -140,33 +140,20 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
         try:
             from core.database_sql import get_db_connection
             from core.encryption import decrypt_password
-            from modules.printers_printers import update_cups_printer_location_wizard
+            from modules.inventory_printers import update_cups_printer_location_wizard, cups_do_pause_reject, cups_do_resume_accept
             import requests
+            import urllib.parse
 
             print(f"[Async Automation] Started. user_id: {user_id}, pr_no: {pr_no}, sub_pr_no: {substitute_pr_no}, is_return: {is_return}")
-
-            cups_admin_url = 'http://10.241.X.X:49631/admin/'
 
             if is_return:
                 # --- RETURN FROM SERVICE FLOW ---
                 # The returned printer (pr_no) ALWAYS goes to Kontrolde first to be checked, and is paused/rejected.
                 # The substitute printer (substitute_pr_no) stays untouched in its new location.
                 update_cups_printer_location_wizard(pr_no, "Kontrolde")
-                try:
-                    # Pause the returning printer
-                    requests.post(cups_admin_url, data={
-                        'OP': 'pause-printer',
-                        'printer_name': pr_no,
-                        'confirm': 'Yes'
-                    }, timeout=10, verify=False)
-                    # Reject jobs for the returning printer
-                    requests.post(cups_admin_url, data={
-                        'OP': 'reject-jobs',
-                        'printer_name': pr_no,
-                        'confirm': 'Yes'
-                    }, timeout=10, verify=False)
-                except Exception as ce:
-                    print(f"[Async CUPS Return to Depo Error] {ce}")
+                # Pause the returning printer
+                succ, msg, _ = cups_do_pause_reject(pr_no)
+                print(f"[Async CUPS Return to Depo] {pr_no}: {msg}")
 
             else:
                 # --- SEND TO SERVICE FLOW ---
@@ -177,41 +164,14 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                     faulty_cups_location = f"SERVİSTE-{orig_location}" if orig_location and not orig_location.startswith('SERVİSTE') else "SERVİSTE"
                 update_cups_printer_location_wizard(pr_no, faulty_cups_location)
                 
-                try:
-                    # Always Pause Printer
-                    requests.post(cups_admin_url, data={
-                        'OP': 'pause-printer',
-                        'printer_name': pr_no,
-                        'confirm': 'Yes'
-                    }, timeout=10, verify=False)
-                    # Always Reject Jobs
-                    requests.post(cups_admin_url, data={
-                        'OP': 'reject-jobs',
-                        'printer_name': pr_no,
-                        'confirm': 'Yes'
-                    }, timeout=10, verify=False)
-                except Exception as ce:
-                    print(f"[Async CUPS Pause/Reject Error] {ce}")
+                succ, msg, _ = cups_do_pause_reject(pr_no)
+                print(f"[Async CUPS Pause/Reject] {pr_no}: {msg}")
 
                 # 2. CUPS Substitute Printer location update & resume/accept
                 if has_substitute and substitute_pr_no and orig_location:
                     update_cups_printer_location_wizard(substitute_pr_no, orig_location)
-                    
-                    try:
-                        # Resume substitute printer queue
-                        requests.post(cups_admin_url, data={
-                            'OP': 'resume-printer',
-                            'printer_name': substitute_pr_no,
-                            'confirm': 'Yes'
-                        }, timeout=10, verify=False)
-                        # Accept substitute printer jobs
-                        requests.post(cups_admin_url, data={
-                            'OP': 'accept-jobs',
-                            'printer_name': substitute_pr_no,
-                            'confirm': 'Yes'
-                        }, timeout=10, verify=False)
-                    except Exception as ce:
-                        print(f"[Async CUPS Substitute Resume/Accept Error] {ce}")
+                    succ, msg, _ = cups_do_resume_accept(substitute_pr_no)
+                    print(f"[Async CUPS Substitute Resume/Accept] {substitute_pr_no}: {msg}")
 
             # 3. BIM PC Mappings Update
             if not pc_targets:
@@ -239,15 +199,23 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                 return
 
             base_url = "http://bim.kocaelish.com/Handler.ashx"
-            browser_headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-            }
-
+            
             for pc in pc_targets:
                 pc_ip = pc.get('ip')
                 pc_name = pc.get('pc_no')
                 if not pc_ip:
                     continue
+
+                bim_session = requests.Session()
+                browser_headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    "Client-IP": pc_ip,
+                    "X-Forwarded-For": pc_ip,
+                    "Origin": "http://bim.kocaelish.com",
+                    "Referer": "http://bim.kocaelish.com/"
+                }
 
                 # BIM Login
                 try:
@@ -256,7 +224,8 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                         "UserName": bim_user,
                         "Password": bim_pass
                     }
-                    login_resp = requests.post(base_url, data=login_data, headers=browser_headers, timeout=10, verify=False)
+                    encoded_login = urllib.parse.urlencode(login_data)
+                    login_resp = bim_session.post(base_url, data=encoded_login, headers=browser_headers, timeout=10, verify=False)
                     if login_resp.status_code != 200 or login_resp.text.strip() == "Error" or not login_resp.text.strip():
                         print(f"[Async BIM Error] Login failed for PC {pc_name}")
                         continue
@@ -265,12 +234,8 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                     print(f"[Async BIM Error] Login exception for PC {pc_name}: {le}")
                     continue
 
-                headers = {
-                    "IPASession": ipa_session,
-                    "User-Agent": browser_headers["User-Agent"],
-                    "Referer": "http://bim.kocaelish.com/",
-                    "Origin": "http://bim.kocaelish.com"
-                }
+                headers = browser_headers.copy()
+                headers["IPASession"] = ipa_session
 
                 if is_return:
                     # Remove substitute printer from client PC
@@ -282,7 +247,8 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                                 "Functions": "RemovePrinter",
                                 "PrinterName": substitute_pr_no
                             }
-                            rem_resp = requests.post(base_url, data=rem_data, headers=headers, timeout=15, verify=False)
+                            enc_rem = urllib.parse.urlencode(rem_data)
+                            rem_resp = bim_session.post(base_url, data=enc_rem, headers=headers, timeout=15, verify=False)
                             print(f"[Async BIM] RemovePrinter {substitute_pr_no} from {pc_ip} - Status: {rem_resp.status_code}, Body: {rem_resp.text.strip()}")
                         except Exception as re_err:
                             print(f"[Async BIM Error] RemovePrinter failed for PC {pc_name}: {re_err}")
@@ -295,10 +261,11 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                             "Functions": "AddPrinter",
                             "PrinterName": f"{pr_no}/01"
                         }
-                        add_resp = requests.post(base_url, data=add_data, headers=headers, timeout=15, verify=False)
+                        enc_add = urllib.parse.urlencode(add_data)
+                        add_resp = bim_session.post(base_url, data=enc_add, headers=headers, timeout=15, verify=False)
                         print(f"[Async BIM] AddPrinter {pr_no}/01 to {pc_ip} - Status: {add_resp.status_code}, Body: {add_resp.text.strip()}")
-                    except Exception as add_err:
-                        print(f"[Async BIM Error] AddPrinter failed for PC {pc_name}: {add_err}")
+                    except Exception as ad_err:
+                        print(f"[Async BIM Error] AddPrinter failed for PC {pc_name}: {ad_err}")
 
                 else:
                     # Remove faulty printer from client PC
@@ -309,7 +276,8 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                             "Functions": "RemovePrinter",
                             "PrinterName": pr_no
                         }
-                        rem_resp = requests.post(base_url, data=rem_data, headers=headers, timeout=15, verify=False)
+                        enc_rem = urllib.parse.urlencode(rem_data)
+                        rem_resp = bim_session.post(base_url, data=enc_rem, headers=headers, timeout=15, verify=False)
                         print(f"[Async BIM] RemovePrinter {pr_no} from {pc_ip} - Status: {rem_resp.status_code}, Body: {rem_resp.text.strip()}")
                     except Exception as re_err:
                         print(f"[Async BIM Error] RemovePrinter failed for PC {pc_name}: {re_err}")
@@ -323,10 +291,11 @@ def run_service_automations_async(user_id, pr_no, substitute_pr_no, orig_locatio
                                 "Functions": "AddPrinter",
                                 "PrinterName": f"{substitute_pr_no}/01"
                             }
-                            add_resp = requests.post(base_url, data=add_data, headers=headers, timeout=15, verify=False)
+                            enc_add = urllib.parse.urlencode(add_data)
+                            add_resp = bim_session.post(base_url, data=enc_add, headers=headers, timeout=15, verify=False)
                             print(f"[Async BIM] AddPrinter {substitute_pr_no}/01 to {pc_ip} - Status: {add_resp.status_code}, Body: {add_resp.text.strip()}")
-                        except Exception as add_err:
-                            print(f"[Async BIM Error] AddPrinter failed for PC {pc_name}: {add_err}")
+                        except Exception as ad_err:
+                            print(f"[Async BIM Error] AddPrinter failed for PC {pc_name}: {ad_err}")
 
             print("[Async Automation] Finished successfully.")
 

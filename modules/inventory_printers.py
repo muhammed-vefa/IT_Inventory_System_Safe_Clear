@@ -1070,38 +1070,31 @@ def cups_print_job():
         return jsonify({"error": f"Yazdırma işi gönderilemedi: {str(e)}"}), 500
 
 
-@inventory_printers_bp.route('/cups/pause', methods=['POST'])
-@require_editor
-def pause_reject_cups():
+def cups_do_pause_reject(pr_no):
+    import requests as http_req
+    import re
+    import urllib3
+    urllib3.disable_warnings()
+    
+    from core.integrations import get_integration_config
+    cups_config = get_integration_config('CUPS') or {}
+    cups_base_url = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/')
+    username = cups_config.get('auth_username') or cups_config.get('username', 'admin')
+    password = cups_config.get('auth_password') or cups_config.get('password', '')
+    
+    printer_url = f"{cups_base_url}/printers/{pr_no}"
+    
+    session = http_req.Session()
+    if username and password:
+        session.auth = (username, password)
+    
     try:
-        data = request.json
-        pr_no = data.get('pr_no')
-        if not pr_no:
-            return jsonify({'error': 'PR No gereklidir.'}), 400
-            
-        import requests as http_req
-        import re
-        import urllib3
-        urllib3.disable_warnings()
-        
-        from core.integrations import get_integration_config
-        cups_config = get_integration_config('CUPS') or {}
-        cups_base_url = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/')
-        username = cups_config.get('auth_username') or cups_config.get('username', 'admin')
-        password = cups_config.get('auth_password') or cups_config.get('password', '')
-        
-        printer_url = f"{cups_base_url}/printers/{pr_no}"
-        
-        session = http_req.Session()
-        if username and password:
-            session.auth = (username, password)
-        
         # SID token'ı al
         get_resp = session.get(printer_url, verify=False, timeout=10)
         if get_resp.status_code == 404:
-            return jsonify({'error': f"CUPS'ta {pr_no} adında bir yazıcı bulunamadı."}), 404
+            return False, f"CUPS'ta {pr_no} adında bir yazıcı bulunamadı.", 404
         if get_resp.status_code == 401:
-            return jsonify({'error': "CUPS yetkilendirme hatası. Entegrasyon Ayarlarından CUPS şifresini kontrol edin."}), 401
+            return False, "CUPS yetkilendirme hatası. Entegrasyon Ayarlarından CUPS şifresini kontrol edin.", 401
             
         sid_match = re.search(r'NAME="org\.cups\.sid"\s+VALUE="([^"]+)"', get_resp.text, re.IGNORECASE)
         sid = sid_match.group(1) if sid_match else ""
@@ -1118,46 +1111,56 @@ def pause_reject_cups():
         resp2 = session.post(printer_url, data={'org.cups.sid': sid2, 'OP': 'reject-jobs'}, timeout=10, verify=False)
         
         if resp1.status_code == 401 or resp2.status_code == 401:
-            return jsonify({'error': 'CUPS yetkilendirme hatası (401). CUPS ayarlarına geçerli bir yetkili şifresi girmelisiniz.'}), 401
+            return False, 'CUPS yetkilendirme hatası (401). CUPS ayarlarına geçerli bir yetkili şifresi girmelisiniz.', 401
         
-        return jsonify({'success': True, 'message': f'{pr_no} CUPS üzerinde duraklatıldı ve reddedildi.'})
+        return True, f'{pr_no} CUPS üzerinde duraklatıldı ve reddedildi.', 200
     except http_req.exceptions.RequestException as e:
-        return jsonify({'success': False, 'error': f"CUPS bağlantı hatası: {str(e)}"}), 200
+        return False, f"CUPS bağlantı hatası: {str(e)}", 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return False, str(e), 500
 
-@inventory_printers_bp.route('/cups/resume', methods=['POST'])
+@inventory_printers_bp.route('/cups/pause', methods=['POST'])
 @require_editor
-def resume_accept_cups():
+def pause_reject_cups():
     try:
         data = request.json
         pr_no = data.get('pr_no')
         if not pr_no:
             return jsonify({'error': 'PR No gereklidir.'}), 400
             
-        import requests as http_req
-        import re
-        import urllib3
-        urllib3.disable_warnings()
+        success, msg, code = cups_do_pause_reject(pr_no)
         
-        from core.integrations import get_integration_config
-        cups_config = get_integration_config('CUPS') or {}
-        cups_base_url = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/')
-        username = cups_config.get('auth_username') or cups_config.get('username', 'admin')
-        password = cups_config.get('auth_password') or cups_config.get('password', '')
-        
-        printer_url = f"{cups_base_url}/printers/{pr_no}"
-        
-        session = http_req.Session()
-        if username and password:
-            session.auth = (username, password)
-        
+        if not success:
+            return jsonify({'error': msg}), code
+        return jsonify({'success': True, 'message': msg})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def cups_do_resume_accept(pr_no):
+    import requests as http_req
+    import re
+    import urllib3
+    urllib3.disable_warnings()
+    
+    from core.integrations import get_integration_config
+    cups_config = get_integration_config('CUPS') or {}
+    cups_base_url = cups_config.get('base_url', 'http://10.241.X.X:49631').rstrip('/')
+    username = cups_config.get('auth_username') or cups_config.get('username', 'admin')
+    password = cups_config.get('auth_password') or cups_config.get('password', '')
+    
+    printer_url = f"{cups_base_url}/printers/{pr_no}"
+    
+    session = http_req.Session()
+    if username and password:
+        session.auth = (username, password)
+    
+    try:
         # SID token'ı al
         get_resp = session.get(printer_url, verify=False, timeout=10)
         if get_resp.status_code == 404:
-            return jsonify({'error': f"CUPS'ta {pr_no} adında bir yazıcı bulunamadı."}), 404
+            return False, f"CUPS'ta {pr_no} adında bir yazıcı bulunamadı.", 404
         if get_resp.status_code == 401:
-            return jsonify({'error': "CUPS yetkilendirme hatası. Entegrasyon Ayarlarından CUPS şifresini kontrol edin."}), 401
+            return False, "CUPS yetkilendirme hatası. Entegrasyon Ayarlarından CUPS şifresini kontrol edin.", 401
             
         sid_match = re.search(r'NAME="org\.cups\.sid"\s+VALUE="([^"]+)"', get_resp.text, re.IGNORECASE)
         sid = sid_match.group(1) if sid_match else ""
@@ -1174,11 +1177,28 @@ def resume_accept_cups():
         resp2 = session.post(printer_url, data={'org.cups.sid': sid2, 'OP': 'accept-jobs'}, timeout=10, verify=False)
         
         if resp1.status_code == 401 or resp2.status_code == 401:
-            return jsonify({'error': 'CUPS yetkilendirme hatası (401). CUPS ayarlarına geçerli bir yetkili şifresi girmelisiniz.'}), 401
+            return False, 'CUPS yetkilendirme hatası (401). CUPS ayarlarına geçerli bir yetkili şifresi girmelisiniz.', 401
         
-        return jsonify({'success': True, 'message': f'{pr_no} CUPS üzerinde uyandırıldı ve iş kabulüne açıldı.'})
+        return True, f'{pr_no} CUPS üzerinde uyandırıldı ve iş kabulüne açıldı.', 200
     except http_req.exceptions.RequestException as e:
-        return jsonify({'success': False, 'error': f"CUPS bağlantı hatası: {str(e)}"}), 200
+        return False, f"CUPS bağlantı hatası: {str(e)}", 200
+    except Exception as e:
+        return False, str(e), 500
+
+@inventory_printers_bp.route('/cups/resume', methods=['POST'])
+@require_editor
+def resume_accept_cups():
+    try:
+        data = request.json
+        pr_no = data.get('pr_no')
+        if not pr_no:
+            return jsonify({'error': 'PR No gereklidir.'}), 400
+            
+        success, msg, code = cups_do_resume_accept(pr_no)
+        
+        if not success:
+            return jsonify({'error': msg}), code
+        return jsonify({'success': True, 'message': msg})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
