@@ -2843,10 +2843,10 @@ checkLoginStatus: function() {
         const bimUser = document.getElementById('batch-bim-user').value;
         const bimPass = document.getElementById('batch-bim-pass').value;
         
-        const selected = Array.from(document.querySelectorAll('.batch-chk:checked')).map(chk => {
-            const item = this.state.inventory.find(i => i.id == chk.dataset.val);
-            // Sadece IP kısmını al (Parantez içindeki bilgileri temizle)
-            return { id: chk.dataset.val, ip: item ? item.ip : '', name: item ? (item.pc_no || 'Cihaz') : 'Cihaz' };
+        const selectedIds = Array.from(this.state.selectedBatchIds || []);
+        const selected = selectedIds.map(sid => {
+            const item = this.state.inventory.find(i => i.id == sid);
+            return { id: sid, ip: item ? item.ip : '', name: item ? (item.pc_no || 'Cihaz') : 'Cihaz' };
         });
 
         if(!printerId || selected.length === 0) {

@@ -1296,8 +1296,7 @@ def batch_action():
 
             # Request headers remain exactly the same as login headers for jQuery match
             headers = browser_headers.copy()
-            if "UserName" in send_data:
-                headers["IPASession"] = ipa_session
+            headers["IPASession"] = ipa_session
 
             encoded_send_data = urllib.parse.urlencode(send_data)
 
