@@ -2,9 +2,9 @@
   <h1>🏥 IT Demirbaş ve Envanter Yönetim Sistemi</h1>
 
   <p>
-    [![Python](https://img.shields.io/badge/Python-3.x-blue.svg?style=for-the-badge&logo=python)](https://www.python.org/)
-    [![SQL](https://img.shields.io/badge/Database-SQLite-orange.svg?style=for-the-badge&logo=sqlite)]()
-    [![Status](https://img.shields.io/badge/Status-Active-success.svg?style=for-the-badge)]()
+    <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.x-blue.svg?style=for-the-badge&logo=python" alt="Python"></a>
+    <img src="https://img.shields.io/badge/Database-SQLite-orange.svg?style=for-the-badge&logo=sqlite" alt="SQL">
+    <img src="https://img.shields.io/badge/Status-Active-success.svg?style=for-the-badge" alt="Status">
   </p>
 
   <p>
