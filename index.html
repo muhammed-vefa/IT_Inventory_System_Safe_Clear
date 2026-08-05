@@ -1027,6 +1027,15 @@
                     </div>
                 </div>
 
+                <!-- Kayıp Envanter Butonu -->
+                <div class="card doc-btn-card" onclick="app.openDocModal('kayip-envanter')" style="background: linear-gradient(135deg, rgba(255,165,0,0.05) 0%, rgba(200,100,0,0.02) 100%);">
+                    <i class="fas fa-search-location doc-icon" style="color: #ffa500;"></i>
+                    <div class="doc-info">
+                        <h4>Kayıp Envanter Tutanağı</h4>
+                        <p>Kayıp statüsündeki cihazların tespit formu.</p>
+                    </div>
+                </div>
+
                 <!-- VPN Talep Butonu -->
                 <div class="card doc-btn-card" onclick="app.openDocModal('vpn')" style="background: linear-gradient(135deg, rgba(255,0,255,0.05) 0%, rgba(100,0,255,0.02) 100%);">
                     <i class="fas fa-network-wired doc-icon" style="color: #ff00ff;"></i>
@@ -1440,7 +1449,72 @@
             </div>
         </div>
 
-                <div id="doc-modal-vpn" class="modal-backdrop" style="display: none; align-items: center; justify-content: center;">
+        <!-- KAYIP ENVANTER TUTANAĞI MODAL -->
+        <div id="doc-modal-kayip-envanter" class="modal-backdrop" style="display: none; align-items: center; justify-content: center;">
+            <div class="card" style="max-width: 550px; width: 95%; padding: 15px; background: rgba(10, 15, 25, 0.98); border: 1.5px solid var(--accent); box-shadow: 0 0 30px rgba(0,210,255,0.2);">
+                <div class="flex-between mb-2">
+                    <h3 style="margin: 0; color: var(--accent); font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-search-location"></i> Kayıp Envanter Tutanağı
+                    </h3>
+                    <button class="btn btn-icon" onclick="app.closeDocModal('kayip-envanter')" style="color: var(--text-secondary);"><i class="fas fa-times"></i></button>
+                </div>
+                
+                <div class="flex-column" style="gap: 12px;">
+                    <!-- DONANIM BİLGİSİ KUTUSU -->
+                    <div style="border: 1px solid rgba(0,210,255,0.2); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;">
+                        <h4 style="font-size: 0.8rem; color: var(--accent); margin: 0 0 8px 0;">Donanım Bilgisi</h4>
+                        <div class="flex-row gap-2" style="margin-bottom: 8px;">
+                            <input type="text" id="ke-pc-no" class="search-bar" style="flex:1; font-size: 0.85rem; height: 36px;" placeholder="PC / Donanım No (Opsiyonel)">
+                            <input type="text" id="ke-seri-no" class="search-bar" style="flex:1; font-size: 0.85rem; height: 36px;" placeholder="Seri Numarası">
+                            <input type="text" id="ke-sla-no" class="search-bar" style="flex:1; font-size: 0.85rem; height: 36px;" placeholder="SLA No (Opsiyonel)">
+                        </div>
+                    </div>
+
+                    <!-- MAHAL VE TARİH BİLGİSİ KUTUSU -->
+                    <div style="border: 1px solid rgba(0,210,255,0.2); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;">
+                        <h4 style="font-size: 0.8rem; color: var(--accent); margin: 0 0 8px 0;">Mahal ve Tarih Bilgisi</h4>
+                        <div class="flex-row gap-2" style="margin-bottom: 2px;">
+                            <label style="flex:1; font-size: 0.7rem; color: var(--text-secondary); margin-left: 4px;">Kayıp (İnaktif) Tarihi</label>
+                            <label style="flex:1; font-size: 0.7rem; color: var(--text-secondary); margin-left: 4px;">Bulunduğu Tarih</label>
+                        </div>
+                        <div class="flex-row gap-2" style="margin-bottom: 8px;">
+                            <input type="date" id="ke-inaktif-tarih" class="search-bar" style="flex:1; font-size: 0.85rem; height: 36px;">
+                            <input type="date" id="ke-talep-tarihi" class="search-bar" style="flex:1; font-size: 0.85rem; height: 36px;">
+                        </div>
+                        <div class="flex-row gap-2">
+                            <input list="mahal-datalist" type="text" id="ke-bulunan-mahal" class="search-bar" style="flex:1; font-size: 0.85rem; height: 36px;" placeholder="Bulunduğu Mahal Kodu (Örn: E.G0.F3.124)">
+                            <input type="text" id="ke-bulunan-birim" class="search-bar" style="flex:1; font-size: 0.85rem; height: 36px;" placeholder="Birim Adı (Örn: Ayniyat Demirbaş - Opsiyonel)">
+                        </div>
+                    </div>
+
+                    <!-- İMZALAYAN KİŞİLER KUTUSU -->
+                    <div style="border: 1px solid rgba(0,210,255,0.2); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;">
+                        <h4 style="font-size: 0.8rem; color: var(--accent); margin: 0 0 8px 0;">İmzalayan Kişiler</h4>
+                        <div class="flex-column gap-2">
+                            <div class="flex-row gap-2">
+                                <input type="text" id="ke-kisi1-ad" class="search-bar" style="flex:1; font-size:0.85rem; height:36px;" placeholder="Ad Soyad">
+                                <input type="text" id="ke-kisi1-unvan" class="search-bar" style="flex:1; font-size:0.8rem; height:36px; opacity:0.7;" placeholder="Kullanıcı / Sorumlu" onfocus="this.placeholder=''" onblur="this.placeholder='Kullanıcı / Sorumlu'">
+                            </div>
+                            <div class="flex-row gap-2">
+                                <input type="text" id="ke-kisi2-ad" class="search-bar" style="flex:1; font-size:0.85rem; height:36px;" placeholder="Ad Soyad">
+                                <input type="text" id="ke-kisi2-unvan" class="search-bar" style="flex:1; font-size:0.8rem; height:36px; opacity:0.7;" placeholder="Ünvan" value="BİLGİ İŞLEM DESTEK UZMANI">
+                            </div>
+                            <div class="flex-row gap-2">
+                                <input type="text" id="ke-kisi3-ad" class="search-bar" style="flex:1; font-size:0.85rem; height:36px;" placeholder="Ad Soyad" value="Murat COŞKUN">
+                                <input type="text" id="ke-kisi3-unvan" class="search-bar" style="flex:1; font-size:0.8rem; height:36px; opacity:0.7;" placeholder="Ünvan" value="BİLGİ İŞLEM MÜDÜRÜ">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex-row gap-2 mt-1">
+                        <button class="btn btn-secondary" style="flex:1; height: 35px; font-size: 0.8rem;" onclick="app.generateKayipEnvanterPDF('excel')">SİSTEMDEN YAZDIR</button>
+                        <button class="btn btn-accent" style="flex:1; height: 35px; font-size: 0.85rem; font-weight: 800;" onclick="app.generateKayipEnvanterPDF('pdf', true)"><i class="fas fa-print"></i> YAZICIYA GÖNDER (A4)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="doc-modal-vpn" class="modal-backdrop" style="display: none; align-items: center; justify-content: center;">
             <div class="card" style="max-width: 550px; width: 95%; padding: 15px; background: rgba(10, 15, 25, 0.98); border: 1.5px solid var(--accent); box-shadow: 0 0 30px rgba(0,210,255,0.2);">
                 <div class="flex-between mb-2">
                     <h3 style="color:var(--accent); margin:0; font-size: 1.1rem;"><i class="fas fa-network-wired"></i> VPN Bağlantı Formu</h3>

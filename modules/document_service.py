@@ -217,6 +217,84 @@ def generate_pdf_direct(t_type, items, photo_path=None):
         pdf.cell(65, 6, kisi2_ad, align="C")
         pdf.cell(65, 6, kisi3_ad, align="R", ln=True)
 
+    elif t_type == "KAYIP_ENVANTER":
+        pdf.set_auto_page_break(False)
+        pdf.set_y(35)
+        pdf.set_font("ArialTR", "B", 14)
+        pdf.cell(0, 15, "TUTANAK", ln=True, align="C")
+        pdf.ln(5)
+        
+        pc_no = items.get("pc_no", "-")
+        seri_no = items.get("seri_no", "-")
+        sla_no = items.get("sla_no", "-")
+        inaktif_tarih = items.get("inaktif_tarih", "-")
+        talep_tarihi = items.get("talep_tarihi", "-")
+        bulunan_mahal = items.get("bulunan_mahal", "-")
+        
+        # Convert dates to DD.MM.YYYY
+        def format_date(d_str):
+            if d_str and len(d_str) == 10 and "-" in d_str:
+                parts = d_str.split("-")
+                return f"{parts[2]}.{parts[1]}.{parts[0]}"
+            return d_str
+            
+        inaktif_tarih = format_date(inaktif_tarih)
+        talep_tarihi = format_date(talep_tarihi)
+        
+        pdf.set_font("ArialTR", "", 9)
+        pdf.cell(0, 5, f"SLA No: {sla_no}", ln=True, align="L")
+        pdf.cell(0, 5, f"Mahal: {bulunan_mahal}", ln=True, align="L")
+        pdf.ln(5)
+        
+        pdf.set_font("ArialTR", "", 9)
+        birim_adi = items.get("birim_adi", "").strip()
+        if birim_adi:
+            tespit_cumlesi = f"ilgili cihazın {bulunan_mahal} mahal kodlu {birim_adi} birimine ait alanda olduğu"
+        else:
+            tespit_cumlesi = f"ilgili cihazın {bulunan_mahal} mahal kodlu alanda olduğu"
+            
+        text1 = (
+            f"Bilgisayar envanterimizde {inaktif_tarih} tarihinden itibaren inaktif duruma düşen ve fiziksel "
+            f"konumunda bulunamadığı için envanter kayıtlarında \"Kayıp\" statüsünde takip edilen {seri_no} seri numaralı, "
+            f"{pc_no} kodlu bilgisayar, {talep_tarihi} tarihinde kurulum talebiyle tarafımıza iletilmiştir.\n"
+            f"Yapılan incelemeler neticesinde; {tespit_cumlesi} tespit edilmiştir. Ancak, kurum içi envanter "
+            f"yönetimi prosedürlerine açıkça aykırı olarak; söz konusu bilgisayarın kullanılmadığı ve inaktif olduğu süreç "
+            f"boyunca olması gereken mahalde bulunmadığı, Bilgi İşlem birimine fiziki teslimatının yapılmadığı ve cihazın yeni "
+            f"mahal bilgisine dair tarafımıza hiçbir bildirimde bulunulmadığı anlaşılmıştır.\n"
+            f"Cihazın, Bilgi İşlem biriminin bilgisi ve onayı dışında, prosedürlere aykırı şekilde atıl durumda "
+            f"bekletilmesi takip süreçlerinde usulsüzlük teşkil etmektedir. Meydana gelen bu süreç ihlalini, bildirim "
+            f"eksikliğini ve bilgisayarın mevcut durumunu belgelendirmek üzere işbu tutanak imza altına alınmıştır."
+        )
+        pdf.multi_cell(0, 5, text1, align="L")
+        
+        pdf.ln(25)
+        
+        pdf.set_font("ArialTR", "", 8)
+        kisi1_unvan = items.get("kisi1_unvan", "Kullanıcı")
+        kisi2_unvan = items.get("kisi2_unvan", "BİLGİ İŞLEM DESTEK UZMANI")
+        kisi3_unvan = items.get("kisi3_unvan", "BİLGİ İŞLEM MÜDÜRÜ")
+        
+        pdf.cell(65, 4, "Kullanıcı / Sorumlu", align="L")
+        pdf.cell(65, 4, "Tespit Eden", align="C")
+        pdf.cell(65, 4, "Birim Sorumlusu", align="R", ln=True)
+        
+        pdf.set_font("ArialTR", "", 8)
+        kisi1_ad = items.get("kisi1_ad", "")
+        if not kisi1_ad: kisi1_ad = "Ad-Soyad/Unvan/İmza"
+        kisi2_ad = items.get("kisi2_ad", "")
+        if not kisi2_ad: kisi2_ad = "Ad-Soyad/Unvan/İmza"
+        kisi3_ad = items.get("kisi3_ad", "Murat COŞKUN")
+        
+        pdf.cell(65, 4, kisi1_ad, align="L")
+        pdf.cell(65, 4, kisi2_ad, align="C")
+        pdf.cell(65, 4, kisi3_ad, align="R", ln=True)
+        
+        pdf.ln(5)
+        pdf.set_font("ArialTR", "B", 8)
+        pdf.cell(65, 4, kisi1_unvan, align="L")
+        pdf.cell(65, 4, kisi2_unvan, align="C")
+        pdf.cell(65, 4, kisi3_unvan, align="R", ln=True)
+
     elif t_type == "VPN":
         pdf.set_auto_page_break(False)
         # 1. HEADER

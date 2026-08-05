@@ -8537,6 +8537,47 @@ exit
             }, 'USULSUZ_TASIMA', false, sendToCups);
         } catch (e) { alert('Hata: ' + e.message); }
     },
+    generateKayipEnvanterPDF: async function(format = 'pdf', sendToCups = false) {
+        const actualFormat = (format === 'pdf') ? 'excel' : format;
+        
+        let mahal_code = document.getElementById('ke-bulunan-mahal')?.value || '';
+        let mahal_name = '';
+        if (mahal_code && this.state.mahalMap && this.state.mahalMap[mahal_code]) {
+            mahal_name = this.state.mahalMap[mahal_code].name;
+        }
+        let mahal_full = mahal_code;
+        if (mahal_name) {
+            mahal_full = `${mahal_code} (${mahal_name})`;
+        }
+
+        const payload = {
+            pc_no: document.getElementById('ke-pc-no')?.value || '',
+            seri_no: document.getElementById('ke-seri-no')?.value || '',
+            sla_no: document.getElementById('ke-sla-no')?.value || '-',
+            inaktif_tarih: document.getElementById('ke-inaktif-tarih')?.value || '',
+            talep_tarihi: document.getElementById('ke-talep-tarihi')?.value || '',
+            bulunan_mahal: mahal_full,
+            birim_adi: document.getElementById('ke-bulunan-birim')?.value || '',
+            kisi1_ad: document.getElementById('ke-kisi1-ad')?.value || '',
+            kisi1_unvan: document.getElementById('ke-kisi1-unvan')?.value || '',
+            kisi2_ad: document.getElementById('ke-kisi2-ad')?.value || '',
+            kisi2_unvan: document.getElementById('ke-kisi2-unvan')?.value || '',
+            kisi3_ad: document.getElementById('ke-kisi3-ad')?.value || '',
+            kisi3_unvan: document.getElementById('ke-kisi3-unvan')?.value || ''
+        };
+        if (!payload.pc_no || !payload.seri_no) {
+            return alert('Lütfen Donanım Bilgisi (PC No ve Seri No) alanlarını doldurun.');
+        }
+        try {
+            this.showToast('Kayıp Envanter tutanağı hazırlanıyor...', 'info');
+            this.sendPDFRequest({
+                type: 'KAYIP_ENVANTER',
+                mahal: 'Kayip_Envanter',
+                format: actualFormat,
+                data: payload
+            }, 'KAYIP_ENVANTER', false, sendToCups);
+        } catch (e) { alert('Hata: ' + e.message); }
+    },
     generateVPNPDF: async function(format = 'pdf', sendToCups = false) {
         const actualFormat = (format === 'pdf') ? 'excel' : format;
         
