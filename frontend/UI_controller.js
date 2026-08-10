@@ -2300,6 +2300,19 @@ checkLoginStatus: function() {
 
             return true;
         });
+
+        // T5, T6 gibi mahal siralamasi ve ardindan model siralamasi (6900 once, 5200 sonra)
+        filtered.sort((a, b) => {
+            let m1 = (a.mahal || "").toUpperCase().replace(/^(SERVİSTE|SERVISTE|DEPO|KAYIP|HURDA)[\.\s-]+/g, '');
+            let m2 = (b.mahal || "").toUpperCase().replace(/^(SERVİSTE|SERVISTE|DEPO|KAYIP|HURDA)[\.\s-]+/g, '');
+            
+            let cmp = m1.localeCompare(m2, undefined, { numeric: true, sensitivity: 'base' });
+            if (cmp !== 0) return cmp;
+            
+            let mod1 = (a.model || "").toUpperCase();
+            let mod2 = (b.model || "").toUpperCase();
+            return mod2.localeCompare(mod1, undefined, { numeric: true, sensitivity: 'base' });
+        });
         
         this.state.currentPrintersRenderList = filtered;
         this.state.printersPage = 0;
