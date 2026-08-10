@@ -1965,7 +1965,8 @@ checkLoginStatus: function() {
         const floors = [...new Set(dataList
             .filter(i => {
                 const tower = (i.tower || "").toUpperCase();
-                const kod = (i.location_code || i.mahal || "").toUpperCase();
+                let kod = (i.location_code || i.mahal || "").toUpperCase();
+                kod = kod.replace(/^(SERVİSTE|SERVISTE|DEPO|KAYIP|HURDA)[\.\s-]+/g, '');
                 if (block === 'A') return (kod.startsWith('A.') || tower === 'A');
                 if (block === 'B') return (kod.startsWith('B.') || tower === 'B');
                 if (block === 'MH') return (kod.startsWith('C.') || tower === 'C' || tower === 'MH');
@@ -1973,7 +1974,8 @@ checkLoginStatus: function() {
             })
             .map(i => {
                 if (i.floor) return i.floor;
-                const kod = (i.location_code || i.mahal || "").toUpperCase();
+                let kod = (i.location_code || i.mahal || "").toUpperCase();
+                kod = kod.replace(/^(SERVİSTE|SERVISTE|DEPO|KAYIP|HURDA)[\.\s-]+/g, '');
                 const parts = kod.split('.');
                 if (parts.length > 1) return parts[1];
                 return "";
@@ -2272,7 +2274,8 @@ checkLoginStatus: function() {
             }
 
             // 3. Block and Floor Filter
-            const mahalUP = (p.mahal || "").toUpperCase();
+            let mahalUP = (p.mahal || "").toUpperCase();
+            mahalUP = mahalUP.replace(/^(SERVİSTE|SERVISTE|DEPO|KAYIP|HURDA)[\.\s-]+/g, '');
             const block = this.state.invBlock || 'ALL';
             const floor = this.state.invKat || 'ALL';
 
