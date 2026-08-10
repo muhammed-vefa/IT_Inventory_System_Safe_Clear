@@ -1791,7 +1791,13 @@ checkLoginStatus: function() {
         if (countModeBtn) countModeBtn.style.display = (cat === 'PC') ? 'inline-flex' : 'none';
         
         const floorFilters = document.getElementById('floor-filters');
-        if (floorFilters) floorFilters.style.display = isPrinterCat ? 'none' : 'block';
+        if (floorFilters) {
+            if (this.state.invBlock !== 'ALL') {
+                floorFilters.style.display = 'flex';
+            } else {
+                floorFilters.style.display = 'none';
+            }
+        }
 
         if (isPrinterCat) {
             this.state.printerMainType = cat;
@@ -1938,7 +1944,13 @@ checkLoginStatus: function() {
         this.state.invKat = 'ALL'; // Reset floor when block changes
         document.querySelectorAll('#inventory-filters .btn-chip').forEach(btn => btn.classList.toggle('active', btn.dataset.block === block));
         this.renderKatFilters(block);
-        this.filterInventory();
+        
+        const isPrinterCat = ['PRINTER', 'BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER'].includes(this.state.invCategory);
+        if (isPrinterCat) {
+            this.applyPrinterFilters();
+        } else {
+            this.filterInventory();
+        }
     },
     renderKatFilters: function(block) {
         const container = document.getElementById('floor-filters');
@@ -1947,17 +1959,25 @@ checkLoginStatus: function() {
             container.style.display = 'none';
             return;
         }
-        // Find unique floors for the selected block
-        const floors = [...new Set(this.state.inventory
+        const isPrinterCat = ['PRINTER', 'BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER'].includes(this.state.invCategory);
+        const dataList = isPrinterCat ? (this.state.printers || []) : (this.state.inventory || []);
+
+        const floors = [...new Set(dataList
             .filter(i => {
                 const tower = (i.tower || "").toUpperCase();
-                const kod = (i.location_code || i.location_code || "").toUpperCase();
+                const kod = (i.location_code || i.mahal || "").toUpperCase();
                 if (block === 'A') return (kod.startsWith('A.') || tower === 'A');
                 if (block === 'B') return (kod.startsWith('B.') || tower === 'B');
                 if (block === 'MH') return (kod.startsWith('C.') || tower === 'C' || tower === 'MH');
                 return (tower === block || kod.includes(block));
             })
-            .map(i => i.floor)
+            .map(i => {
+                if (i.floor) return i.floor;
+                const kod = (i.location_code || i.mahal || "").toUpperCase();
+                const parts = kod.split('.');
+                if (parts.length > 1) return parts[1];
+                return "";
+            })
             .filter(k => k && k.trim() !== "")
         )].sort();
         if (floors.length === 0) {
@@ -1979,7 +1999,13 @@ checkLoginStatus: function() {
             const txt = btn.innerText.replace('. Kat', '').trim();
             btn.classList.toggle('active', (floor === 'ALL' && txt === 'Tümü') || txt === floor);
         });
-        this.filterInventory();
+        
+        const isPrinterCat = ['PRINTER', 'BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER'].includes(this.state.invCategory);
+        if (isPrinterCat) {
+            this.applyPrinterFilters();
+        } else {
+            this.filterInventory();
+        }
     },
     filterInventory: function() {
         const cat = this.state.invCategory || 'PC';
@@ -2244,6 +2270,31 @@ checkLoginStatus: function() {
                     if (!matchAny) return false;
                 }
             }
+
+            // 3. Block and Floor Filter
+            const mahalUP = (p.mahal || "").toUpperCase();
+            const block = this.state.invBlock || 'ALL';
+            const floor = this.state.invKat || 'ALL';
+
+            if (block !== 'ALL') {
+                let blockMatch = false;
+                if (block === 'A') blockMatch = mahalUP.startsWith('A.');
+                else if (block === 'B') blockMatch = mahalUP.startsWith('B.');
+                else if (block === 'MH') blockMatch = mahalUP.startsWith('C.');
+                else blockMatch = mahalUP.includes(block);
+                
+                if (!blockMatch) return false;
+            }
+
+            if (floor !== 'ALL') {
+                const parts = mahalUP.split('.');
+                if (parts.length > 1) {
+                    if (parts[1] !== floor) return false;
+                } else {
+                    return false;
+                }
+            }
+
             return true;
         });
         
