@@ -797,7 +797,7 @@
                     <button class="btn-chip" data-category="MONITOR" onclick="app.setInvCategory('MONITOR')">MONİTÖR</button>
                 </div>
             </div>
-            <div class="flex-between mb-3">
+            <div class="mb-3" style="display: flex; flex-wrap: wrap; align-items: center; gap: 20px;">
                 <div class="filter-chips" id="inventory-filters" style="margin-bottom: 0;">
                     <button class="btn-chip active" data-block="ALL" onclick="app.setInvBlock('ALL')">TÜMÜ</button>
                     <button class="btn-chip" data-block="A" onclick="app.setInvBlock('A')">A-BLOK</button>
@@ -809,6 +809,7 @@
                 </div>
                 
                 <div id="printer-model-filters-container" style="display:none; align-items: center; gap: 15px;">
+                    <div style="width: 2px; height: 35px; background: rgba(255,255,255,0.1); border-radius: 2px;"></div>
                     <div class="filter-chips" id="printer-model-filters" style="margin-bottom: 0; background: rgba(255,255,255,0.02); padding: 5px; border-radius: 12px; display: inline-flex;">
                         <button class="btn-chip active" data-pmodel="ALL" onclick="app.setPrinterModelType('ALL')">Tümü</button>
                         <button class="btn-chip" data-pmodel="5200" onclick="app.setPrinterModelType('5200')">5200</button>
