@@ -2280,22 +2280,23 @@ checkLoginStatus: function() {
             const floor = this.state.invKat || 'ALL';
 
             if (block !== 'ALL') {
+                const tower = (p.tower || "").toUpperCase();
                 let blockMatch = false;
-                if (block === 'A') blockMatch = mahalUP.startsWith('A.');
-                else if (block === 'B') blockMatch = mahalUP.startsWith('B.');
-                else if (block === 'MH') blockMatch = mahalUP.startsWith('C.');
-                else blockMatch = mahalUP.includes(block);
+                if (block === 'A') blockMatch = (mahalUP.startsWith('A.') || tower === 'A');
+                else if (block === 'B') blockMatch = (mahalUP.startsWith('B.') || tower === 'B');
+                else if (block === 'MH') blockMatch = (mahalUP.startsWith('C.') || tower === 'C' || tower === 'MH');
+                else blockMatch = (tower === block || mahalUP.includes(block));
                 
                 if (!blockMatch) return false;
             }
 
             if (floor !== 'ALL') {
-                const parts = mahalUP.split('.');
-                if (parts.length > 1) {
-                    if (parts[1] !== floor) return false;
-                } else {
-                    return false;
+                let pFloor = p.floor;
+                if (!pFloor) {
+                    const parts = mahalUP.split('.');
+                    if (parts.length > 1) pFloor = parts[1];
                 }
+                if (pFloor !== floor) return false;
             }
 
             return true;
