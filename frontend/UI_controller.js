@@ -2315,6 +2315,9 @@ checkLoginStatus: function() {
             return mod2.localeCompare(mod1, undefined, { numeric: true, sensitivity: 'base' });
         });
         
+        const countEl = document.getElementById('printer-count');
+        if (countEl) countEl.innerText = `Toplam Yazıcı: ${filtered.length}`;
+        
         this.state.currentPrintersRenderList = filtered;
         this.state.printersPage = 0;
         container.innerHTML = '';

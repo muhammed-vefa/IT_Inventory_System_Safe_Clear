@@ -807,6 +807,15 @@
                     <button class="btn-chip" data-block="TSB" onclick="app.setInvBlock('TSB')">TSB</button>
                     <button class="btn-chip" data-block="MH" onclick="app.setInvBlock('MH')">MH</button>
                 </div>
+                
+                <div id="printer-model-filters-container" style="display:none; align-items: center; gap: 15px;">
+                    <div class="filter-chips" id="printer-model-filters" style="margin-bottom: 0; background: rgba(255,255,255,0.02); padding: 5px; border-radius: 12px; display: inline-flex;">
+                        <button class="btn-chip active" data-pmodel="ALL" onclick="app.setPrinterModelType('ALL')">Tümü</button>
+                        <button class="btn-chip" data-pmodel="5200" onclick="app.setPrinterModelType('5200')">5200</button>
+                        <button class="btn-chip" data-pmodel="6900" onclick="app.setPrinterModelType('6900')">6900</button>
+                        <button class="btn-chip" data-pmodel="8690" onclick="app.setPrinterModelType('8690')">8690</button>
+                    </div>
+                    <span id="printer-count" style="color: var(--accent); font-size: 0.95rem; font-weight: 600; padding: 5px 10px; background: rgba(6,182,212,0.1); border-radius: 8px;"></span>
                 </div>
             </div>
 
@@ -828,16 +837,6 @@
             <div class="filter-chips mb-4" id="floor-filters" style="display: none; padding-top: 5px; border-top: 1px dashed rgba(255,255,255,0.1);"></div>
             <div class="grid" id="inventory-grid">            </div>
             <div id="inventory-scroll-sentinel" style="height: 20px; width: 100%;"></div>
-
-            <!-- Model Bazlı Alt Filtreler (Sadece Yazıcı seçiliyken anlamlı) -->
-            <div id="printer-model-filters-container" class="mb-4" style="display:none;">
-                <div class="filter-chips" id="printer-model-filters" style="margin-bottom: 0; background: rgba(255,255,255,0.02); padding: 5px; border-radius: 12px; display: inline-flex;">
-                    <button class="btn-chip active" data-pmodel="ALL" onclick="app.setPrinterModelType('ALL')">Tümü</button>
-                    <button class="btn-chip" data-pmodel="5200" onclick="app.setPrinterModelType('5200')">5200</button>
-                    <button class="btn-chip" data-pmodel="6900" onclick="app.setPrinterModelType('6900')">6900</button>
-                    <button class="btn-chip" data-pmodel="8690" onclick="app.setPrinterModelType('8690')">8690</button>
-                </div>
-            </div>
 
             <div class="grid" id="printers-grid" style="display:none;"></div>
             <div id="printers-scroll-sentinel" style="height: 20px; width: 100%; display:none;"></div>
