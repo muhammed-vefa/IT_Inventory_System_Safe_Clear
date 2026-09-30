@@ -1,0 +1,118 @@
+[+] Sunucu Baslatildi - Canli Konsol Log Akisi
+
+============================================================
+   KEYDATA IT ENVANTER SISTEMI - STARTUP SEQUENCE
+============================================================
+[*] KOD DIZINI (BASE):  C:\Users\MUHAMMED-VEFA-IS\.gemini\antigravity\scratch\IT_Inventory
+[*] VERI DIZINI (DATA):  C:\Users\MUHAMMED-VEFA-IS\.gemini\antigravity\scratch\IT_Inventory
+[*] Veritabanı onarımı ve migrasyonlar başlatılıyor (init_db)...
+DB Baglanti Hatasi (master): ('08001', '[08001] [Microsoft][ODBC SQL Server Driver][DBMSLPCN]SQL Server yok veya erişim engellendi. (17) (SQLDriverConnect); [08001] [Microsoft][ODBC SQL Server Driver][DBMSLPCN]ConnectionOpen (Connect()). (3)')
+[*] Veritabanı şeması güncel.
+[!] APScheduler Başlatılamadı: expected 'except' or 'finally' block (scheduler_logic.py, line 63)
+[*] Sunucu 5000 portunda (Detaylı Log Modu) yayında...
+ * Serving Flask app 'main'
+ * Debug mode: off
+DB Baglanti Hatasi (IT_INVENTORY): ('08001', '[08001] [Microsoft][ODBC SQL Server Driver][DBMSLPCN]SQL Server yok veya erişim engellendi. (17) (SQLDriverConnect); [08001] [Microsoft][ODBC SQL Server Driver][DBMSLPCN]ConnectionOpen (Connect()). (3)')
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.241.100.32:5000
+Press CTRL+C to quit
+127.0.0.1 - - [22/Jul/2026 08:10:58] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:58] "GET /static/logo/KOCSH.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:58] "GET /frontend/style.css?v=20260706_1 HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:58] "GET /frontend/UI_controller.js?v=20260703_4 HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:59] "GET /frontend/manifest.json HTTP/1.1" 200 -
+[MATRIX] [08:10:59.059] HTTP GET /api/system_info | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:10:59] "GET /api/system_info HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:59] "GET /static/logo/favicon/web-app-manifest-192x192.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:59] "GET /sw.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:59] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:59] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:59] "GET /frontend/style.css HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:59] "GET /frontend/UI_controller.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:59] "GET /static/logo/KOCSH.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:59] "GET /static/logo/favicon/web-app-manifest-192x192.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:59] "GET /static/logo/favicon/web-app-manifest-512x512.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:59] "GET /frontend/manifest.json HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:10:59] "GET /sw.js HTTP/1.1" 200 -
+[MATRIX_CLICK] Kullanici 'Guest' sunu tikladi: INPUT#login-user.search-bar.mb-2
+[MATRIX] [08:11:00.735] HTTP POST /api/logs/click | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:11:00] "POST /api/logs/click HTTP/1.1" 200 -
+DB Baglanti Hatasi (IT_INVENTORY): ('08001', '[08001] [Microsoft][ODBC SQL Server Driver][DBMSLPCN]SQL Server yok veya erişim engellendi. (17) (SQLDriverConnect); [08001] [Microsoft][ODBC SQL Server Driver][DBMSLPCN]ConnectionOpen (Connect()). (3)')
+[MATRIX] [08:11:16.742] HTTP POST /api/users/login | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:11:16] "POST /api/users/login HTTP/1.1" 500 -
+127.0.0.1 - - [22/Jul/2026 08:13:11] "GET /static/logo/favicon.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:13:13] "GET /static/logo/favicon.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:13:13] "GET /static/logo/logo_key.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:14:30] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:14:30] "GET /frontend/style.css?v=20260706_1 HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:14:30] "GET /static/logo/KOCSH.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:14:30] "GET /frontend/UI_controller.js?v=20260703_4 HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:14:31] "GET /frontend/manifest.json HTTP/1.1" 200 -
+[MATRIX] [08:14:31.632] HTTP GET /api/system_info | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:14:31] "GET /api/system_info HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:14:31] "GET /static/logo/favicon/web-app-manifest-192x192.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:14:31] "GET /sw.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:14:33] "GET /sw.js HTTP/1.1" 200 -
+[MATRIX_CLICK] Kullanici 'Guest' sunu tikladi: INPUT#login-pass.search-bar.mb-4
+[MATRIX] [08:14:37.356] HTTP POST /api/logs/click | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:14:37] "POST /api/logs/click HTTP/1.1" 200 -
+[MATRIX_CLICK] Kullanici 'Guest' sunu tikladi: INPUT#login-user.search-bar.mb-2
+[MATRIX] [08:14:37.896] HTTP POST /api/logs/click | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:14:37] "POST /api/logs/click HTTP/1.1" 200 -
+[MATRIX_CLICK] Kullanici 'Guest' sunu tikladi: BUTTON#btn-login-submit.btn.btn-accent ("Giriliyor...")
+[MATRIX] [08:14:43.680] HTTP POST /api/logs/click | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:14:43] "POST /api/logs/click HTTP/1.1" 200 -
+DB Baglanti Hatasi (IT_INVENTORY): ('08001', '[08001] [Microsoft][ODBC SQL Server Driver][DBMSLPCN]SQL Server yok veya erişim engellendi. (17) (SQLDriverConnect); [08001] [Microsoft][ODBC SQL Server Driver][DBMSLPCN]ConnectionOpen (Connect()). (3)')
+[MATRIX] [08:14:56.175] HTTP POST /api/users/login | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:14:56] "POST /api/users/login HTTP/1.1" 500 -
+127.0.0.1 - - [22/Jul/2026 08:15:36] "GET /static/logo/favicon.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:15:36] "GET /static/logo/favicon.png HTTP/1.1" 200 -
+[MATRIX_CLICK] Kullanici 'Guest' sunu tikladi: BUTTON#btn-login-submit.btn.btn-accent ("Giriliyor...")
+[MATRIX] [08:16:29.484] HTTP POST /api/logs/click | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:16:29] "POST /api/logs/click HTTP/1.1" 200 -
+[MATRIX_CLICK] Kullanici 'Guest' sunu tikladi: DIV#login-overlay.modal-backdrop ("Lütfen yetkili kimlik bilgiler")
+[MATRIX] [08:16:31.081] HTTP POST /api/logs/click | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:16:31] "POST /api/logs/click HTTP/1.1" 200 -
+[MATRIX_CLICK] Kullanici 'Guest' sunu tikladi: DIV#login-overlay.modal-backdrop ("Lütfen yetkili kimlik bilgiler")
+[MATRIX] [08:16:32.423] HTTP POST /api/logs/click | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:16:32] "POST /api/logs/click HTTP/1.1" 200 -
+[MATRIX_CLICK] Kullanici 'Guest' sunu tikladi: DIV#login-overlay.modal-backdrop ("Lütfen yetkili kimlik bilgiler")
+[MATRIX] [08:16:35.139] HTTP POST /api/logs/click | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:16:35] "POST /api/logs/click HTTP/1.1" 200 -
+[MATRIX_CLICK] Kullanici 'Guest' sunu tikladi: DIV#login-overlay.modal-backdrop ("Lütfen yetkili kimlik bilgiler")
+[MATRIX] [08:16:35.445] HTTP POST /api/logs/click | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:16:35] "POST /api/logs/click HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:16:36] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:16:36] "GET /frontend/style.css?v=20260706_1 HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:16:36] "GET /static/logo/KOCSH.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:16:36] "GET /frontend/UI_controller.js?v=20260703_4 HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:16:36] "GET /frontend/manifest.json HTTP/1.1" 200 -
+[MATRIX] [08:16:36.976] HTTP GET /api/system_info | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:16:36] "GET /api/system_info HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:16:37] "GET /static/logo/favicon.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:16:37] "GET /static/logo/favicon/web-app-manifest-192x192.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:16:37] "GET /static/logo/favicon.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:16:37] "GET /static/logo/logo_key.png HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:16:37] "GET /sw.js HTTP/1.1" 200 -
+[MATRIX_CLICK] Kullanici 'Guest' sunu tikladi: INPUT#login-user.search-bar.mb-2
+[MATRIX] [08:16:37.710] HTTP POST /api/logs/click | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:16:37] "POST /api/logs/click HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jul/2026 08:16:38] "GET /sw.js HTTP/1.1" 200 -
+DB Baglanti Hatasi (IT_INVENTORY): ('08001', '[08001] [Microsoft][ODBC SQL Server Driver][DBMSLPCN]SQL Server yok veya erişim engellendi. (17) (SQLDriverConnect); [08001] [Microsoft][ODBC SQL Server Driver][DBMSLPCN]ConnectionOpen (Connect()). (3)')
+[MATRIX] [08:16:42.100] HTTP POST /api/users/login | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:16:42] "POST /api/users/login HTTP/1.1" 500 -
+[MATRIX_CLICK] Kullanici 'Guest' sunu tikladi: INPUT#login-pass.search-bar.mb-4
+[MATRIX] [08:16:42.466] HTTP POST /api/logs/click | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:16:42] "POST /api/logs/click HTTP/1.1" 200 -
+[MATRIX_CLICK] Kullanici 'Guest' sunu tikladi: INPUT#login-user.search-bar.mb-2
+[MATRIX] [08:16:43.212] HTTP POST /api/logs/click | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:16:43] "POST /api/logs/click HTTP/1.1" 200 -
+[MATRIX_CLICK] Kullanici 'Guest' sunu tikladi: BUTTON#btn-login-submit.btn.btn-accent ("Giriliyor...")
+[MATRIX] [08:16:47.197] HTTP POST /api/logs/click | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:16:47] "POST /api/logs/click HTTP/1.1" 200 -
+DB Baglanti Hatasi (IT_INVENTORY): ('08001', '[08001] [Microsoft][ODBC SQL Server Driver][DBMSLPCN]SQL Server yok veya erişim engellendi. (17) (SQLDriverConnect); [08001] [Microsoft][ODBC SQL Server Driver][DBMSLPCN]ConnectionOpen (Connect()). (3)')
+[MATRIX] [08:16:59.830] HTTP POST /api/users/login | Cihaz: 127.0.0.1 | Kullanici: Guest
+127.0.0.1 - - [22/Jul/2026 08:16:59] "POST /api/users/login HTTP/1.1" 500 -
+[!] Sunucu kapandi. Arayuz 3 saniye icinde kapatilacak...

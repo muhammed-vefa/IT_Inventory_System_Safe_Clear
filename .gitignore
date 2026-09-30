@@ -1,0 +1,6 @@
+static/kurulum_dosyalari/
+database/yedek/
+temp/
+Arşiv/
+data/
+database/google_credentials.json
