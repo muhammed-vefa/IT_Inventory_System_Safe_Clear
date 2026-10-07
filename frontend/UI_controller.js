@@ -2229,7 +2229,14 @@ checkLoginStatus: function() {
                             return fullContent.includes(termUP);
                         }                        else {
                             // 5. Dier her ey: SERİ NUMARALARI, HOSTNAME ve GENEL (DM4, VJM vb.)
-                            const content = `${i.pc_serial} ${i.monitor_seri} ${i.monitor2_seri} ${i.by_seri} ${i.bo_seri} ${i.tarayici_seri} ${i.seri} ${i.serial_no} ${i.hostname} ${i.card_name || ''} ${i.location_name}`.toUpperCase();
+                            const iStatus = (i.status || '').toUpperCase();
+                            const isInst2 = i.location_code && i.location_code.trim() !== "";
+                            let stText2 = "KURULU";
+                            if (iStatus.includes("ARIZALI") || iStatus.includes("KAYIP")) stText2 = iStatus.includes("ARIZALI") ? "ARIZALI" : "KAYIP";
+                            else if (iStatus.includes("DEPODA") || iStatus.includes("DEPO")) stText2 = "DEPODA";
+                            else if (iStatus.includes("SERV")) stText2 = "SERVIS SERVİSTE";
+                            else if (!isInst2) stText2 = "DEPODA";
+                            const content = `${i.pc_serial} ${i.monitor_seri} ${i.monitor2_seri} ${i.by_seri} ${i.bo_seri} ${i.tarayici_seri} ${i.seri} ${i.serial_no} ${i.hostname} ${i.card_name || ''} ${i.location_name} ${stText2} ${iStatus}`.toUpperCase();
                             return content.includes(termUP);
                         }
                     });
@@ -2379,9 +2386,25 @@ checkLoginStatus: function() {
                             const prNoStr = (p.pr_no || "").toUpperCase();
                             const padded = termUP.padStart(3, '0');
                             const exactPr = "PR-" + padded;
-                            return prNoStr.includes(termUP) || prNoStr.includes(padded) || prNoStr === exactPr;
+                            const prMatch = prNoStr.includes(termUP) || prNoStr.includes(padded) || prNoStr === exactPr;
+                            const pStatus = (p.status || '').toUpperCase();
+                            const isInst = p.mahal && p.mahal.trim() !== "";
+                            let stText = "KURULU";
+                            if (pStatus.includes("ARIZALI") || pStatus.includes("KAYIP")) stText = pStatus.includes("ARIZALI") ? "ARIZALI" : "KAYIP";
+                            else if (pStatus.includes("DEPODA") || pStatus.includes("DEPO")) stText = "DEPODA";
+                            else if (pStatus.includes("SERV")) stText = "SERVIS SERVİSTE";
+                            else if (!isInst) stText = "DEPODA";
+                            const content = `${p.pr_no} ${p.model || p.name} ${p.seri || p.serial_no} ${p.mahal} ${p.ip} ${p.mac} ${stText} ${pStatus}`.toUpperCase();
+                            return prMatch || content.includes(termUP);
                         } else {
-                            const content = `${p.pr_no} ${p.model || p.name} ${p.seri || p.serial_no} ${p.mahal} ${p.ip} ${p.mac}`.toUpperCase();
+                            const pStatus = (p.status || '').toUpperCase();
+                            const isInst = p.mahal && p.mahal.trim() !== "";
+                            let stText = "KURULU";
+                            if (pStatus.includes("ARIZALI") || pStatus.includes("KAYIP")) stText = pStatus.includes("ARIZALI") ? "ARIZALI" : "KAYIP";
+                            else if (pStatus.includes("DEPODA") || pStatus.includes("DEPO")) stText = "DEPODA";
+                            else if (pStatus.includes("SERV")) stText = "SERVIS SERVİSTE";
+                            else if (!isInst) stText = "DEPODA";
+                            const content = `${p.pr_no} ${p.model || p.name} ${p.seri || p.serial_no} ${p.mahal} ${p.ip} ${p.mac} ${stText} ${pStatus}`.toUpperCase();
                             let paddedTerm = termUP;
                             if (termUP.startsWith('PR-')) {
                                 const num = termUP.replace('PR-', '').trim();
