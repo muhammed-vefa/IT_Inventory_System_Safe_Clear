@@ -2158,7 +2158,17 @@ checkLoginStatus: function() {
             // Block
             if (block !== 'ALL') {
                 const tower = (i.tower || "").toUpperCase();
-                const kod = (i.location_code || i.mahal || "").toUpperCase();
+                let kod = (i.location_code || i.mahal || "").toUpperCase();
+                if (!kod || !kod.includes('.')) {
+                    const searchNo = (i.recorded_device_no || i.pc_no || "").toUpperCase();
+                    if (searchNo && searchNo !== 'NONE' && searchNo !== 'NULL') {
+                        const connectedPc = app.state.inventory?.find(pc => {
+                            const pcNo = (pc.pc_no || "").toUpperCase();
+                            return pcNo === searchNo || `PC-${pcNo.padStart(3, '0')}` === searchNo || pcNo === searchNo.replace('PC-', '');
+                        });
+                        if (connectedPc) kod = (connectedPc.location_code || connectedPc.mahal || "").toUpperCase();
+                    }
+                }
                 
                 const parsedBlock = app.getBlockFromMahal(kod);
                 let blockMatch = false;
@@ -2426,6 +2436,16 @@ checkLoginStatus: function() {
             if (block !== 'ALL') {
                 const tower = (p.tower || "").toUpperCase();
                 let kod = (p.mahal || p.location_code || "").toUpperCase();
+                if (!kod || !kod.includes('.')) {
+                    const searchNo = (p.recorded_device_no || "").toUpperCase();
+                    if (searchNo) {
+                        const connectedPc = app.state.inventory?.find(pc => {
+                            const pcNo = (pc.pc_no || "").toUpperCase();
+                            return pcNo === searchNo || `PC-${pcNo.padStart(3, '0')}` === searchNo || pcNo === searchNo.replace('PC-', '');
+                        });
+                        if (connectedPc) kod = (connectedPc.location_code || connectedPc.mahal || "").toUpperCase();
+                    }
+                }
                 
                 const parsedBlock = app.getBlockFromMahal(kod);
                 let blockMatch = false;
