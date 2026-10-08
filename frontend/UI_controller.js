@@ -1764,7 +1764,7 @@ checkLoginStatus: function() {
                 ${peripheralsHtml}
 
                 ${this.state.countMode ? `
-                <button class="btn ${countedAt ? 'counted' : 'btn-accent'}" style="width:100%; margin-top:10px; padding:8px; font-size:0.7rem;" onclick="event.stopPropagation(); ${countedAt ? `app.undoMarkCounted(${i.id}, '${i.device_class || \'PC\'}')` : `app.markCounted(${i.id}, '${i.device_class || \'PC\'}')`}">
+                <button class="btn ${countedAt ? 'counted' : 'btn-accent'}" style="width:100%; margin-top:10px; padding:8px; font-size:0.7rem;" onclick="event.stopPropagation(); ${countedAt ? 'app.undoMarkCounted' : 'app.markCounted'}(${i.id}, '${i.device_class || "PC"}')">
                     <i class="fas ${countedAt ? 'fa-undo' : 'fa-check'}"></i> ${countedAt ? 'SAYIMI GERİ AL' : 'SAYILDI OLARAK İŞARETLE'}
                 </button>` : ''}
             </div>`;
@@ -3875,7 +3875,7 @@ rm -f "$C"; rmdir "$M" 2>/dev/null`;
                     </button>
                 
                 ${this.state.countMode ? `
-                <button class="btn ${p.last_counted_at ? 'counted' : 'btn-accent'}" style="width:100%; margin-top:10px; padding:8px; font-size:0.7rem;" onclick="event.stopPropagation(); ${p.last_counted_at ? `app.undoMarkCounted(${p.id}, '${p.device_class || 'PRINTER'}')` : `app.markCounted(${p.id}, '${p.device_class || 'PRINTER'}')`}">
+                <button class="btn ${p.last_counted_at ? 'counted' : 'btn-accent'}" style="width:100%; margin-top:10px; padding:8px; font-size:0.7rem;" onclick="event.stopPropagation(); ${p.last_counted_at ? 'app.undoMarkCounted' : 'app.markCounted'}(${p.id}, '${p.device_class || "PRINTER"}')">
                     <i class="fas ${p.last_counted_at ? 'fa-undo' : 'fa-check'}"></i> ${p.last_counted_at ? 'SAYIMI GERİ AL' : 'SAYILDI OLARAK İŞARETLE'}
                 </button>` : ''}
                 </div>
