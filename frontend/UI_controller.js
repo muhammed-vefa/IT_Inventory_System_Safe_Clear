@@ -2071,6 +2071,16 @@ checkLoginStatus: function() {
                 } else {
                     kod = (i.location_code || i.mahal || "").toUpperCase();
                 }
+                if (!kod || !kod.includes('.')) {
+                    const searchNo = (i.recorded_device_no || i.pc_no || "").toUpperCase();
+                    if (searchNo && searchNo !== 'NONE' && searchNo !== 'NULL') {
+                        const connectedPc = (app.state.inventory || []).find(pc => {
+                            const pcNo = (pc.pc_no || "").toUpperCase();
+                            return pcNo === searchNo || `PC-${pcNo.padStart(3, '0')}` === searchNo || pcNo === searchNo.replace('PC-', '');
+                        });
+                        if (connectedPc) kod = (connectedPc.location_code || connectedPc.mahal || "").toUpperCase();
+                    }
+                }
                 const parsedBlock = app.getBlockFromMahal(kod);
                 if (parsedBlock) return parsedBlock === block;
                 
@@ -2186,7 +2196,13 @@ checkLoginStatus: function() {
                 if (!blockMatch) return false;
                 // Floor filter (only if block is selected)
                 if (this.state.invKat && this.state.invKat !== 'ALL') {
-                    if (i.floor !== this.state.invKat) return false;
+                    let pFloor = i.floor;
+                    if (!pFloor) {
+                        const kodForFloor = kod.replace(/^(SERV\S*STE|KONTROLDE|DEPO|KAYIP|HURDA)[\.\s-]+/ig, '');
+                        const parts = kodForFloor.split('.');
+                        if (parts.length > 1) pFloor = parts[1];
+                    }
+                    if (pFloor !== this.state.invKat) return false;
                 }
             }
             // Search
@@ -2467,7 +2483,18 @@ checkLoginStatus: function() {
             if (floor !== 'ALL') {
                 let pFloor = p.floor;
                 if (!pFloor) {
-                    const kodForFloor = (p.mahal || p.location_code || "").toUpperCase().replace(/^(SERVİSTE|SERVISTE|KONTROLDE|DEPO|KAYIP|HURDA)[\.\s-]+/g, '');
+                    let kodForFloor = (p.mahal || p.location_code || "").toUpperCase();
+                    if (!kodForFloor || !kodForFloor.includes('.')) {
+                        const searchNo = (p.recorded_device_no || "").toUpperCase();
+                        if (searchNo) {
+                            const connectedPc = app.state.inventory?.find(pc => {
+                                const pcNo = (pc.pc_no || "").toUpperCase();
+                                return pcNo === searchNo || `PC-${pcNo.padStart(3, '0')}` === searchNo || pcNo === searchNo.replace('PC-', '');
+                            });
+                            if (connectedPc) kodForFloor = (connectedPc.location_code || connectedPc.mahal || "").toUpperCase();
+                        }
+                    }
+                    kodForFloor = kodForFloor.replace(/^(SERV\S*STE|KONTROLDE|DEPO|KAYIP|HURDA)[\.\s-]+/ig, '');
                     const parts = kodForFloor.split('.');
                     if (parts.length > 1) pFloor = parts[1];
                 }
