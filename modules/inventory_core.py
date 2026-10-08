@@ -1039,6 +1039,7 @@ def mark_counted():
     try:
         data = request.json
         record_id = data.get('id')
+        item_type = data.get('type', 'PC')
         counted_by = data.get('counted_by', request.current_user.get('display_name', 'Sistem'))
         
         if not record_id:
@@ -1048,7 +1049,20 @@ def mark_counted():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute("UPDATE pcs SET last_counted_at = GETDATE(), counted_by = ? WHERE id = ?", (counted_by, record_id))
+        table_map = {
+            'PC': 'pcs',
+            'MONITOR': 'monitors',
+            'TABLET': 'tablets',
+            'SK': 'queing_machines',
+            'PRINTER': 'printers',
+            'BARCODE_PRINTER': 'barcode_printers',
+            'BARCODE_READER': 'barcode_readers',
+            'SCANNER': 'scanners',
+            'CALL_SCREEN': 'call_screens'
+        }
+        table_name = table_map.get(str(item_type).upper(), 'pcs')
+        
+        cursor.execute(f"UPDATE {table_name} SET last_counted_at = GETDATE(), counted_by = ? WHERE id = ?", (counted_by, record_id))
         conn.commit()
         conn.close()
         
@@ -1058,12 +1072,33 @@ def mark_counted():
         return jsonify({"error": str(e)}), 500
 
 
+
+@inventory_core_bp.route('/count/reset', methods=['POST'])
+@require_editor
+def reset_count():
+    try:
+        from core.database_sql import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        tables = ['pcs', 'printers', 'barcode_printers', 'barcode_readers', 'scanners', 'tablets', 'monitors', 'call_screens', 'queing_machines']
+        for t in tables:
+            try:
+                cursor.execute(f"UPDATE {t} SET last_counted_at = NULL, counted_by = NULL")
+            except Exception as e:
+                pass
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "message": "Tum sayim verileri sifirlandi."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @inventory_core_bp.route('/count/undo', methods=['POST'])
 @require_editor
 def undo_mark_counted():
     try:
         data = request.json
         record_id = data.get('id')
+        item_type = data.get('type', 'PC')
         
         if not record_id:
             return jsonify({"error": "ID belirtilmedi."}), 400
@@ -1072,7 +1107,20 @@ def undo_mark_counted():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute("UPDATE pcs SET last_counted_at = NULL, counted_by = NULL WHERE id = ?", (record_id,))
+        table_map = {
+            'PC': 'pcs',
+            'MONITOR': 'monitors',
+            'TABLET': 'tablets',
+            'SK': 'queing_machines',
+            'PRINTER': 'printers',
+            'BARCODE_PRINTER': 'barcode_printers',
+            'BARCODE_READER': 'barcode_readers',
+            'SCANNER': 'scanners',
+            'CALL_SCREEN': 'call_screens'
+        }
+        table_name = table_map.get(str(item_type).upper(), 'pcs')
+        
+        cursor.execute(f"UPDATE {table_name} SET last_counted_at = NULL, counted_by = NULL WHERE id = ?", (record_id,))
         conn.commit()
         conn.close()
         

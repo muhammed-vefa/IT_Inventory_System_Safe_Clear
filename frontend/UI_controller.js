@@ -1764,7 +1764,7 @@ checkLoginStatus: function() {
                 ${peripheralsHtml}
 
                 ${this.state.countMode ? `
-                <button class="btn ${countedAt ? 'counted' : 'btn-accent'}" style="width:100%; margin-top:10px; padding:8px; font-size:0.7rem;" onclick="event.stopPropagation(); ${countedAt ? `app.undoMarkCounted(${i.id})` : `app.markCounted(${i.id})`}">
+                <button class="btn ${countedAt ? 'counted' : 'btn-accent'}" style="width:100%; margin-top:10px; padding:8px; font-size:0.7rem;" onclick="event.stopPropagation(); ${countedAt ? `app.undoMarkCounted(${i.id}, '${i.device_class || \'PC\'}')` : `app.markCounted(${i.id}, '${i.device_class || \'PC\'}')`}">
                     <i class="fas ${countedAt ? 'fa-undo' : 'fa-check'}"></i> ${countedAt ? 'SAYIMI GERİ AL' : 'SAYILDI OLARAK İŞARETLE'}
                 </button>` : ''}
             </div>`;
@@ -1839,7 +1839,7 @@ checkLoginStatus: function() {
         if (printerServiceBtn) printerServiceBtn.style.display = (cat === 'PRINTER') ? 'flex' : 'none';
         
         const countModeBtn = document.getElementById('btn-count-mode');
-        if (countModeBtn) countModeBtn.style.display = (cat === 'PC') ? 'inline-flex' : 'none';
+        if (countModeBtn) countModeBtn.style.display = this.canEdit('inventory') ? 'inline-flex' : 'none';
         
         const floorFilters = document.getElementById('floor-filters');
         if (floorFilters) {
@@ -2759,7 +2759,7 @@ renderPrintersChunk: function() {
         try {
             const resp = await this.apiRequest('/inventory/printers/cups/toggle_pause', {
                 method: 'POST',
-                body: JSON.stringify({id: id, action: action})
+                body: JSON.stringify({id: id, type: type, action: action})
             });
             if(resp.success) {
                 this.showToast(resp.message || 'İşlem başarılı', 'success');
@@ -2783,7 +2783,7 @@ renderPrintersChunk: function() {
         try {
             const resp = await this.apiRequest('/inventory/printers/cups/toggle_reject', {
                 method: 'POST',
-                body: JSON.stringify({id: id, action: action})
+                body: JSON.stringify({id: id, type: type, action: action})
             });
             if(resp.success) {
                 this.showToast(resp.message || 'İşlem başarılı', 'success');
@@ -3342,6 +3342,7 @@ renderPrintersChunk: function() {
             btn.classList.toggle('active', btn.dataset.sktype === skType);
         });
         this.filterInventory();
+        this.applyPrinterFilters();
     },
     setTabletType: function(ttype) {
         this.state.tabletType = ttype;
@@ -3349,6 +3350,7 @@ renderPrintersChunk: function() {
             btn.classList.toggle('active', btn.dataset.ttype === ttype);
         });
         this.filterInventory();
+        this.applyPrinterFilters();
     },
     searchPrinters: function() {
         clearTimeout(this._prnTimer);
@@ -3871,6 +3873,11 @@ rm -f "$C"; rmdir "$M" 2>/dev/null`;
                     <button class="btn btn-chip" style="padding: 6px; width: 35px; justify-content:center;" onclick="event.stopPropagation(); app.openEditDepotItem(${item.id}, '${item.table_origin}')" title="Düzenle">
                         <i class="fas fa-cog"></i>
                     </button>
+                
+                ${this.state.countMode ? `
+                <button class="btn ${p.last_counted_at ? 'counted' : 'btn-accent'}" style="width:100%; margin-top:10px; padding:8px; font-size:0.7rem;" onclick="event.stopPropagation(); ${p.last_counted_at ? `app.undoMarkCounted(${p.id}, '${p.device_class || 'PRINTER'}')` : `app.markCounted(${p.id}, '${p.device_class || 'PRINTER'}')`}">
+                    <i class="fas ${p.last_counted_at ? 'fa-undo' : 'fa-check'}"></i> ${p.last_counted_at ? 'SAYIMI GERİ AL' : 'SAYILDI OLARAK İŞARETLE'}
+                </button>` : ''}
                 </div>
             </div>`;
         }).join('');
@@ -5111,7 +5118,7 @@ rm -f "$C"; rmdir "$M" 2>/dev/null`;
         this.state.initialFormData = null;
         try {
             const payload = { 
-                id: id,
+                id: id, type: type,
                 changed_by: this.state.activeUser.username || this.state.activeUser.key || 'system',
                 display_name: this.state.activeUser.display_name || this.state.activeUser.name || 'Sistem'
             };
@@ -8096,6 +8103,7 @@ rm -f "$C"; rmdir "$M" 2>/dev/null`;
             btn.style.boxShadow = '';
         }
         this.filterInventory();
+        this.applyPrinterFilters();
     },
     sortInventory: function(by) {
         if (!this.state.countMode) return;
@@ -8108,26 +8116,28 @@ rm -f "$C"; rmdir "$M" 2>/dev/null`;
         this.renderInventory(sorted);
         this.showToast(`Sıralandı: ${by === 'floor' ? 'Kat' : 'Mahal Kodu'}`);
     },
-    markCounted: async function(id) {
+    markCounted: async function(id, type) {
         if (!this.state.countMode) return;
         try {
             const resp = await this.apiRequest('/inventory/count', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    id: id,
+                    id: id, type: type,
                     counted_by: this.state.activeUser.display_name || this.state.activeUser.name
                 })
             });
             const result = resp;
             if (result.error) throw new Error(result.error);
             // Yerelde güncelle
-            const item = this.state.inventory.find(i => i.id == id);
+            const isPrinterCat2 = ['PRINTER', 'BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER'].includes(type);
+            const listToSearch2 = isPrinterCat2 ? this.state.printers : this.state.inventory;
+            const item = listToSearch2.find(i => i.id == id);
             if (item) {
                 item.last_counted_at = new Date().toISOString();
                 item.counted_by = this.state.activeUser.display_name || this.state.activeUser.name;
             }
-            this.renderInventory(this.state.lastFilteredList.length > 0 ? this.state.lastFilteredList : this.state.inventory);
+            this.filterInventory(); this.applyPrinterFilters();
             this.showToast('Cihaz sayıldı.');
         } catch (e) { alert('Hata: ' + e.message); }
     },
@@ -8355,7 +8365,7 @@ exit
         document.body.appendChild(a);
         a.click();
     },
-    undoMarkCounted: async function(id) {
+    undoMarkCounted: async function(id, type) {
         if (!confirm('Bu sayımı iptal etmek istediğinize emin misiniz?')) return;
         try {
             const resp = await this.apiRequest('/inventory/count/undo', {
@@ -8366,12 +8376,14 @@ exit
             const result = resp;
             if (result.error) throw new Error(result.error);
             // Yerelde güncelle
-            const item = this.state.inventory.find(i => i.id == id);
+            const isPrinterCat3 = ['PRINTER', 'BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER'].includes(type);
+            const listToSearch3 = isPrinterCat3 ? this.state.printers : this.state.inventory;
+            const item = listToSearch3.find(i => i.id == id);
             if (item) {
                 item.last_counted_at = null;
                 item.counted_by = null;
             }
-            this.renderInventory(this.state.lastFilteredList.length > 0 ? this.state.lastFilteredList : this.state.inventory);
+            this.filterInventory(); this.applyPrinterFilters();
             this.showToast('Sayım geri alındı.');
         } catch (e) { alert('Hata: ' + e.message); }
     },
