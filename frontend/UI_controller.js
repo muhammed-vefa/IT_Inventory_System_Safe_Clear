@@ -3678,37 +3678,41 @@ echo "### İlgili Ortak Alanın Kilidi Açılmıştır. Kullanıcıya F5 ile yen
 fi`;
         } else if (type === 'define') {
             rawScript = `#!/bin/bash
-P="${folder}";S="${ip}";M="/mnt/$P";C="/etc/samba/.$P-credentials"
-F="//$S/$P $M cifs nofail,_netdev,credentials=$C,noexec,rw,file_mode=0777,dir_mode=0777 0 0"
-[ "$(id -u)" -ne 0 ] && exit 1
-apt-get install -y cifs-utils; mkdir -p "$M" /etc/samba
-cat > "$C" <<'EOF'
-username=${user}
-password=${pass}
-EOF
-chmod 600 "$C"; grep -Fqx "$F" /etc/fstab || echo "$F" >> /etc/fstab
-mountpoint -q "$M" || mount "$M"
-if ! mountpoint -q "$M"; then exit 1; fi
-for D in /etc/skel/Desktop /home/*/Desktop; do
-[ -d "$D" ] || continue
-[ ! -e "$D/$P" ] && [ ! -L "$D/$P" ] && ln -s "$M" "$D/$P"
-done`;
+
+FSKontrol=\`grep ${ip} /etc/fstab | wc -l\`
+if [ "$FSKontrol" == "1" ];then
+        echo "FSKontrol Ayarlar Yapılı"
+else
+        apt-get install cifs-utils -y
+        mkdir /mnt/${folder}
+        ln -s /mnt/${folder} /etc/skel/Desktop/
+        mount -t cifs //${ip}/${folder} /mnt/${folder} -o username=${user},password=${pass},noexec,rw,file_mode=0777,dir_mode=0777
+        echo "username=${user}
+password=${pass}" > /etc/samba/.smbcredentials
+        echo "//${ip}/${folder} /mnt/${folder} cifs nofail,credentials=/etc/samba/.smbcredentials,noexec,rw,file_mode=0777,dir_mode=0777  0 0" >> /etc/fstab
+		C=\`ls /home/ | awk '{print $1}' | wc -l\`
+		T=1
+        while [ "$T" -le "$C" ]; do
+        Users=\`ls /home/ | awk '{print $1}' | head -$T | tail -1\`
+        ln -s /mnt/${folder} /home/$Users/Desktop/
+        T=$[$T+1]
+        done
+        echo "FSKontrol Ayarlar Yapıldı"
+fi`;
         } else if (type === 'delete') {
             rawScript = `#!/bin/bash
-P="${folder}";S="${ip}";M="/mnt/$P";C="/etc/samba/.$P-credentials"
+P="${folder}";S="${ip}";M="/mnt/$P";C="/etc/samba/.smbcredentials"
 [ "$(id -u)" -ne 0 ] && exit 1
 if mountpoint -q "$M"; then umount "$M" || umount -l "$M"; fi
 if mountpoint -q "$M"; then exit 1; fi
 for L in /etc/skel/Desktop/$P /home/*/Desktop/$P; do [ -L "$L" ] && unlink "$L"; done
 sed -i "\\|//$S/$P[[:space:]]$M[[:space:]]|d" /etc/fstab
-rm -f "$C"; rmdir "$M" 2>/dev/null`;
+rmdir "$M" 2>/dev/null`;
         }
         
-        // Kullanıcı isteği: Şifreli (Base64) gönderim kalsın ve tanımlama işlemi 1 kere tetiklensin.
-        const encodedScript = btoa(unescape(encodeURIComponent(rawScript)));
-        let script = `echo ${encodedScript} | base64 -d | bash`;
+        let script = rawScript;
         
-        // Bilgi bankası sistemi gibi istemci IP'sini otomatik algılaması için bo IP gönderiyoruz
+        // Bilgi bankası sistemi gibi istemci IP'sini otomatik algılaması için boş IP gönderiyoruz
         this.openRunCommandModal(null, script, '');
     },
     runPrinterAction: function(id, type) {
