@@ -570,34 +570,28 @@ def generate_pdf_direct(t_type, items, photo_path=None):
         other_val = items.get("other_equipment", "")
         draw_checkbox(160, pdf.get_y(), f"Diğer: {other_val}", "Diğer" in equipment or other_val != "")
         
-        # 3. HASAR TESPİT AÇIKLAMASI
+        # 3. HASAR TESPİT AÇIKLAMASI (Kutu büyütüldü, gereksiz yönlendirme metni kaldırıldı)
         pdf.set_xy(10, y_start + 27)
         pdf.set_font("ArialTR", "B", 10)
         pdf.cell(190, 5, "3. HASAR TESPİT AÇIKLAMASI", ln=True)
         y_desc = pdf.get_y()
-        desc_box_h = 36
+        desc_box_h = 50
         pdf.rect(10, y_desc, 190, desc_box_h)
-        pdf.set_xy(12, y_desc + 1.2)
-        pdf.set_font("ArialTR", "", 7.5)
-        pdf.set_text_color(120, 120, 120)
-        pdf.cell(0, 3.5, "Hasar nasıl tespit edildi? Hasarın durumu ve kapsamı hakkında ayrıntılı bilgi veriniz.", ln=True)
-        pdf.set_text_color(0, 0, 0)
         
         desc = items.get("desc", "").strip()
-        # Metin uzunluğuna göre yazı boyutu ve satır aralığını daralt
         desc_len = len(desc)
-        if desc_len > 450:
-            desc_font = 8.0
-            desc_lh = 3.8
-        elif desc_len > 250:
+        if desc_len > 550:
             desc_font = 8.5
             desc_lh = 4.2
-        else:
+        elif desc_len > 300:
             desc_font = 9.0
             desc_lh = 4.6
+        else:
+            desc_font = 9.5
+            desc_lh = 5.0
             
         pdf.set_font("ArialTR", "", desc_font)
-        pdf.set_xy(12, y_desc + 5.5)
+        pdf.set_xy(12, y_desc + 2.5)
         pdf.multi_cell(186, desc_lh, desc, border=0)
         
         # 4. HASAR TESPİT FOTOĞRAFI
@@ -606,23 +600,23 @@ def generate_pdf_direct(t_type, items, photo_path=None):
         pdf.set_font("ArialTR", "B", 10)
         pdf.cell(190, 5, "4. HASAR TESPİT FOTOĞRAFI", ln=True)
         photo_y = photo_title_y + 5
-        photo_h = 80
+        photo_h = 75
         pdf.rect(10, photo_y, 190, photo_h)
         if photo_path and os.path.exists(photo_path):
             try:
-                pdf.image(photo_path, 12, photo_y + 2, 186, 76)
+                pdf.image(photo_path, 12, photo_y + 2, 186, 71)
             except Exception as e:
-                pdf.set_xy(12, photo_y + 35)
+                pdf.set_xy(12, photo_y + 32)
                 pdf.cell(186, 10, "Fotoğraf yüklenemedi", align="C")
         else:
-            pdf.set_xy(12, photo_y + 35)
+            pdf.set_xy(12, photo_y + 32)
             pdf.set_font("ArialTR", "", 10)
             pdf.set_text_color(100, 100, 100)
             pdf.cell(186, 10, "(Lütfen hasarın net görüldüğü fotoğrafı buraya ekleyiniz veya zımbalayınız)", align="C")
             pdf.set_text_color(0, 0, 0)
             
-        # İmzalar
-        sig_y = photo_y + photo_h + 5
+        # İmzalar (biraz daha aşağı kaydırıldı)
+        sig_y = photo_y + photo_h + 8
         pdf.set_xy(10, sig_y)
         
         kullanici = items.get("teslimEden", items.get("kullanici", ""))
