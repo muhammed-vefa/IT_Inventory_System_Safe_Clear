@@ -501,26 +501,27 @@ def generate_pdf_direct(t_type, items, photo_path=None):
         pdf.cell(45, 5, "Sayfa:1/1", align="C")
         
         pdf.set_line_width(0.2)
-        pdf.ln(10)
         
-        # Main Title
+        # Main Title & Tarih (aynı hizada, sağa yaslı tarih)
+        now_str = items.get("tarih") or items.get("date") or datetime.datetime.now().strftime("%d.%m.%Y")
         pdf.set_font("ArialTR", "B", 12)
-        pdf.set_y(48)
-        pdf.cell(0, 6, "BİLGİ İŞLEM HASAR TESPİT TUTANAĞI", ln=True, align="C")
+        pdf.set_xy(10, 44)
+        pdf.cell(190, 6, "BİLGİ İŞLEM HASAR TESPİT TUTANAĞI", align="C")
         
         pdf.set_font("ArialTR", "", 10)
-        pdf.set_y(58)
-        now_str = datetime.datetime.now().strftime("%d.%m.%Y")
-        pdf.cell(0, 6, f"Tarih : {now_str}", ln=True, align="R")
-        pdf.set_y(65)
-        sla = items.get("sla", "")
-        pdf.cell(0, 6, f"SLA Numarası: {sla}", ln=True, align="L")
+        pdf.set_xy(10, 44)
+        pdf.cell(190, 6, f"Tarih : {now_str}", align="R")
         
-        pdf.ln(5)
+        # SLA Numarası (üst boşluk daraltıldı)
+        pdf.set_font("ArialTR", "", 10)
+        pdf.set_xy(10, 52)
+        sla = items.get("sla", "")
+        pdf.cell(190, 5, f"SLA Numarası: {sla}", align="L")
         
         # 1. CİHAZ BİLGİLERİ
+        pdf.set_xy(10, 59)
         pdf.set_font("ArialTR", "B", 10)
-        pdf.cell(0, 6, "1. CİHAZ BİLGİLERİ", ln=True)
+        pdf.cell(190, 5, "1. CİHAZ BİLGİLERİ", ln=True)
         pdf.set_font("ArialTR", "", 10)
         y_cihaz = pdf.get_y()
         pdf.set_fill_color(240, 240, 240)
@@ -532,13 +533,13 @@ def generate_pdf_direct(t_type, items, photo_path=None):
         pdf.cell(65, 6, f"{model_str}")
         pdf.cell(30, 6, "Seri Numarası:", fill=True)
         pdf.cell(60, 6, f"{seri_str}")
-        pdf.ln(9)
         
         # 2. HASAR GÖREN CİHAZ TÜRÜ
+        pdf.set_xy(10, y_cihaz + 11)
         pdf.set_font("ArialTR", "B", 10)
-        pdf.cell(0, 6, "2. HASAR GÖREN CİHAZ TÜRÜ", ln=True)
+        pdf.cell(190, 5, "2. HASAR GÖREN CİHAZ TÜRÜ", ln=True)
         y_start = pdf.get_y()
-        pdf.rect(10, y_start, 190, 25)
+        pdf.rect(10, y_start, 190, 24)
         
         equipment = items.get("equipment", [])
         if isinstance(equipment, str):
@@ -552,7 +553,7 @@ def generate_pdf_direct(t_type, items, photo_path=None):
             pdf.set_font("ArialTR", "", 10)
             pdf.text(x+5, y+3, label)
             
-        pdf.set_y(y_start + 4)
+        pdf.set_y(y_start + 3)
         draw_checkbox(15, pdf.get_y(), "Bilgisayar", "Bilgisayar" in equipment)
         draw_checkbox(65, pdf.get_y(), "Monitör", "Monitör" in equipment)
         draw_checkbox(115, pdf.get_y(), "Yazıcı", "Yazıcı" in equipment)
@@ -568,29 +569,45 @@ def generate_pdf_direct(t_type, items, photo_path=None):
         draw_checkbox(115, pdf.get_y(), "Kiosk", "Kiosk" in equipment)
         other_val = items.get("other_equipment", "")
         draw_checkbox(160, pdf.get_y(), f"Diğer: {other_val}", "Diğer" in equipment or other_val != "")
-        pdf.ln(10)
         
         # 3. HASAR TESPİT AÇIKLAMASI
+        pdf.set_xy(10, y_start + 27)
         pdf.set_font("ArialTR", "B", 10)
-        pdf.cell(0, 6, "3. HASAR TESPİT AÇIKLAMASI", ln=True)
+        pdf.cell(190, 5, "3. HASAR TESPİT AÇIKLAMASI", ln=True)
         y_desc = pdf.get_y()
-        pdf.rect(10, y_desc, 190, 35)
-        pdf.set_xy(12, y_desc + 1)
-        pdf.set_font("ArialTR", "", 8)
+        desc_box_h = 36
+        pdf.rect(10, y_desc, 190, desc_box_h)
+        pdf.set_xy(12, y_desc + 1.2)
+        pdf.set_font("ArialTR", "", 7.5)
         pdf.set_text_color(120, 120, 120)
-        pdf.cell(0, 4, "Hasar nasıl tespit edildi? Hasarın durumu ve kapsamı hakkında ayrıntılı bilgi veriniz.", ln=True)
+        pdf.cell(0, 3.5, "Hasar nasıl tespit edildi? Hasarın durumu ve kapsamı hakkında ayrıntılı bilgi veriniz.", ln=True)
         pdf.set_text_color(0, 0, 0)
-        pdf.set_font("ArialTR", "", 10)
-        desc = items.get("desc", "")
-        pdf.set_xy(12, y_desc + 6)
-        pdf.multi_cell(186, 6, desc, border=0)
-        pdf.set_y(y_desc + 37)
+        
+        desc = items.get("desc", "").strip()
+        # Metin uzunluğuna göre yazı boyutu ve satır aralığını daralt
+        desc_len = len(desc)
+        if desc_len > 450:
+            desc_font = 8.0
+            desc_lh = 3.8
+        elif desc_len > 250:
+            desc_font = 8.5
+            desc_lh = 4.2
+        else:
+            desc_font = 9.0
+            desc_lh = 4.6
+            
+        pdf.set_font("ArialTR", "", desc_font)
+        pdf.set_xy(12, y_desc + 5.5)
+        pdf.multi_cell(186, desc_lh, desc, border=0)
         
         # 4. HASAR TESPİT FOTOĞRAFI
+        photo_title_y = y_desc + desc_box_h + 3
+        pdf.set_xy(10, photo_title_y)
         pdf.set_font("ArialTR", "B", 10)
-        pdf.cell(0, 6, "4. HASAR TESPİT FOTOĞRAFI", ln=True)
-        photo_y = pdf.get_y()
-        pdf.rect(10, photo_y, 190, 80)
+        pdf.cell(190, 5, "4. HASAR TESPİT FOTOĞRAFI", ln=True)
+        photo_y = photo_title_y + 5
+        photo_h = 80
+        pdf.rect(10, photo_y, 190, photo_h)
         if photo_path and os.path.exists(photo_path):
             try:
                 pdf.image(photo_path, 12, photo_y + 2, 186, 76)
@@ -604,7 +621,9 @@ def generate_pdf_direct(t_type, items, photo_path=None):
             pdf.cell(186, 10, "(Lütfen hasarın net görüldüğü fotoğrafı buraya ekleyiniz veya zımbalayınız)", align="C")
             pdf.set_text_color(0, 0, 0)
             
-        pdf.set_y(photo_y + 85)
+        # İmzalar
+        sig_y = photo_y + photo_h + 5
+        pdf.set_xy(10, sig_y)
         
         kullanici = items.get("teslimEden", items.get("kullanici", ""))
         kullanici_unvan = items.get("userUnvan", "")
@@ -614,23 +633,23 @@ def generate_pdf_direct(t_type, items, photo_path=None):
         birim_unvan = items.get("birimUnvan", "")
         
         pdf.set_font("ArialTR", "", 9)
-        pdf.cell(63, 6, "Kullanıcı / Sorumlu", align="C")
-        pdf.cell(63, 6, "Tespit Eden", align="C")
-        pdf.cell(64, 6, "Birim Sorumlusu", align="C", ln=True)
+        pdf.cell(63, 5, "Kullanıcı / Sorumlu", align="C")
+        pdf.cell(63, 5, "Tespit Eden", align="C")
+        pdf.cell(64, 5, "Birim Sorumlusu", align="C", ln=True)
         
-        pdf.cell(63, 6, "Ad-Soyad/Unvan/İmza", align="C")
-        pdf.cell(63, 6, "Ad-Soyad/Unvan/İmza", align="C")
-        pdf.cell(64, 6, "Ad-Soyad/Unvan/İmza", align="C", ln=True)
+        pdf.cell(63, 5, "Ad-Soyad/Unvan/İmza", align="C")
+        pdf.cell(63, 5, "Ad-Soyad/Unvan/İmza", align="C")
+        pdf.cell(64, 5, "Ad-Soyad/Unvan/İmza", align="C", ln=True)
         
         pdf.set_font("ArialTR", "", 9)
-        pdf.cell(63, 6, kullanici_unvan, align="C")
-        pdf.cell(63, 6, tespit_unvan, align="C")
-        pdf.cell(64, 6, birim_unvan, align="C", ln=True)
+        pdf.cell(63, 5, kullanici_unvan, align="C")
+        pdf.cell(63, 5, tespit_unvan, align="C")
+        pdf.cell(64, 5, birim_unvan, align="C", ln=True)
         
         pdf.set_font("ArialTR", "B", 9)
-        pdf.cell(63, 6, kullanici, align="C")
-        pdf.cell(63, 6, tespit_eden, align="C")
-        pdf.cell(64, 6, birim_sorumlusu, align="C", ln=True)
+        pdf.cell(63, 5, kullanici, align="C")
+        pdf.cell(63, 5, tespit_eden, align="C")
+        pdf.cell(64, 5, birim_sorumlusu, align="C", ln=True)
 
     temp_dir = TEMP_DIR
     os.makedirs(temp_dir, exist_ok=True)
