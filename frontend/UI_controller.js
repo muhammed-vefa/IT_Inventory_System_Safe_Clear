@@ -971,6 +971,7 @@ checkLoginStatus: function() {
         this.loadDepot();
         this.loadDashboardStats();
         this.loadGeneralNotes();
+        this.renderPrinters();
     },
     loadNoteCounts: async function() {
         try {
@@ -10045,6 +10046,7 @@ app.saveNewPrinter = async function() {
 
         app.showToast(data.message || 'Cihaz başarıyla eklendi.', 'success');
         app.closePrinterAddModal();
+        await app.renderPrinters();
         app.renderAll();
     } catch (e) {
         app.showToast('Kayıt başarısız: ' + e.message, 'error');
@@ -10064,6 +10066,7 @@ app.deleteDeviceFromModal = async function() {
             });
             app.showToast(data.message || 'Cihaz başarıyla silindi.', 'success');
             app.closeDeviceDetail();
+            await app.renderPrinters();
             app.renderAll();
         } catch (e) {
             app.showToast('Silme başarısız: ' + e.message, 'error');
