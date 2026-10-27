@@ -2759,7 +2759,7 @@ renderPrintersChunk: function() {
         try {
             const resp = await this.apiRequest('/inventory/printers/cups/toggle_pause', {
                 method: 'POST',
-                body: JSON.stringify({id: id, type: type, action: action})
+                body: JSON.stringify({id: id, action: action})
             });
             if(resp.success) {
                 this.showToast(resp.message || 'İşlem başarılı', 'success');
@@ -2783,7 +2783,7 @@ renderPrintersChunk: function() {
         try {
             const resp = await this.apiRequest('/inventory/printers/cups/toggle_reject', {
                 method: 'POST',
-                body: JSON.stringify({id: id, type: type, action: action})
+                body: JSON.stringify({id: id, action: action})
             });
             if(resp.success) {
                 this.showToast(resp.message || 'İşlem başarılı', 'success');
