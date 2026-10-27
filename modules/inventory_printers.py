@@ -1362,6 +1362,10 @@ def add_device():
             max_id = max_id_row[0] if (max_id_row and max_id_row[0]) else 0
             name = f"{prefix}-{(max_id + 1):03d}"
             
+        # Canli tablonun gercek kolonlarini dinamik al
+        cursor.execute(f"SELECT TOP 0 * FROM {table_name}")
+        existing_cols = {c[0].lower(): c[0] for c in cursor.description}
+
         if table_name == 'printers':
             pr_no = data.get('pr_no') or name
             model = data.get('model')
@@ -1375,27 +1379,57 @@ def add_device():
             is_faulty = 1 if status == 'Arızalı' else 0
             in_service = 1 if status == 'Serviste' else 0
             
-            query = """INSERT INTO printers 
-                       (pr_no, model, serial_no, mac, ip, location_code, status, on_field, warehouse, is_faulty, serviste, is_deleted)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"""
-            cursor.execute(query, (pr_no, model, serial_no, mac, ip, location_code, status, on_field, warehouse, is_faulty, in_service))
+            insert_data = {
+                'pr_no': pr_no,
+                'model': model,
+                'serial_no': serial_no,
+                'mac': mac,
+                'ip': ip,
+                'location_code': location_code,
+                'on_field': on_field,
+                'warehouse': warehouse,
+                'is_faulty': is_faulty,
+                'in_service': in_service,
+                'is_deleted': 0
+            }
+            if 'status' in existing_cols:
+                insert_data['status'] = status
+            if 'serviste' in existing_cols and 'in_service' not in existing_cols:
+                insert_data['serviste'] = in_service
+                insert_data.pop('in_service', None)
         else:
             model = data.get('model')
             serial_no = data.get('serial_no')
             pc_no = data.get('pc_no')
             status = data.get('status') or 'Kurulu'
+            on_field = 1 if status == 'Kurulu' else 0
+            warehouse = 1 if status == 'Depoda' else 0
+            is_faulty = 1 if status == 'Arızalı' else 0
             
-            from modules.inventory_core import check_column_exists
-            if check_column_exists(table_name, 'model'):
-                query = f"""INSERT INTO {table_name} 
-                           (name, model, serial_no, pc_no, status, is_deleted)
-                           VALUES (?, ?, ?, ?, ?, 0)"""
-                cursor.execute(query, (name, model, serial_no, pc_no, status))
-            else:
-                query = f"""INSERT INTO {table_name} 
-                           (name, serial_no, pc_no, status, is_deleted)
-                           VALUES (?, ?, ?, ?, 0)"""
-                cursor.execute(query, (name, serial_no, pc_no, status))
+            insert_data = {
+                'name': name,
+                'serial_no': serial_no,
+                'pc_no': pc_no,
+                'is_deleted': 0
+            }
+            if 'model' in existing_cols:
+                insert_data['model'] = model
+            if 'status' in existing_cols:
+                insert_data['status'] = status
+            if 'on_field' in existing_cols:
+                insert_data['on_field'] = on_field
+            if 'warehouse' in existing_cols:
+                insert_data['warehouse'] = warehouse
+            if 'is_faulty' in existing_cols:
+                insert_data['is_faulty'] = is_faulty
+
+        cols_to_insert = [existing_cols[c.lower()] for c in insert_data.keys() if c.lower() in existing_cols]
+        vals_to_insert = [insert_data[c.lower()] for c in insert_data.keys() if c.lower() in existing_cols]
+        col_names_sql = ", ".join([f"[{col}]" for col in cols_to_insert])
+        placeholders_sql = ", ".join(["?"] * len(cols_to_insert))
+
+        query = f"INSERT INTO {table_name} ({col_names_sql}) VALUES ({placeholders_sql})"
+        cursor.execute(query, vals_to_insert)
 
         conn.commit()
         conn.close()
