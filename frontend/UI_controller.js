@@ -5871,16 +5871,23 @@ rmdir "$M" 2>/dev/null`;
             }
             const safeName = this.escapeHtml(f.name || '');
             html += `
-            <div class="card" style="padding: 15px; display: flex; align-items: center; gap: 15px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px;">
-                <div style="width: 45px; height: 45px; background: rgba(255,255,255,0.05); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: ${iconColor}; flex-shrink: 0;">
+            <div class="card" style="padding: 12px 14px; display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; min-height: 82px;">
+                <div style="width: 44px; height: 44px; background: rgba(255,255,255,0.05); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: ${iconColor}; flex-shrink: 0;">
                     <i class="fas ${icon} fa-xl"></i>
                 </div>
                 <div style="flex: 1; min-width: 0; cursor: pointer;" onclick="window.location.href='${this.state.API_BASE}/installations/downloads/get/${encodeURIComponent(f.name)}'">
-                    <div style="font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${safeName}">${safeName}</div>
-                    <div style="font-size: 0.7rem; opacity: 0.6; margin-top: 3px;">${f.size} ${isDir ? '• Klasör (ZIP)' : ''} | ${f.date}</div>
+                    <div style="font-weight: 600; font-size: 0.92rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word;" title="${safeName}">${safeName}</div>
+                    <div style="font-size: 0.7rem; opacity: 0.6; margin-top: 4px;">${f.size} ${isDir ? '• Klasör (ZIP)' : ''} | ${f.date}</div>
                 </div>
-                <button class="btn btn-sm btn-primary" onclick="window.location.href='${this.state.API_BASE}/installations/downloads/get/${encodeURIComponent(f.name)}'" title="${isDir ? 'ZIP Olarak İndir' : 'İndir'}" style="white-space: nowrap;"><i class="fas fa-download"></i> İndir</button>
-                ${(this.state.activeUser && this.state.activeUser.role === 'ADMIN') ? `<button class="btn btn-sm" style="background: rgba(239,68,68,0.2); color: #ef4444; border-radius: 5px;" onclick="app.deleteDownloadFile('${safeName}')" title="Sil"><i class="fas fa-trash"></i></button>` : ''}
+                <div style="display: flex; flex-direction: column; gap: 5px; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <button class="btn btn-sm btn-primary" onclick="window.location.href='${this.state.API_BASE}/installations/downloads/get/${encodeURIComponent(f.name)}'" title="${isDir ? 'ZIP Olarak İndir' : 'İndir'}" style="width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 6px;">
+                        <i class="fas fa-download"></i>
+                    </button>
+                    ${(this.state.activeUser && this.state.activeUser.role === 'ADMIN') ? `
+                    <button class="btn btn-sm" style="width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; background: rgba(239,68,68,0.2); color: #ef4444; border-radius: 6px; border: 1px solid rgba(239,68,68,0.3);" onclick="app.deleteDownloadFile('${safeName}')" title="Sil">
+                        <i class="fas fa-trash"></i>
+                    </button>` : ''}
+                </div>
             </div>`;
         });
         html += '</div>';
