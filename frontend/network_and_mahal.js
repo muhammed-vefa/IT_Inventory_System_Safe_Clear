@@ -90,8 +90,9 @@ Object.assign(window.app, {
     },
 
     openMahalModal: function(id) {
-        if (!this.state.isLoggedIn || (this.state.activeUser?.role || "").toUpperCase() !== "ADMIN") {
-            this.showNotification("Bu islem icin admin yetkisi gereklidir.", "error");
+        const canEdit = this.canEdit("mahal");
+        if (!this.state.isLoggedIn || (!id && !canEdit)) {
+            this.showNotification("Bu işlem için yetkiniz bulunmuyor.", "error");
             return;
         }
         this.state.editingId = id;
@@ -139,8 +140,8 @@ Object.assign(window.app, {
     },
 
     deleteMahal: async function(id) {
-        if (!this.state.isLoggedIn || (this.state.activeUser?.role || "").toUpperCase() !== "ADMIN") {
-            this.showNotification("Bu islem icin admin yetkisi gereklidir.", "error");
+        if (!this.state.isLoggedIn || !this.canEdit("mahal")) {
+            this.showNotification("Bu işlem için yetkiniz bulunmuyor.", "error");
             return;
         }
         if (!confirm("Bu mahali silmek istediginize emin misiniz?")) return;
@@ -500,8 +501,9 @@ Object.assign(window.app, {
     },
 
     openNetworkModal: function(id) {
-        if (!this.state.isLoggedIn || (this.state.activeUser?.role || "").toUpperCase() !== "ADMIN") {
-            this.showNotification("Bu islem icin admin yetkisi gereklidir.", "error");
+        const canEdit = this.canEdit("network");
+        if (!this.state.isLoggedIn || (!id && !canEdit)) {
+            this.showNotification("Bu işlem için yetkiniz bulunmuyor.", "error");
             return;
         }
         this.state.editingId = id;
@@ -589,7 +591,11 @@ Object.assign(window.app, {
     },
 
     deleteNetwork: async function(id) {
-        if (!confirm("Bu cihazi silmek istediginize emin misiniz?")) return;
+        if (!this.state.isLoggedIn || !this.canEdit("network")) {
+            this.showNotification("Bu işlem için yetkiniz bulunmuyor.", "error");
+            return;
+        }
+        if (!confirm("Bu cihazı silmek istediğinize emin misiniz?")) return;
         const res = await this.apiRequest(`/network/delete/${id}`, { method: "DELETE" });
         if (res && res.success) {
             this.showNotification("Basariyla silindi", "success");

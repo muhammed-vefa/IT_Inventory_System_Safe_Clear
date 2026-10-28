@@ -2988,7 +2988,7 @@
 
     <!-- ═══════════════ USER ADD/EDIT MODAL ═══════════════ -->
     <div id="user-modal" class="modal-backdrop" style="display: none;">
-        <div class="card" style="max-width: 420px; width: 90%;">
+        <div class="card" style="max-width: 420px; width: 90%; max-height: 90vh; overflow-y: auto;">
             <div class="flex-between mb-3">
                 <h3 id="user-modal-title"><i class="fas fa-user-plus"></i> Yeni Kullanıcı</h3>
                 <i class="fas fa-times modal-close" onclick="document.getElementById('user-modal').style.display='none'"></i>
@@ -3007,7 +3007,7 @@
                 </select>
 
                 <!-- Özel Yetki Listesi -->
-                <div id="user-permissions-container" style="display: none; background: rgba(0,0,0,0.1); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                <div id="user-permissions-container" style="display: none; background: rgba(0,0,0,0.1); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); max-height: 280px; overflow-y: auto;">
                     <label style="font-size: 0.75rem; color: var(--accent); margin-bottom: 10px; display: block;">ERİŞİLEBİLİR MODÜLLER:</label>
                     <div class="equipment-grid" style="grid-template-columns: 1fr 1fr; gap: 8px;">
                         <label class="check-container" style="font-size:0.8rem;">Dashboard <input type="checkbox" value="dashboard"><span class="checkmark"></span></label>
@@ -3018,6 +3018,11 @@
                         <label class="check-container" style="font-size:0.8rem;">Depo <input type="checkbox" value="depot"><span class="checkmark"></span></label>
                         <label class="check-container" style="font-size:0.8rem;">Tutanaklar <input type="checkbox" value="docs"><span class="checkmark"></span></label>
                         <label class="check-container" style="font-size:0.8rem;">Servis <input type="checkbox" value="service"><span class="checkmark"></span></label>
+                        <label class="check-container" style="font-size:0.8rem;">Mahal <input type="checkbox" value="mahal"><span class="checkmark"></span></label>
+                        <label class="check-container" style="font-size:0.8rem;">Ağ Cihazları <input type="checkbox" value="network"><span class="checkmark"></span></label>
+                        <label class="check-container" style="font-size:0.8rem;">Bina Haritası <input type="checkbox" value="building-map"><span class="checkmark"></span></label>
+                        <label class="check-container" style="font-size:0.8rem;">Hızlı Kurulumlar <input type="checkbox" value="installations"><span class="checkmark"></span></label>
+                        <label class="check-container" style="font-size:0.8rem;">Raporlar <input type="checkbox" value="admin-reports"><span class="checkmark"></span></label>
                         <label class="check-container" style="font-size:0.8rem;">Audit Logs <input type="checkbox" value="logs"><span class="checkmark"></span></label>
                         <label class="check-container" style="font-size:0.8rem;">Kullanıcılar <input type="checkbox" value="users"><span class="checkmark"></span></label>
                     </div>

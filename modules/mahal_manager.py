@@ -1,7 +1,7 @@
 from core.utils import normalize_row
 from flask import Blueprint, jsonify, request
 from core.database_sql import get_db_connection, query_db
-from core.auth import require_admin
+from core.auth import require_editor
 
 mahal_manager_bp = Blueprint('mahal_manager', __name__)
 
@@ -17,7 +17,7 @@ def get_all():
     return jsonify(results)
 
 @mahal_manager_bp.route('/add', methods=['POST'])
-@require_admin
+@require_editor
 def add_mahal():
     data = request.json
     location_code = data.get('location_code')
@@ -35,7 +35,7 @@ def add_mahal():
     return jsonify({"success": True})
 
 @mahal_manager_bp.route('/update/<int:item_id>', methods=['PUT'])
-@require_admin
+@require_editor
 def update_mahal(item_id):
     data = request.json
     location_code = data.get('location_code')
@@ -53,7 +53,7 @@ def update_mahal(item_id):
     return jsonify({"success": True})
 
 @mahal_manager_bp.route('/delete/<int:item_id>', methods=['DELETE'])
-@require_admin
+@require_editor
 def delete_mahal(item_id):
     conn = get_db_connection()
     cursor = conn.cursor()

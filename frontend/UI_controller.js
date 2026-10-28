@@ -749,8 +749,10 @@ checkLoginStatus: function() {
         } else if (isOther && user.permissions) {
             try {
                 allowedViews = JSON.parse(user.permissions);
-                if (!allowedViews.includes('building-map')) allowedViews.push('building-map');
-            } catch(e) { allowedViews = ['building-map']; }
+                if (allowedViews.includes('printers') && !allowedViews.includes('inventory')) {
+                    allowedViews.push('inventory');
+                }
+            } catch(e) { allowedViews = []; }
         } else if (role === 'EDITOR') {
             allowedViews = ['dashboard', 'building-map', 'inventory', 'general-notes', 'areas', 'docs', 'service', 'installations', 'mahal', 'network'];
         } else if (this.isDepotRole(role)) {

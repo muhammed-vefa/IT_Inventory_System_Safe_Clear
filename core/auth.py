@@ -148,10 +148,16 @@ def require_editor(f):
         if '/depot/' in path: module = 'depot'
         if '/document/' in path: module = 'docs'
         if '/service/' in path: module = 'service'
-        if '/users/' in path or '/logs/' in path: module = 'admin_only'
+        if '/network/' in path: module = 'network'
+        if '/mahal/' in path: module = 'mahal'
+        if '/building_map/' in path or '/building-map/' in path: module = 'building-map'
+        if '/installations/' in path: module = 'installations'
+        if '/admin/reports/' in path or '/admin-reports/' in path: module = 'admin-reports'
+        if '/users/' in path: module = 'users'
+        if '/logs/' in path: module = 'logs'
 
         if role == 'EDITOR':
-            if module == 'admin_only':
+            if module in ('users', 'logs', 'admin-reports'):
                 return jsonify({'error': 'Bu işlem için ADMIN yetkisi gerekli'}), 403
             return f(*args, **kwargs)
             

@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from core.database_sql import get_db_connection, query_db
-from core.auth import require_admin
+from core.auth import require_editor
 import datetime
 
 network_manager_bp = Blueprint("network_manager", __name__)
@@ -17,7 +17,7 @@ def get_all():
     return jsonify(results)
 
 @network_manager_bp.route("/add", methods=["POST"])
-@require_admin
+@require_editor
 def add_device():
     data = request.json
     dev_cat = data.get("device_category")
@@ -50,7 +50,7 @@ def add_device():
     return jsonify({"success": True})
 
 @network_manager_bp.route("/update/<int:item_id>", methods=["PUT"])
-@require_admin
+@require_editor
 def update_device(item_id):
     data = request.json
     dev_cat = data.get("device_category")
@@ -84,7 +84,7 @@ def update_device(item_id):
     return jsonify({"success": True})
 
 @network_manager_bp.route("/delete/<int:item_id>", methods=["DELETE"])
-@require_admin
+@require_editor
 def delete_device(item_id):
     user_name = request.current_user.get("display_name") or request.current_user.get("username") or "Bilinmiyor"
     conn = get_db_connection()
