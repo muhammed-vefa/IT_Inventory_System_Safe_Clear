@@ -5756,10 +5756,14 @@ rmdir "$M" 2>/dev/null`;
         } else {
             if (appsContainer) appsContainer.style.display = 'none';
             if (downloadsGrid) downloadsGrid.style.display = '';
-            if (dlActions) dlActions.style.display = (this.state.activeUser && this.state.activeUser.role === 'ADMIN') ? 'flex' : 'none';
+            if (dlActions) dlActions.style.display = 'flex';
+            const uploadBtn = document.getElementById('inst-upload-label');
+            if (uploadBtn) uploadBtn.style.display = (this.state.activeUser && this.state.activeUser.role === 'ADMIN') ? 'inline-flex' : 'none';
             if (btnSifir) btnSifir.style.display = 'none';
             if (btnSifirEdit) btnSifirEdit.style.display = 'none';
             if (btnBulk) btnBulk.style.display = 'none';
+            const searchInput = document.getElementById('downloads-search-input');
+            if (searchInput) searchInput.value = '';
             this.loadDownloadFiles();
         }
     },
@@ -5836,27 +5840,47 @@ rmdir "$M" 2>/dev/null`;
         }
     },
     renderDownloadFiles: function(files) {
+        this._downloadFiles = files || [];
+        this.renderDownloadFilesCards(this._downloadFiles);
+    },
+    filterDownloadFiles: function(query) {
+        if (!this._downloadFiles) return;
+        const q = (query || '').toLowerCase().trim();
+        const filtered = q ? this._downloadFiles.filter(f => (f.name || '').toLowerCase().includes(q)) : this._downloadFiles;
+        this.renderDownloadFilesCards(filtered);
+    },
+    renderDownloadFilesCards: function(files) {
         const grid = document.getElementById('downloads-grid');
         if (!grid) return;
-        if (files.length === 0) {
-            grid.innerHTML = '<div style="text-align:center; padding:30px; opacity:0.5;">Henüz indirme dosyası bulunamadı.</div>';
+        if (!files || files.length === 0) {
+            grid.innerHTML = '<div style="grid-column: 1 / -1; text-align:center; padding:30px; opacity:0.5;">İndirme dosyası veya klasör bulunamadı.</div>';
             return;
         }
-        let html = '<div style="grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; width: 100%; align-items: stretch;">';
+        let html = '<div style="grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; width: 100%; align-items: stretch;">';
         files.forEach(f => {
-            const isBat = f.name.toLowerCase().endsWith('.bat');
-            const icon = isBat ? 'fa-terminal' : 'fa-file-arrow-down';
+            const isDir = !!f.is_dir;
+            const isBat = (f.name || '').toLowerCase().endsWith('.bat');
+            let icon = 'fa-file-arrow-down';
+            let iconColor = 'var(--accent)';
+            if (isDir) {
+                icon = 'fa-folder-open';
+                iconColor = '#f59e0b';
+            } else if (isBat) {
+                icon = 'fa-terminal';
+                iconColor = '#10b981';
+            }
+            const safeName = this.escapeHtml(f.name || '');
             html += `
-            <div class="card" style="padding: 15px; display: flex; align-items: center; gap: 15px; background: rgba(255,255,255,0.02);">
-                <div style="width: 45px; height: 45px; background: rgba(255,255,255,0.05); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--accent);">
+            <div class="card" style="padding: 15px; display: flex; align-items: center; gap: 15px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px;">
+                <div style="width: 45px; height: 45px; background: rgba(255,255,255,0.05); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: ${iconColor}; flex-shrink: 0;">
                     <i class="fas ${icon} fa-xl"></i>
                 </div>
-                <div style="flex: 1; overflow: hidden; cursor: pointer;" onclick="window.location.href='${this.state.API_BASE}/installations/downloads/get/${encodeURIComponent(f.name)}'">
-                    <div style="font-weight: 600; font-size: 0.9rem;" title="${f.name}">${f.name}</div>
-                    <div style="font-size: 0.7rem; opacity: 0.5;">${f.size} | ${f.date}</div>
+                <div style="flex: 1; min-width: 0; cursor: pointer;" onclick="window.location.href='${this.state.API_BASE}/installations/downloads/get/${encodeURIComponent(f.name)}'">
+                    <div style="font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${safeName}">${safeName}</div>
+                    <div style="font-size: 0.7rem; opacity: 0.6; margin-top: 3px;">${f.size} ${isDir ? '• Klasör (ZIP)' : ''} | ${f.date}</div>
                 </div>
-                <button class="btn btn-sm btn-primary" onclick="window.location.href='${this.state.API_BASE}/installations/downloads/get/${encodeURIComponent(f.name)}'"><i class="fas fa-download"></i> İndir</button>
-                ${(this.state.activeUser && this.state.activeUser.role === 'ADMIN') ? `<button class="btn btn-sm" style="background: rgba(239,68,68,0.2); color: #ef4444; border-radius: 5px;" onclick="app.deleteDownloadFile('${f.name}')" title="Dosyayı Sil"><i class="fas fa-trash"></i></button>` : ''}
+                <button class="btn btn-sm btn-primary" onclick="window.location.href='${this.state.API_BASE}/installations/downloads/get/${encodeURIComponent(f.name)}'" title="${isDir ? 'ZIP Olarak İndir' : 'İndir'}" style="white-space: nowrap;"><i class="fas fa-download"></i> İndir</button>
+                ${(this.state.activeUser && this.state.activeUser.role === 'ADMIN') ? `<button class="btn btn-sm" style="background: rgba(239,68,68,0.2); color: #ef4444; border-radius: 5px;" onclick="app.deleteDownloadFile('${safeName}')" title="Sil"><i class="fas fa-trash"></i></button>` : ''}
             </div>`;
         });
         html += '</div>';

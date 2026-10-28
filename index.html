@@ -2367,8 +2367,12 @@
                         <i class="fas fa-download"></i> Gerekli İndirmeler
                     </button>
                 </div>
-                <div id="inst-downloads-actions" style="display: none; gap: 8px; align-items: center;">
-                    <label for="inst-upload-file" class="btn btn-accent btn-sm" style="cursor: pointer; margin: 0;">
+                <div id="inst-downloads-actions" style="display: none; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <div style="position: relative; display: flex; align-items: center;">
+                        <input type="text" id="downloads-search-input" class="search-bar" style="width: 250px; height: 34px; padding-left: 32px; font-size: 0.85rem;" placeholder="İndirmelerde ara..." oninput="app.filterDownloadFiles(this.value)">
+                        <i class="fas fa-search" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 0.8rem; pointer-events: none;"></i>
+                    </div>
+                    <label id="inst-upload-label" for="inst-upload-file" class="btn btn-accent btn-sm" style="cursor: pointer; margin: 0; display: none;">
                         <i class="fas fa-upload"></i> Dosya Yükle
                     </label>
                     <input type="file" id="inst-upload-file" style="display:none;" onchange="app.uploadDownloadFile(this)">

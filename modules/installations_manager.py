@@ -1,3 +1,5 @@
+import tempfile
+import re
 import os
 import json
 from flask import Blueprint, jsonify, request, send_file, render_template_string, Response, send_from_directory
@@ -49,19 +51,40 @@ def get_safe_app_dir(app_id, check_exists=True):
         return None
     return app_dir
 
+def get_dir_size(dir_path):
+    total = 0
+    try:
+        for dirpath, dirnames, filenames in os.walk(dir_path):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                if not os.path.islink(fp):
+                    try:
+                        total += os.path.getsize(fp)
+                    except OSError:
+                        pass
+    except Exception:
+        pass
+    return total
+
+def format_size(size):
+    if size >= 1024 * 1024 * 1024:
+        return f"{size / (1024 * 1024 * 1024):.1f} GB"
+    elif size >= 1024 * 1024:
+        return f"{size / (1024 * 1024):.1f} MB"
+    elif size >= 1024:
+        return f"{size / 1024:.1f} KB"
+    else:
+        return f"{size} B"
+
 def file_info(path, filename):
     stat = os.stat(path)
-    size = stat.st_size
-    if size >= 1024 * 1024:
-        size_text = f"{size / (1024 * 1024):.1f} MB"
-    elif size >= 1024:
-        size_text = f"{size / 1024:.1f} KB"
-    else:
-        size_text = f"{size} B"
+    is_dir = os.path.isdir(path)
+    size = get_dir_size(path) if is_dir else stat.st_size
     return {
         'name': filename,
-        'size': size_text,
-        'date': datetime.datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M')
+        'size': format_size(size),
+        'date': datetime.datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M'),
+        'is_dir': is_dir
     }
 
 @installations_manager_bp.route('/apps', methods=['GET'])
@@ -604,28 +627,50 @@ if ($PSCommandPath -and (Test-Path $PSCommandPath)) {
 
 @installations_manager_bp.route('/downloads/list', methods=['GET'])
 def list_download_files():
-    """Hızlı Kurulumlar > Gerekli İndirmeler listesini döndürür."""
+    """Hızlı Kurulumlar > Gerekli İndirmeler listesini döndürür (dosyalar ve klasörler)."""
     try:
         dl_dir = get_download_dir()
         os.makedirs(dl_dir, exist_ok=True)
         files = []
         for filename in os.listdir(dl_dir):
             full_path = os.path.join(dl_dir, filename)
-            if os.path.isfile(full_path):
+            if os.path.isfile(full_path) or os.path.isdir(full_path):
                 files.append(file_info(full_path, filename))
-        files.sort(key=lambda x: x.get('name', '').lower())
+                
+        def natural_sort_key(item):
+            name = item.get('name', '')
+            return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', name)]
+            
+        files.sort(key=natural_sort_key)
         return jsonify({'success': True, 'files': files})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e), 'files': []}), 500
 
 @installations_manager_bp.route('/downloads/get/<path:filename>', methods=['GET'])
 def get_download_file(filename):
-    """Gerekli indirmeler dosyasını indirir."""
+    """Gerekli indirmeler dosyasını veya klasörünü (ZIP olarak) indirir."""
     dl_dir = get_download_dir()
     file_path = safe_join(dl_dir, filename)
-    if not file_path or not os.path.exists(file_path) or not os.path.isfile(file_path):
-        return jsonify({'success': False, 'error': 'Dosya bulunamadı'}), 404
-    return send_file(file_path, as_attachment=True, download_name=os.path.basename(file_path))
+    if not file_path or not os.path.exists(file_path):
+        return jsonify({'success': False, 'error': 'Dosya veya klasör bulunamadı'}), 404
+        
+    if os.path.isfile(file_path):
+        return send_file(file_path, as_attachment=True, download_name=os.path.basename(file_path))
+        
+    if os.path.isdir(file_path):
+        base_name = os.path.basename(file_path)
+        zip_temp_dir = os.path.join(tempfile.gettempdir(), "it_inventory_download_zips")
+        os.makedirs(zip_temp_dir, exist_ok=True)
+        zip_base = os.path.join(zip_temp_dir, base_name)
+        zip_file = zip_base + ".zip"
+        
+        folder_mtime = os.path.getmtime(file_path)
+        if not os.path.exists(zip_file) or os.path.getmtime(zip_file) < folder_mtime:
+            shutil.make_archive(zip_base, 'zip', file_path)
+            
+        return send_file(zip_file, as_attachment=True, download_name=f"{base_name}.zip")
+        
+    return jsonify({'success': False, 'error': 'Geçersiz öğe'}), 400
 
 @installations_manager_bp.route('/downloads/upload', methods=['POST'])
 @require_editor
@@ -648,13 +693,16 @@ def upload_download_file():
 @installations_manager_bp.route('/downloads/delete/<path:filename>', methods=['DELETE'])
 @require_editor
 def delete_download_file(filename):
-    """Gerekli indirmeler alanından dosya siler."""
+    """Gerekli indirmeler alanından dosya veya klasör siler."""
     try:
         dl_dir = get_download_dir()
         file_path = safe_join(dl_dir, filename)
-        if not file_path or not os.path.exists(file_path) or not os.path.isfile(file_path):
-            return jsonify({'success': False, 'error': 'Dosya bulunamadı'}), 404
-        os.remove(file_path)
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({'success': False, 'error': 'Dosya veya klasör bulunamadı'}), 404
+        if os.path.isdir(file_path):
+            shutil.rmtree(file_path)
+        else:
+            os.remove(file_path)
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
