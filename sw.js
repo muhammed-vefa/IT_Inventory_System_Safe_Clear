@@ -1,9 +1,10 @@
-const CACHE_NAME = 'it-inventory-v19';
+const CACHE_NAME = 'it-inventory-v20';
 const ASSETS = [
   '/',
   '/index.html',
   '/frontend/style.css',
   '/frontend/UI_controller.js',
+  '/frontend/keyboard_tester.js',
   '/static/logo/KOCSH.png',
   '/static/logo/favicon/web-app-manifest-192x192.png',
   '/static/logo/favicon/web-app-manifest-512x512.png',

@@ -425,6 +425,7 @@ var appData = {
         return role === 'DEPOT' || role === 'DEPO' || role === 'DEPOCU' || role === 'WAREHOUSE';
     },
     hasAccess: function(moduleName) {
+        if (moduleName === 'keyboard-test') return true;
         if (!this.state.activeUser) return false;
         var role = (this.state.activeUser.role || '').toUpperCase();
         if (role === 'ADMIN') return true;
@@ -440,6 +441,7 @@ var appData = {
         return false;
     },
     canEdit: function(moduleName) {
+        if (moduleName === 'keyboard-test') return true;
         if (!this.state.activeUser) return false;
         var role = (this.state.activeUser.role || '').toUpperCase();
         if (role === 'VIEWER') return false;
@@ -761,6 +763,7 @@ checkLoginStatus: function() {
             // VIEWER
             allowedViews = ['dashboard', 'building-map', 'inventory', 'general-notes', 'areas', 'service', 'mahal', 'network'];
         }
+        if (!allowedViews.includes('keyboard-test')) allowedViews.push('keyboard-test');
         // Navigasyon linklerini gizle/göster
         document.querySelectorAll('.nav-link').forEach(link => {
             const view = link.getAttribute('data-view');
@@ -1342,6 +1345,7 @@ checkLoginStatus: function() {
         }
         if (view === 'mahal' && this.loadMahal) this.loadMahal();
         if (view === 'network' && this.loadNetwork) this.loadNetwork();
+        if (view === 'keyboard-test' && this.initKeyboardTest) this.initKeyboardTest();
         
         // Default sub-tabs for other views
         if (view === 'inventory') {

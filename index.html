@@ -315,7 +315,9 @@
             <a href="#" class="nav-link" data-view="docs"><i class="fas fa-file-signature" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Tutanaklar</a>
             <a href="#" class="nav-link" data-view="mahal"><i class="fas fa-map-marker-alt" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Mahal</a>
             <a href="#" class="nav-link" data-view="network"><i class="fas fa-server" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Ağ Cihazları</a>
-            <a href="#" class="nav-link" data-view="building-map"><i class="fas fa-layer-group" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Bina Haritası</a> <a href="#" class="nav-link" data-view="installations" id="menu-installations" style="display:none;"><i class="fas fa-bolt" style="color:var(--accent);"></i> Hızlı Kurulumlar</a>
+            <a href="#" class="nav-link" data-view="building-map"><i class="fas fa-layer-group" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Bina Haritası</a>
+            <a href="#" class="nav-link" data-view="keyboard-test"><i class="fas fa-keyboard" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Klavye Testi</a>
+            <a href="#" class="nav-link" data-view="installations" id="menu-installations" style="display:none;"><i class="fas fa-bolt" style="color:var(--accent);"></i> Hızlı Kurulumlar</a>
         </div>
         <div class="flex-row" style="align-items:center; gap:12px;">
             <div class="custom-dropdown" id="shortcuts-dropdown">
@@ -332,6 +334,7 @@
                     <a href="https://bulut.kocaelish.com/index.php/login" target="_blank"><i class="fas fa-cloud"></i> Bulut</a>
                     <a href="http://ortakalan.kocaelish.com/WebClientNew/Login" target="_blank"><i class="fas fa-network-wired"></i> Ortak Alan</a>
                     <a href="http://speedtest.kocaelish.com/" target="_blank"><i class="fas fa-gauge-high"></i> Speedtest</a>
+                    <a href="#" onclick="event.preventDefault(); app.navigateTo('keyboard-test');"><i class="fas fa-keyboard" style="color:var(--accent);"></i> Klavye Testi</a>
                     <hr style="border:0; border-top:1px solid rgba(255,255,255,0.05); margin:5px 0;">
                     <div style="padding: 5px 20px; font-size: 0.8rem; color: var(--accent);"><i class="fas fa-tv"></i> Magic Info</div>
                     <div style="display:flex; flex-wrap:wrap; gap:5px; padding: 0 20px 5px 20px;">
@@ -2461,6 +2464,93 @@
                 </div>
             </div>
         </section>
+
+        <!-- ═══════════════ KEYBOARD TESTER VIEW ═══════════════ -->
+        <section id="view-keyboard-test" class="view fade-in" style="display: none;">
+            <div class="section-header-group">
+                <div class="flex-between" style="align-items: center; flex-wrap: wrap; gap: 15px;">
+                    <div>
+                        <h2 class="section-title"><i class="fas fa-keyboard" style="color:var(--accent); margin-right: 10px;"></i> Klavye Test Aracı</h2>
+                        <p class="section-subtitle">Klavyenizi test etmek için tuşlara basın — çalışan tuşlar <strong style="color:#10b981;">YEŞİL</strong> yanacaktır.</p>
+                    </div>
+                    <div class="action-buttons flex-row gap-2" style="align-items: center; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" id="kb-toggle-layout" onclick="app.toggleKeyboardLayout()" title="Klavye Dizilimini Değiştir">
+                            <i class="fas fa-globe"></i> <span id="kb-layout-name">Türkçe Q</span>
+                        </button>
+                        <button class="btn btn-secondary" id="kb-toggle-numpad" onclick="app.toggleKeyboardNumpad()" title="Numpad Aç/Kapat">
+                            <i class="fas fa-calculator"></i> <span id="kb-numpad-status">Numpad: Açık</span>
+                        </button>
+                        <button class="btn btn-secondary" id="kb-toggle-sound" onclick="app.toggleKeyboardSound()" title="Mekanik Tuş Sesini Aç/Kapat">
+                            <i class="fas fa-volume-high" id="kb-sound-icon" style="color:var(--accent);"></i> <span id="kb-sound-status">Ses: Açık</span>
+                        </button>
+                        <button class="btn btn-accent" onclick="app.resetKeyboardTest()" title="Tüm basılan tuşları sıfırlar">
+                            <i class="fas fa-undo"></i> Sıfırla
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KEYBOARD TEST STATUS / STATS BAR -->
+            <div class="kb-stats-grid mb-4">
+                <div class="card stat-card" style="padding: 14px 18px; display: flex; align-items: center; gap: 15px;">
+                    <div style="background: rgba(16, 185, 129, 0.15); color: #10b981; width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0;">
+                        <i class="fas fa-check-double"></i>
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Test Edilen Tuşlar</div>
+                        <div style="display: flex; align-items: baseline; gap: 8px;">
+                            <span id="kb-tested-count" style="font-size: 1.5rem; font-weight: bold; color: #10b981;">0</span>
+                            <span style="font-size: 0.85rem; color: var(--text-secondary);">/ <span id="kb-total-count">105</span> (<span id="kb-tested-percent">0%</span>)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card stat-card" style="padding: 14px 18px; display: flex; align-items: center; gap: 15px;">
+                    <div style="background: rgba(0, 210, 255, 0.15); color: var(--accent); width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0;">
+                        <i class="fas fa-fingerprint"></i>
+                    </div>
+                    <div style="flex: 1; overflow: hidden;">
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Son Basılan Tuş</div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span id="kb-last-key-display" style="font-size: 1.25rem; font-weight: bold; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">-</span>
+                            <span id="kb-last-code-badge" class="badge" style="background: rgba(255,255,255,0.08); font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; color: var(--accent); white-space: nowrap;">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card stat-card" style="padding: 14px 18px; display: flex; align-items: center; gap: 15px;">
+                    <div style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0;">
+                        <i class="fas fa-history"></i>
+                    </div>
+                    <div style="flex: 1; overflow: hidden;">
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Tuş Geçmişi</div>
+                        <div id="kb-history-stream" style="display: flex; gap: 6px; overflow-x: auto; white-space: nowrap; padding-top: 4px; min-height: 26px;">
+                            <span style="font-size: 0.8rem; color: rgba(255,255,255,0.3); font-style: italic;">Henüz tuşa basılmadı</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CHASSIS CONTAINER -->
+            <div class="card kb-chassis-card">
+                <div id="keyboard-wrapper" class="kb-wrapper">
+                    <!-- RENDERED DYNAMICALLY BY keyboard_tester.js -->
+                </div>
+            </div>
+
+            <!-- INSTRUCTIONS & HELP -->
+            <div class="mt-4 flex-row" style="justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; color: var(--text-secondary); font-size: 0.85rem; padding: 10px 15px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+                <div>
+                    <i class="fas fa-info-circle" style="color: var(--accent); margin-right: 5px;"></i>
+                    <strong>İpucu:</strong> Windows tuşu, Alt tuşları, F1-F12 fonksiyon tuşları ve Ok tuşları gibi tüm özel donanım tuşlarını güvenle test edebilirsiniz.
+                </div>
+                <div style="display: flex; gap: 18px; align-items: center; flex-wrap: wrap;">
+                    <span style="display:flex; align-items:center; gap:6px;"><span style="display:inline-block; width:14px; height:14px; background:#151d2c; border:1px solid #243144; border-radius:3px;"></span> Basılmadı</span>
+                    <span style="display:flex; align-items:center; gap:6px;"><span style="display:inline-block; width:14px; height:14px; background:#00d2ff; border-radius:3px; box-shadow:0 0 6px #00d2ff;"></span> Basılı Tutuluyor</span>
+                    <span style="display:flex; align-items:center; gap:6px;"><span style="display:inline-block; width:14px; height:14px; background:#10b981; border-radius:3px; box-shadow:0 0 6px #10b981;"></span> Çalışıyor (Test Edildi)</span>
+                </div>
+            </div>
+        </section>
     </main>
 
 
@@ -3477,6 +3567,7 @@
     <script src="frontend/UI_controller.js?v=20260921_perf3"></script>
     <script src="frontend/network_and_mahal.js?v=20260921_perf2"></script>
     <script src="frontend/building_map.js"></script>
+    <script src="frontend/keyboard_tester.js?v=20261102"></script>
 
     <!-- ═══════════════ MOBİL CUPS YAZDIRMA FAB & MODAL ═══════════════ -->
     <button id="mobile-print-fab" class="mobile-print-fab" onclick="app.openMobilePrintModal()" title="Mobil Yazdırma">
