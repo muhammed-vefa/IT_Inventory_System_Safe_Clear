@@ -1542,6 +1542,39 @@ checkLoginStatus: function() {
         }
     },
     
+        // Fast O(1) PC lookup Map to eliminate 75,000 loop iterations on card renders
+    getFastPcLookupMap: function() {
+        const sourceList = (this.state.inventoryCache && this.state.inventoryCache['PC']) || this.state.inventory;
+        if (this._fastPcLookupMap && this._fastPcLookupSource === sourceList) {
+            return this._fastPcLookupMap;
+        }
+        const map = new Map();
+        if (Array.isArray(sourceList)) {
+            for (let i = 0; i < sourceList.length; i++) {
+                const pc = sourceList[i];
+                if (!pc || !pc.pc_no) continue;
+                const raw = String(pc.pc_no).trim().toUpperCase();
+                const clean = raw.replace(/^PC-/, '');
+                const padded = !isNaN(clean) && clean !== '' ? `PC-${clean.padStart(3, '0')}` : raw;
+                
+                map.set(raw, pc);
+                map.set(clean, pc);
+                map.set(padded, pc);
+            }
+        }
+        this._fastPcLookupMap = map;
+        this._fastPcLookupSource = sourceList;
+        return map;
+    },
+
+    findConnectedPc: function(searchNo) {
+        if (!searchNo) return null;
+        const s = String(searchNo).trim().toUpperCase();
+        if (!s || s === 'NONE' || s === 'NULL' || s === '---') return null;
+        const map = this.getFastPcLookupMap();
+        return map.get(s) || map.get(s.replace(/^PC-/, '')) || null;
+    },
+
     renderInventory: function(items) {
         const grid = document.getElementById('inventory-grid');
         if(!grid) return;
@@ -1580,15 +1613,10 @@ checkLoginStatus: function() {
                 let displayIpValue = p.ip || p.recorded_device_no || p.pc_no || '-';
                 let displayIpLabel = "BAĞLI CİHAZ";
 
-                // Bağlı olduğu PC'yi bulma (Barkod yazıcılardaki gibi)
-                const pcs = (this.state.inventoryCache && this.state.inventoryCache['PC']) || [];
+                // Bağlı olduğu PC'yi bulma (O(1) Map ile anlık)
                 const searchNo = (p.recorded_device_no || p.pc_no || "").toUpperCase();
-                
                 if (searchNo && searchNo !== "NONE" && searchNo !== "NULL" && searchNo !== "---") {
-                    const connectedPc = pcs.find(pc => {
-                        const pcNo = (pc.pc_no || "").toUpperCase();
-                        return pcNo === searchNo || `PC-${pcNo.padStart(3, '0')}` === searchNo || pcNo === searchNo.replace('PC-', '');
-                    });
+                    const connectedPc = this.findConnectedPc(searchNo);
 
                     if (connectedPc) {
                         displayMahal = (connectedPc.location_code || connectedPc.location_name || p.location_code || 'BİLİNMİYOR').toUpperCase();
@@ -2569,13 +2597,8 @@ renderPrintersChunk: function() {
 
             if (isSpecial) {
                 displayIpLabel = "BAĞLI CİHAZ (PC NO)";
-                // recorded_device_no üzerinden PC'yi bul
-                const connectedPc = this.state.inventory?.find(pc => {
-                    const searchNo = (p.recorded_device_no || "").toUpperCase();
-                    const pcNo = (pc.pc_no || "").toUpperCase();
-                    // "PC-001" vs "001" karşılaştırması için esnek kontrol
-                    return pcNo === searchNo || `PC-${pcNo.padStart(3, '0')}` === searchNo || pcNo === searchNo.replace('PC-', '');
-                });
+                // recorded_device_no üzerinden PC'yi bul (O(1) Map ile anlık)
+                const connectedPc = this.findConnectedPc(p.recorded_device_no);
 
                 if (connectedPc) {
                     displayMahal = (connectedPc.location_code || 'BİLİNMİYOR').toUpperCase();
@@ -3791,8 +3814,11 @@ rmdir "$M" 2>/dev/null`;
         const grid = document.getElementById('depot-grid');
         if (!grid) return;
         items = items || this.state.depot;
-        // Her zaman alfabetik sırala
-        items.sort((a, b) => (a.name || "").localeCompare(b.name || "", 'tr'));
+        // Yüksek performanslı Türkçe alfabetik sıralama (Intl.Collator)
+        if (!this._depotCollator) {
+            this._depotCollator = new Intl.Collator('tr-TR', { sensitivity: 'base' });
+        }
+        items.sort((a, b) => this._depotCollator.compare(a.name || "", b.name || ""));
         if (!items.length) {
             grid.innerHTML = '<p style="opacity:0.4; text-align:center; grid-column:1/-1;">Depoda henüz ürün yok. + Yeni ürün butonuyla ekleyin.</p>';
             return;
