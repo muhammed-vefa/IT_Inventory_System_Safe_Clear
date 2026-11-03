@@ -320,35 +320,66 @@
             if (this._listenersAttached) return;
             this._listenersAttached = true;
 
+            // Capture phase (true) intercepts F5, F11, F12 before browser default actions
             window.addEventListener('keydown', (e) => {
                 if (this.state && this.state.view !== 'keyboard-test') return;
                 this.handleKeyDown(e);
-            });
+            }, true);
 
             window.addEventListener('keyup', (e) => {
                 if (this.state && this.state.view !== 'keyboard-test') return;
                 this.handleKeyUp(e);
-            });
+            }, true);
         },
 
         handleKeyDown: function(e) {
-            // Prevent browser actions that interfere with keyboard testing
+            let code = e.code || '';
+            const key = e.key || '';
+            const keyCode = e.keyCode || e.which || 0;
+
+            // Map F1-F12 keys reliably by keyCode (112-123) or name
+            const fKeyCodeMap = {
+                112: 'F1', 113: 'F2', 114: 'F3', 115: 'F4',
+                116: 'F5', 117: 'F6', 118: 'F7', 119: 'F8',
+                120: 'F9', 121: 'F10', 122: 'F11', 123: 'F12'
+            };
+
+            const isFKey = /^F([1-9]|1[0-2])$/i.test(code) || 
+                          /^F([1-9]|1[0-2])$/i.test(key) || 
+                          (keyCode >= 112 && keyCode <= 123);
+
+            if (isFKey) {
+                if (fKeyCodeMap[keyCode]) {
+                    code = fKeyCodeMap[keyCode];
+                } else if (!code && key) {
+                    code = key.toUpperCase();
+                }
+            }
+
+            // Prevent all browser actions that interfere with keyboard testing
+            // F5 (reload), F11 (fullscreen), F12 (devtools), Tab, Space, Backspace, etc.
             const preventCodes = [
                 'Tab', 'Space', 'Backspace', 'ContextMenu',
                 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
                 'PageUp', 'PageDown', 'Home', 'End', 'Insert',
-                'F1', 'F3', 'F6', 'F7'
+                'Escape'
             ];
-            if (preventCodes.includes(e.code) || (e.altKey && ['ArrowLeft', 'ArrowRight'].includes(e.code))) {
-                e.preventDefault();
+
+            if (isFKey || preventCodes.includes(code) || (e.altKey && ['ArrowLeft', 'ArrowRight'].includes(code))) {
+                if (typeof e.preventDefault === 'function') e.preventDefault();
+                if (typeof e.stopPropagation === 'function') e.stopPropagation();
             }
 
-            const code = e.code;
+            if (!code) code = key || `Key_${keyCode}`;
+
             this.testedKeyCodes.add(code);
             this.playMechanicalSound();
 
-            // Find key DOM element
-            const keyEl = document.querySelector(`.kb-key[data-code="${code}"]`);
+            // Find key DOM element by data-code or fallback by key
+            let keyEl = document.querySelector(`.kb-key[data-code="${code}"]`);
+            if (!keyEl && key) {
+                keyEl = document.querySelector(`.kb-key[data-code="${key}"]`);
+            }
             if (keyEl) {
                 keyEl.classList.add('active');
                 keyEl.classList.add('tested');
@@ -358,15 +389,33 @@
             this.updateLockLEDs(e);
 
             // Update stats & history
-            const readableName = this.formatKeyName(e);
-            this.updateLastKey(readableName, code, e.keyCode || e.which);
+            const readableName = this.formatKeyName(e, code);
+            this.updateLastKey(readableName, code, keyCode);
             this.pushHistory(readableName, code);
             this.updateKeyboardStats();
         },
 
         handleKeyUp: function(e) {
-            const code = e.code;
-            const keyEl = document.querySelector(`.kb-key[data-code="${code}"]`);
+            let code = e.code || '';
+            const key = e.key || '';
+            const keyCode = e.keyCode || e.which || 0;
+
+            const isFKey = /^F([1-9]|1[0-2])$/i.test(code) || 
+                          /^F([1-9]|1[0-2])$/i.test(key) || 
+                          (keyCode >= 112 && keyCode <= 123);
+
+            if (isFKey) {
+                if (typeof e.preventDefault === 'function') e.preventDefault();
+                if (typeof e.stopPropagation === 'function') e.stopPropagation();
+                if (keyCode >= 112 && keyCode <= 123) {
+                    code = `F${keyCode - 111}`;
+                }
+            }
+
+            let keyEl = document.querySelector(`.kb-key[data-code="${code}"]`);
+            if (!keyEl && key) {
+                keyEl = document.querySelector(`.kb-key[data-code="${key}"]`);
+            }
             if (keyEl) {
                 keyEl.classList.remove('active');
             }
@@ -388,10 +437,15 @@
             if (ledScroll) ledScroll.classList.toggle('active', scrollOn);
         },
 
-        formatKeyName: function(e) {
+        formatKeyName: function(e, resolvedCode) {
             if (!e) return '-';
-            const code = e.code || '';
+            const code = resolvedCode || e.code || '';
             const key = e.key || '';
+
+            // Laptop Multimedia Keys Notice
+            if (code.includes('AudioVolume') || code.includes('Brightness') || code.includes('Media')) {
+                return `${key || code} (Laptop Fn aktif: F-tuşu için Fn tuşuna basılı tutun)`;
+            }
 
             if (code === 'Space') return 'Space (Boşluk)';
             if (code === 'Enter') return 'Enter ↵';
@@ -668,9 +722,21 @@
         },
 
         simulateKeyClick: function(code) {
-            this.handleKeyDown({ code: code, key: code, keyCode: 0, preventDefault: () => {} });
+            this.handleKeyDown({
+                code: code,
+                key: code,
+                keyCode: 0,
+                preventDefault: () => {},
+                stopPropagation: () => {}
+            });
             setTimeout(() => {
-                this.handleKeyUp({ code: code, key: code, keyCode: 0 });
+                this.handleKeyUp({
+                    code: code,
+                    key: code,
+                    keyCode: 0,
+                    preventDefault: () => {},
+                    stopPropagation: () => {}
+                });
             }, 120);
         }
     };
