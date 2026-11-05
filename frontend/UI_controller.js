@@ -471,6 +471,12 @@ var appData = {
         // Sağ üst dropdown menüler ve özel sayfalar
         var ids = [
             {id: 'menu-users', module: 'users'},
+            {id: 'menu-docs', module: 'docs'},
+            {id: 'menu-mahal', module: 'mahal'},
+            {id: 'menu-network', module: 'network'},
+            {id: 'menu-building-map', module: 'building-map'},
+            {id: 'menu-keyboard-test', module: 'keyboard-test'},
+            {id: 'menu-installations', module: 'installations'},
             {id: 'menu-admin-reports', module: 'admin-reports'},
             {id: 'menu-backup', module: 'users'}, // users yetkisi olan backup alabilir
             {id: 'menu-keyos-query', module: 'users'},
@@ -484,7 +490,7 @@ var appData = {
         ];
         ids.forEach(item => {
             var el = document.getElementById(item.id);
-            if (el) el.style.display = self.hasAccess(item.module) ? 'block' : 'none';
+            if (el) el.style.display = self.hasAccess(item.module) ? 'flex' : 'none';
         });
 
         // Dashboard Health Panel
@@ -781,8 +787,22 @@ checkLoginStatus: function() {
         const navPrinterPagesReport = document.getElementById('menu-printer-pages-report');
         const navCupsQuery = document.getElementById('menu-cups-query');
         const navHardTest = document.getElementById('menu-hard-test');
-        if(navUsers) navUsers.style.display = allowedViews.includes('users') ? 'block' : 'none';
-        if(navLogs) navLogs.style.display = allowedViews.includes('logs') ? 'block' : 'none';
+        if(navUsers) navUsers.style.display = allowedViews.includes('users') ? 'flex' : 'none';
+        if(navLogs) navLogs.style.display = allowedViews.includes('logs') ? 'flex' : 'none';
+        
+        const navDocs = document.getElementById('menu-docs');
+        const navMahal = document.getElementById('menu-mahal');
+        const navNetwork = document.getElementById('menu-network');
+        const navBuildingMap = document.getElementById('menu-building-map');
+        const navKeyboardTest = document.getElementById('menu-keyboard-test');
+        const navInstallations = document.getElementById('menu-installations');
+
+        if(navDocs) navDocs.style.display = allowedViews.includes('docs') ? 'flex' : 'none';
+        if(navMahal) navMahal.style.display = allowedViews.includes('mahal') ? 'flex' : 'none';
+        if(navNetwork) navNetwork.style.display = allowedViews.includes('network') ? 'flex' : 'none';
+        if(navBuildingMap) navBuildingMap.style.display = allowedViews.includes('building-map') ? 'flex' : 'none';
+        if(navKeyboardTest) navKeyboardTest.style.display = allowedViews.includes('keyboard-test') ? 'flex' : 'none';
+        if(navInstallations) navInstallations.style.display = allowedViews.includes('installations') ? 'flex' : 'none';
         if(navSync) navSync.style.display = isAdmin ? 'block' : 'none';
         if(navKeyosSync) navKeyosSync.style.display = isAdmin ? 'block' : 'none';
         if(navKeyosReport) navKeyosReport.style.display = isAdmin ? 'block' : 'none';
@@ -1324,6 +1344,7 @@ checkLoginStatus: function() {
         if (this.stopLiveConsoleStream) this.stopLiveConsoleStream();
         this.state.view = view;
         localStorage.setItem('active_view', view);
+        document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('show'));
         document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
         const viewEl = document.getElementById(`view-${view}`);
         if(viewEl) viewEl.style.display = 'block';
