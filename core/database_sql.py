@@ -672,6 +672,52 @@ def init_db():
             log_message NVARCHAR(MAX),
             created_at DATETIME DEFAULT GETDATE()
         )""",
+        "vpn_users": """(
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            username NVARCHAR(100),
+            full_name NVARCHAR(255),
+            tc_no NVARCHAR(50),
+            phone NVARCHAR(100),
+            email NVARCHAR(255),
+            department NVARCHAR(255),
+            title NVARCHAR(255),
+            institution NVARCHAR(255),
+            user_type NVARCHAR(50),
+            vpn_status NVARCHAR(50) DEFAULT 'Aktif',
+            has_petition NVARCHAR(50) DEFAULT 'YOK',
+            petition_date DATETIME,
+            expiry_date DATETIME,
+            petition_file NVARCHAR(255),
+            work_status NVARCHAR(50) DEFAULT N'Çalışıyor',
+            is_risk_detected BIT DEFAULT 0,
+            sicil_no NVARCHAR(50),
+            notes NVARCHAR(MAX),
+            created_at DATETIME DEFAULT GETDATE(),
+            last_edit_date DATETIME,
+            last_edit_user NVARCHAR(255),
+            is_deleted BIT DEFAULT 0,
+            archive_date DATETIME,
+            deleted_at DATETIME
+        )""",
+        "mym_personnel": """(
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            username NVARCHAR(255),
+            sicil_no NVARCHAR(50),
+            full_name NVARCHAR(255),
+            tc_no NVARCHAR(50),
+            phone NVARCHAR(100),
+            email NVARCHAR(255),
+            department NVARCHAR(255),
+            title NVARCHAR(255),
+            institution NVARCHAR(255),
+            work_status NVARCHAR(50) DEFAULT N'Çalışıyor',
+            created_at DATETIME DEFAULT GETDATE(),
+            last_edit_date DATETIME,
+            last_edit_user NVARCHAR(255),
+            is_deleted BIT DEFAULT 0,
+            archive_date DATETIME,
+            deleted_at DATETIME
+        )""",
         "printer_page_logs": """(
             id INT IDENTITY(1,1) PRIMARY KEY,
             pr_no NVARCHAR(100),
@@ -828,7 +874,8 @@ def init_db():
         ("network_devices", "device_name", "NVARCHAR(255)"),
         ("network_devices", "tower", "NVARCHAR(50)"),
         ("network_devices", "mac_address", "NVARCHAR(100)"),
-        ("network_devices", "warranty_info", "NVARCHAR(255)")
+        ("network_devices", "warranty_info", "NVARCHAR(255)"),
+        ("vpn_users", "sicil_no", "NVARCHAR(50)")
     ]
 
     for table, col, dtype in required_columns:

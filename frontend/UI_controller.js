@@ -1366,6 +1366,7 @@ checkLoginStatus: function() {
         }
         if (view === 'mahal' && this.loadMahal) this.loadMahal();
         if (view === 'network' && this.loadNetwork) this.loadNetwork();
+        if (view === 'vpn' && this.loadVpn) this.loadVpn();
         if (view === 'keyboard-test' && this.initKeyboardTest) this.initKeyboardTest();
         
         // Default sub-tabs for other views

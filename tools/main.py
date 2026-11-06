@@ -163,6 +163,10 @@ app.register_blueprint(building_map_bp, url_prefix='/api/building_map')
 # Ag Cihazlari (Network Devices)
 from modules.network_manager import network_manager_bp
 app.register_blueprint(network_manager_bp, url_prefix='/api/network')
+# VPN Yonetimi (VPN Users)
+from modules.vpn_manager import vpn_manager_bp
+app.register_blueprint(vpn_manager_bp, url_prefix='/api/vpn')
+
 
 # --- Alias for Cached Frontends ---
 # Bazen tarayıcılar eski JS dosyasını (printers/batch_action) önbellekte tutabiliyor.

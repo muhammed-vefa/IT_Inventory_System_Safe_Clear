@@ -367,6 +367,7 @@
                           <a href="#" id="menu-docs" onclick="app.navigateTo('docs')"><i class="fas fa-file-signature" style="color:var(--accent);"></i> Tutanaklar</a>
                           <a href="#" id="menu-mahal" onclick="app.navigateTo('mahal')"><i class="fas fa-map-marker-alt" style="color:var(--accent);"></i> Mahal</a>
                           <a href="#" id="menu-network" onclick="app.navigateTo('network')"><i class="fas fa-server" style="color:var(--accent);"></i> Ağ Cihazları</a>
+                            <a href="#" id="menu-vpn" onclick="app.navigateTo('vpn')"><i class="fas fa-shield-alt" style="color:var(--accent);"></i> VPN Yönetimi</a>
                           <a href="#" id="menu-building-map" onclick="app.navigateTo('building-map')"><i class="fas fa-layer-group" style="color:var(--accent);"></i> Bina Haritası</a>
                           <a href="#" id="menu-keyboard-test" onclick="app.navigateTo('keyboard-test')"><i class="fas fa-keyboard" style="color:var(--accent);"></i> Klavye Testi</a>
                           <a href="#" id="menu-installations" onclick="app.navigateTo('installations')"><i class="fas fa-bolt" style="color:var(--accent);"></i> Hızlı Kurulumlar</a>
@@ -1371,6 +1372,113 @@
             </div>
             <div id="network-scroll-sentinel" style="height: 20px; width: 100%;"></div>
         </section>
+
+        <!-- VPN YÖNETİMİ VIEW -->
+        <section id="view-vpn" class="view fade-in" style="display: none;">
+            <div class="section-header-group">
+                <div class="flex-between" style="align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <h2 class="section-title"><i class="fas fa-shield-alt" style="color:var(--accent); margin-right: 10px;"></i> VPN Yönetimi</h2>
+                        <p class="section-subtitle">Bakanlık ve kurum VPN kullanıcıları, 1 yıllık dilekçe takibi ve güvenlik denetimi.</p>
+                    </div>
+                    <div class="flex-row gap-2" style="align-items: center;">
+                        <button id="btn-export-vpn" onclick="app.exportVpnToExcel()" title="Excel'e Aktar" style="height: 36px; padding: 0 15px; border-radius: 20px; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #10b981; display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.3s ease;">
+                            <i class="fas fa-file-excel"></i> Excel İndir
+                        </button>
+                        <button id="btn-add-vpn" onclick="app.openAddVpnModal()" title="Yeni VPN Kullanıcısı Ekle" style="height: 36px; width: 36px; border-radius: 50%; background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; color: #38bdf8; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 900; cursor: pointer; transition: all 0.3s ease;">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <div class="search-wrapper" style="max-width: 320px;">
+                            <input type="text" id="vpn-search" class="search-bar" placeholder="Kullanıcı, ad, TC veya birim ara..." oninput="app.searchVpn()">
+                            <i class="fas fa-times clear-search" onclick="app.clearSearch('vpn-search'); app.searchVpn()"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VPN Filtre Chipleri (Sayaçlı Rozetler) -->
+                <div class="filter-chips mt-3" id="vpn-filter-chips">
+                    <button class="btn-chip active" data-filter="TUMU" onclick="app.setVpnFilter('TUMU')">TÜMÜ (<span id="vpn-count-tumu">0</span>)</button>
+                    <button class="btn-chip" data-filter="RISK" onclick="app.setVpnFilter('RISK')" style="border-color: #ef4444; color: #ef4444;">🚨 AYRILANLAR (<span id="vpn-count-risk">0</span>)</button>
+                    <button class="btn-chip" data-filter="YAKLASAN" onclick="app.setVpnFilter('YAKLASAN')" style="border-color: #f59e0b; color: #f59e0b;">⏳ SÜRESİ YAKLAŞANLAR (<span id="vpn-count-yaklasan">0</span>)</button>
+                    <button class="btn-chip" data-filter="BITEN" onclick="app.setVpnFilter('BITEN')" style="border-color: #ff4b2b; color: #ff4b2b;">⛔ SÜRESİ DOLANLAR (<span id="vpn-count-biten">0</span>)</button>
+                    <button class="btn-chip" data-filter="GUNCEL" onclick="app.setVpnFilter('GUNCEL')" style="border-color: #10b981; color: #10b981;">✅ GÜNCEL (<span id="vpn-count-guncel">0</span>)</button>
+                    <button class="btn-chip" data-filter="HEKİM" onclick="app.setVpnFilter('HEKİM')">Hekimler (<span id="vpn-count-hekim">0</span>)</button>
+                    <button class="btn-chip" data-filter="DIS_DESTEK" onclick="app.setVpnFilter('DIS_DESTEK')">Dış Destek (<span id="vpn-count-dis">0</span>)</button>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; margin-top: 10px; margin-bottom: 12px;">
+                <span class="status-badge" style="background: rgba(0, 210, 255, 0.1); color: #00d2ff; border: 1px solid rgba(0, 210, 255, 0.2); padding: 4px 12px; font-size: 0.8rem; border-radius: 12px;">
+                    Toplam VPN Kullanıcısı: <strong id="vpn-total-badge" style="margin-left: 5px;">0</strong>
+                </span>
+            </div>
+
+            <div class="grid" id="vpn-grid">
+                <!-- JS Tarafından Kartlar Basılacak -->
+            </div>
+            <div id="vpn-scroll-sentinel" style="height: 20px;"></div>
+        </section>
+
+        <!-- VPN YENİ KULLANICI EKLEME MODALI -->
+        <div id="modal-vpn-add" class="modal-backdrop" style="display: none; z-index: 10000;">
+            <div class="card" style="max-width: 620px; width: 92%; max-height: 85vh; display: flex; flex-direction: column; padding: 22px; background: #0f172a; border: 1.5px solid #38bdf8; box-shadow: 0 10px 40px rgba(0,0,0,0.8); margin: auto;">
+                <!-- Modal Başlık -->
+                <div class="flex-between mb-3" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px; align-items: center;">
+                    <h3 style="color: #38bdf8; font-size: 1.1rem; margin: 0; display: flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-user-plus"></i> Yeni VPN Kullanıcısı Ekle
+                    </h3>
+                    <i class="fas fa-times modal-close" onclick="app.closeAddVpnModal()" style="cursor: pointer; opacity: 0.7; font-size: 1.2rem; color: #94a3b8;"></i>
+                </div>
+                
+                <!-- Arama Alanı -->
+                <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                    <input type="text" id="vpn-add-search-input" placeholder="TC Kimlik No, Sicil No veya Ad Soyad..." 
+                           style="flex: 1; height: 42px; padding: 0 14px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); color: #e2e8f0; font-size: 0.9rem; outline: none;"
+                           onkeydown="if(event.key==='Enter') app.searchPersonnel()">
+                    <button onclick="app.searchPersonnel()" style="height: 42px; padding: 0 20px; border-radius: 8px; background: #38bdf8; color: #000; border: none; font-weight: 800; font-size: 0.85rem; cursor: pointer; white-space: nowrap;">
+                        <i class="fas fa-search"></i> Ara
+                    </button>
+                </div>
+                
+                <!-- Sonuçlar -->
+                <div id="vpn-add-results" style="overflow-y: auto; flex: 1; max-height: 52vh; padding-right: 4px;">
+                    <div style="text-align: center; color: #64748b; font-size: 0.85rem; padding: 30px 0;">
+                        <i class="fas fa-search" style="font-size: 2.2rem; display: block; margin-bottom: 10px; opacity: 0.3;"></i>
+                        TC Kimlik No, Sicil No veya Ad Soyad ile personel arayın
+                    </div>
+                </div>
+                
+                <!-- Alt Bilgi -->
+                <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 0.72rem; color: #64748b; text-align: center;">
+                    <i class="fas fa-info-circle"></i> MYM personel havuzundan arama yapılmaktadır. VPN aktif edilen kullanıcının süresi 1 yıl olarak başlatılır.
+                </div>
+            </div>
+        </div>
+
+        <!-- VPN DILEKCE YUKLEME VE GORUNTULEME MODAL -->
+        <div id="modal-vpn-petition" class="modal-backdrop" style="display: none; z-index: 10000;">
+            <div style="background: var(--bg-secondary, #161b22); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; width: 90%; max-width: 500px; padding: 24px; color: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.7);">
+                <div class="flex-between" style="align-items: center; margin-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px;">
+                    <h3 id="vpn-modal-title" style="margin: 0; font-size: 1.1rem; color: #38bdf8;"><i class="fas fa-file-alt"></i> VPN Dilekçe Evrakı</h3>
+                    <i class="fas fa-times" onclick="app.closeVpnModal()" style="cursor: pointer; opacity: 0.7; font-size: 1.2rem;"></i>
+                </div>
+                
+                <!-- Mevcut Evrak Alanı -->
+                <div id="vpn-modal-existing-file" style="display: none; margin-bottom: 16px;"></div>
+
+                <!-- Kullanıcı Bilgisi & Talimat -->
+                <div id="vpn-modal-user-info" style="margin-bottom: 12px; font-size: 0.85rem; color: #cbd5e1; line-height: 1.5;"></div>
+                
+                <!-- Dosya Seçimi -->
+                <input type="file" id="vpn-petition-file-input" accept=".pdf,.png,.jpg,.jpeg" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px dashed #38bdf8; border-radius: 8px; color: #fff; margin-bottom: 20px;">
+                
+                <div class="flex-between">
+                    <button onclick="app.closeVpnModal()" class="btn-chip" style="background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2); padding: 6px 16px;">İptal</button>
+                    <button id="vpn-modal-submit-btn" onclick="app.submitVpnPetition()" class="btn-chip" style="background: #10b981; color: #000; font-weight: 800; border: none; padding: 6px 18px;"><i class="fas fa-upload"></i> Yükle ve Kaydet</button>
+                </div>
+            </div>
+        </div>
+
 
         <section id="view-areas" class="view fade-in" style="display: none;">
             <div class="section-header-group">
@@ -3568,6 +3676,7 @@
     </style>
     <script src="frontend/UI_controller.js?v=20260921_perf3"></script>
     <script src="frontend/network_and_mahal.js?v=20260921_perf2"></script>
+    <script src="frontend/vpn_manager.js?v=20261105"></script>
     <script src="frontend/building_map.js"></script>
     <script src="frontend/keyboard_tester.js?v=20261102"></script>
 
