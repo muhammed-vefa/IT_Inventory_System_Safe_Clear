@@ -5322,7 +5322,7 @@ rmdir "$M" 2>/dev/null`;
                                 body: JSON.stringify({
                                     serial: item.pc_serial,
                                     hostname: hName || '',
-                                    placeId: payload.location_code
+                                    placeId: (payload.location_code || '').replace(/\./g, '-').trim().toUpperCase()
                                 })
                             }).then(keyosResp => {
                                 if (keyosResp && keyosResp.success) {
@@ -8743,7 +8743,7 @@ exit
                 body: JSON.stringify({
                     serial: item.pc_serial,
                     hostname: hostname,
-                    placeId: placeId,
+                    placeId: (placeId || '').replace(/\./g, '-').trim().toUpperCase(),
                     keyos_user: user,
                     keyos_pass: pass
                 })
@@ -8898,7 +8898,7 @@ exit
                 items.push({
                     serial: pc.pc_serial,
                     hostname: m.local_hostname || pc.hostname,
-                    placeId: pc.location_code || ''
+                    placeId: (pc.location_code || '').replace(/\./g, '-').trim().toUpperCase()
                 });
             }
 

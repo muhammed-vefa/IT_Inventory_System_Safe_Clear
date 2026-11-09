@@ -518,7 +518,7 @@ def update_keyos():
         data = request.json
         serial = data.get('serial')
         hostname = data.get('hostname')
-        place_id_name = data.get('placeId') # Mahal ismi, örn. B-02-C1-229
+        place_id_name = str(data.get('placeId') or '').replace('.', '-').strip().upper() # Mahal ismi, örn. B-02-C1-229 (tireli format)
         user_id = request.current_user.get('user_id')
         
         if not serial or not hostname or not place_id_name:
@@ -588,7 +588,7 @@ def update_keyos():
                     for opt in place_select.find_all('option'):
                         val = opt.get('value')
                         text = opt.get_text(strip=True)
-                        if text.strip().upper() == place_id_name.strip().upper():
+                        if text.strip().upper() == place_id_name or text.replace('.', '-').strip().upper() == place_id_name:
                             place_id_val = val
                             break
             if place_id_val:
@@ -617,7 +617,7 @@ def update_keyos():
                     for opt in place_select.find_all('option'):
                         val = opt.get('value')
                         text = opt.get_text(strip=True)
-                        if text.strip().upper() == place_id_name.strip().upper():
+                        if text.strip().upper() == place_id_name or text.replace('.', '-').strip().upper() == place_id_name:
                             place_id_val = val
                             break
                             
@@ -722,7 +722,8 @@ def push_hostname_to_keyos(user_id, serial, hostname, location_code):
                     place_select = soup.find('select', attrs={'name': 'placeId'})
                     if place_select:
                         for opt in place_select.find_all('option'):
-                            if opt.get_text(strip=True).strip().upper() == place_id_name:
+                            t_text = opt.get_text(strip=True).strip().upper()
+                            if t_text == place_id_name or t_text.replace('.', '-') == place_id_name:
                                 place_id_val = opt.get('value')
                                 break
                 if place_id_val:
@@ -746,7 +747,8 @@ def push_hostname_to_keyos(user_id, serial, hostname, location_code):
                     ps2 = soup2.find('select', attrs={'name': 'placeId'})
                     if ps2:
                         for opt in ps2.find_all('option'):
-                            if opt.get_text(strip=True).strip().upper() == place_id_name:
+                            t_text = opt.get_text(strip=True).strip().upper()
+                            if t_text == place_id_name or t_text.replace('.', '-') == place_id_name:
                                 place_id_val = opt.get('value')
                                 break
                                 
@@ -842,7 +844,7 @@ def bulk_update_keyos():
         for item in items:
             serial = item.get('serial', '').strip()
             hostname = item.get('hostname', '').strip()
-            place_id_name = item.get('placeId', '').strip()
+            place_id_name = str(item.get('placeId', '')).replace('.', '-').strip().upper()
             print(f"[KeyOS Bulk Update] İşleniyor: {serial} -> Hostname: {hostname}, Mahal: {place_id_name}")
             
             if not serial or not hostname:
@@ -856,7 +858,7 @@ def bulk_update_keyos():
             
             try:
                 # Mahal ID'sini bul veya oluştur
-                place_id_val = place_cache.get(place_id_name.upper()) if place_id_name else None
+                place_id_val = place_cache.get(place_id_name) if place_id_name else None
                 
                 if place_id_name and not place_id_val:
                     edit_page_url = get_keyos_login_url().replace("/login", f"/updateComputer?{computer_id}")
@@ -868,10 +870,34 @@ def bulk_update_keyos():
                             for opt in place_select.find_all('option'):
                                 val = opt.get('value')
                                 text = opt.get_text(strip=True)
-                                if text.strip().upper() == place_id_name.strip().upper():
+                                if text.strip().upper() == place_id_name or text.replace('.', '-').strip().upper() == place_id_name:
                                     place_id_val = val
-                                    place_cache[place_id_name.upper()] = val
+                                    place_cache[place_id_name] = val
                                     break
+                    
+                    # Eğer KeyOS'ta bulunamadıysa yeni mahal ekle
+                    if not place_id_val:
+                        try:
+                            add_place_url = get_keyos_login_url().replace("/login", "/addPlace/add")
+                            add_payload = {"name": place_id_name}
+                            add_headers = {
+                                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                                "X-Requested-With": "XMLHttpRequest"
+                            }
+                            client.session.post(add_place_url, data=json.dumps(add_payload), headers=add_headers, timeout=15, verify=False)
+                            r_edit2 = client.session.get(edit_page_url, timeout=30, verify=False)
+                            if r_edit2.status_code == 200:
+                                soup2 = BeautifulSoup(r_edit2.text, 'html.parser')
+                                ps2 = soup2.find('select', attrs={'name': 'placeId'})
+                                if ps2:
+                                    for opt in ps2.find_all('option'):
+                                        t = opt.get_text(strip=True).strip().upper()
+                                        if t == place_id_name or t.replace('.', '-') == place_id_name:
+                                            place_id_val = opt.get('value')
+                                            place_cache[place_id_name] = place_id_val
+                                            break
+                        except Exception as e_add:
+                            print(f"[KeyOS Bulk Update] Mahal ekleme hatası: {e_add}")
                 
                 # Güncelleme yap
                 update_url = get_keyos_login_url().replace("/login", "/updateComputer/update")
