@@ -6,6 +6,32 @@ import traceback
 
 building_map_bp = Blueprint('building_map_bp', __name__)
 
+# Bina -> Kanat eşleştirme haritası (Excel PARÇAAL formülünden türetildi)
+# Location code formatı: {Prefix}.{Kat}.{Kanat}.{Oda} (ör: C.02.M0.239)
+# Bina tespiti PREFIX'e değil, KANAT adına göre yapılır.
+BUILDING_WINGS = {
+    'A KULE': ['C2', 'T5', 'T6', 'T7', 'T8'],
+    'B KULE': ['C1', 'T1', 'T2', 'T3', 'T4'],
+    'MH':     ['M0', 'M1', 'M2', 'M3'],
+    'FTR':    ['F1', 'F2', 'F3', 'F4', 'F5'],
+    'TSB':    ['S1', 'S2', 'S3', 'S4', 'S5'],
+    'YGAP':   ['P1', 'P2', 'P3', 'P4', 'P5'],
+}
+
+def _build_wing_filter(building_name, table_alias='p'):
+    """Bina adına göre kanat bazlı SQL filtresi üretir."""
+    b_clean = (building_name or '').strip().upper()
+    wings = None
+    for bname, wlist in BUILDING_WINGS.items():
+        if bname in b_clean or b_clean in bname:
+            wings = wlist
+            break
+    if not wings:
+        return ""
+    # location_code LIKE '%.M0.%' OR location_code LIKE '%.M1.%' ...
+    conditions = " OR ".join([f"{table_alias}.location_code LIKE '%.{w}.%'" for w in wings])
+    return f"AND ({conditions})"
+
 @building_map_bp.route('/layout/<building_name>', methods=['GET'])
 @require_auth
 def get_layout(building_name):
@@ -145,23 +171,10 @@ def get_layout(building_name):
         pr_faulty_clause = "pr.is_faulty = 1 AND" if pr_has_faulty else "0=1 AND"
 
         # Sadece var olan veriyi çek ve arızalı cihaz sayısını pcs ve printers tablolarından getir
-        # Bina filtresi (A KULE ve B KULE için C2/C1 ve kanat ayrımı)
+        # Bina filtresi (Kanat bazlı — BUILDING_WINGS haritasından)
         b_clean = (building_name or '').strip().upper()
-        if 'A KULE' in b_clean:
-            b_filter_pc = "AND (p.location_code LIKE 'A.%' OR p.location_code LIKE '%A KULE%' OR p.location_code LIKE '%A BLOK%')"
-            b_filter_pr = "AND (pr.location_code LIKE 'A.%' OR pr.location_code LIKE '%A KULE%' OR pr.location_code LIKE '%A BLOK%')"
-        elif 'B KULE' in b_clean:
-            b_filter_pc = "AND (p.location_code LIKE 'B.%' OR p.location_code LIKE '%B KULE%' OR p.location_code LIKE '%B BLOK%')"
-            b_filter_pr = "AND (pr.location_code LIKE 'B.%' OR pr.location_code LIKE '%B KULE%' OR pr.location_code LIKE '%B BLOK%')"
-        elif 'FTR' in b_clean:
-            b_filter_pc = "AND (p.location_code LIKE '%FTR%' OR p.location_code LIKE '%.F%' OR p.location_code LIKE 'F.%')"
-            b_filter_pr = "AND (pr.location_code LIKE '%FTR%' OR pr.location_code LIKE '%.F%' OR pr.location_code LIKE 'F.%')"
-        elif 'YGAP' in b_clean:
-            b_filter_pc = "AND (p.location_code LIKE '%YGAP%' OR p.location_code LIKE '%.P%' OR p.location_code LIKE 'P.%' OR p.location_code LIKE 'Y.%')"
-            b_filter_pr = "AND (pr.location_code LIKE '%YGAP%' OR pr.location_code LIKE '%.P%' OR pr.location_code LIKE 'P.%' OR pr.location_code LIKE 'Y.%')"
-        else:
-            b_filter_pc = ""
-            b_filter_pr = ""
+        b_filter_pc = _build_wing_filter(building_name, 'p')
+        b_filter_pr = _build_wing_filter(building_name, 'pr')
 
         # Yeni format desteği: A.05.C2.591, A.07.T6.343, A.B1.C2, A.G0.C2
         floor_match_pc = """(
@@ -289,22 +302,18 @@ def get_devices():
             
         search_term = f"%{search_wing}%"
         
-        # Bina filtresi
+        # Bina filtresi (Kanat bazlı — BUILDING_WINGS haritasından)
         building_clause = ""
         if building:
+            wings = None
             b_clean = building.strip().upper()
-            if 'A KULE' in b_clean or b_clean == 'A':
-                building_clause = "AND (location_code LIKE 'A.%' OR location_code LIKE '%A KULE%' OR location_code LIKE '%A BLOK%')"
-            elif 'B KULE' in b_clean or b_clean == 'B':
-                building_clause = "AND (location_code LIKE 'B.%' OR location_code LIKE '%B KULE%' OR location_code LIKE '%B BLOK%')"
-            elif 'MH' in b_clean:
-                building_clause = "AND (location_code LIKE 'M.%' OR location_code LIKE '%MH%')"
-            elif 'FTR' in b_clean:
-                building_clause = "AND (location_code LIKE '%FTR%' OR location_code LIKE '%.F%' OR location_code LIKE 'F.%')"
-            elif 'TSB' in b_clean:
-                building_clause = "AND (location_code LIKE 'T.%' OR location_code LIKE 'S.%' OR location_code LIKE '%TSB%')"
-            elif 'YGAP' in b_clean:
-                building_clause = "AND (location_code LIKE '%YGAP%' OR location_code LIKE '%.P%' OR location_code LIKE 'P.%' OR location_code LIKE 'Y.%')"
+            for bname, wlist in BUILDING_WINGS.items():
+                if bname in b_clean or b_clean in bname:
+                    wings = wlist
+                    break
+            if wings:
+                conditions = " OR ".join([f"location_code LIKE '%.{w}.%'" for w in wings])
+                building_clause = f"AND ({conditions})"
         
         # Kat SQL şartı (A.05.C2.591, A.07.T6.343, A.B1.C2, A.G0.C2 gibi formatlar için)
         if floor is not None and floor != 'undefined':

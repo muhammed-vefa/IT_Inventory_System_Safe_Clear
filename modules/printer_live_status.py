@@ -45,11 +45,51 @@ STATUS_MAP_TR = {
     "toner az": "Toner Az",
     "replace toner": "Toner Bitti / Değiştir",
     "toner bitti": "Toner Bitti / Değiştir",
+    "toneri değiştir": "Toner Bitti / Değiştir",
+    "toneri degistir": "Toner Bitti / Değiştir",
+    "toner değiştir": "Toner Bitti / Değiştir",
+    "toner degistir": "Toner Bitti / Değiştir",
     "replace drum": "Drum Değiştir",
     "drum değiştir": "Drum Değiştir",
+    "drum degistir": "Drum Değiştir",
     "drum near end": "Drum Ömrü Az",
     "drum end soon": "Drum Ömrü Az",
 }
+
+def clean_turkish_text(text):
+    """
+    Yazıcı web arayüzünden veya SNMP'den gelen metinlerdeki Türkçe karakter bozulmalarını (mojibake)
+    ve kodlama uyumsuzluklarını düzeltir.
+    Örnek: 'Toneri DeÄŸiÅŸtir' -> 'Toneri Değiştir'
+    """
+    if not text or not isinstance(text, str):
+        return text or ""
+        
+    cleaned = text.strip()
+    
+    # Mojibake tespiti (UTF-8 baytlarının windows-1252 veya latin-1 olarak decode edilmiş hali)
+    mojibake_markers = ('ÄŸ', 'ÅŸ', 'Ä°', 'Ä±', 'Ã§', 'Ã¶', 'Ã¼', 'Ã‡', 'Ã–', 'Ãœ', 'Äž', 'Åž')
+    if any(m in cleaned for m in mojibake_markers):
+        try:
+            cleaned = cleaned.encode('windows-1252').decode('utf-8')
+        except Exception:
+            try:
+                cleaned = cleaned.encode('latin1').decode('utf-8')
+            except Exception:
+                pass
+
+    # Garanti karakter eşlemeleri
+    replacements = {
+        'DeÄŸiÅŸtir': 'Değiştir',
+        'deÄŸiÅŸtir': 'değiştir',
+        'ÄŸ': 'ğ', 'ÅŸ': 'ş', 'Ä°': 'İ', 'Ä±': 'ı', 'Ã§': 'ç', 'Ã¶': 'ö', 'Ã¼': 'ü',
+        'Ã‡': 'Ç', 'Ã–': 'Ö', 'Ãœ': 'Ü', 'Äž': 'Ğ', 'Åž': 'Ş'
+    }
+    for bad, good in replacements.items():
+        if bad in cleaned:
+            cleaned = cleaned.replace(bad, good)
+            
+    return cleaned
 
 def _is_ip_reachable(ip, timeout=0.35):
     """
@@ -70,27 +110,42 @@ def _is_ip_reachable(ip, timeout=0.35):
 
 def _decode_html(resp):
     content = resp.content
+    if not content:
+        return ""
+
+    # 1. Önce her zaman UTF-8 dene (Modern web ve Türkçe yazıcı web arayüzleri için en güvenli)
+    try:
+        decoded = content.decode('utf-8')
+        return clean_turkish_text(decoded)
+    except UnicodeDecodeError:
+        pass
+
+    # 2. Header veya meta tag içindeki encoding'e bak
     encoding = None
     content_type = resp.headers.get('content-type', '').lower()
     if 'charset=' in content_type:
-        encoding = content_type.split('charset=')[-1].strip()
+        encoding = content_type.split('charset=')[-1].strip().lower()
     
     if not encoding:
         charset_match = re.search(rb'charset=["\']?([a-zA-Z0-9_-]+)', content[:2000], re.IGNORECASE)
         if charset_match:
-            encoding = charset_match.group(1).decode('ascii', errors='ignore').strip()
+            encoding = charset_match.group(1).decode('ascii', errors='ignore').strip().lower()
     
+    # 3. Sırayla Türkçe / Windows encodinglerini dene
     encodings_to_try = []
-    if encoding:
+    if encoding and encoding not in ('utf-8', 'utf8'):
         encodings_to_try.append(encoding)
-    encodings_to_try.extend(['utf-8', 'windows-1254', 'iso-8859-9', 'cp1252'])
+    encodings_to_try.extend(['windows-1254', 'iso-8859-9', 'windows-1252', 'iso-8859-1'])
     
     for enc in encodings_to_try:
         try:
-            return content.decode(enc)
+            decoded = content.decode(enc)
+            return clean_turkish_text(decoded)
         except Exception:
             continue
-    return content.decode(resp.apparent_encoding or 'utf-8', errors='replace')
+            
+    fallback = content.decode(resp.apparent_encoding or 'utf-8', errors='replace')
+    return clean_turkish_text(fallback)
 
 def _parse_html_status_and_toner(html):
     """
@@ -181,13 +236,18 @@ def _parse_html_status_and_toner(html):
                 status = norm
                 break
 
-    # Durum metnini Türkçe karşılığına çevir
+    # Durum metnini Türkçe karşılığına çevir ve karakter temizliği yap
+    status = clean_turkish_text(status)
+    maintenance_msg = clean_turkish_text(maintenance_msg)
+    
     st_clean = status.strip().lower()
     if st_clean in STATUS_MAP_TR:
         status = STATUS_MAP_TR[st_clean]
 
     if maintenance_msg and maintenance_msg.lower() not in status.lower():
         status = f"{status} ({maintenance_msg})"
+        
+    status = clean_turkish_text(status)
 
     # 3. TONER SEVİYESİ TESPİTİ
     # Yöntem A: JS moni_data dizisi
@@ -374,6 +434,7 @@ def fetch_printer_status(ip):
                     
                 # Hem durum hem toner bulunduysa döngüden çık
                 if result["status"] != "Bilinmiyor" and result["toner"] != "Bilinmiyor":
+                    result["status"] = clean_turkish_text(result["status"])
                     return result
         except Exception:
             continue
@@ -391,6 +452,7 @@ def fetch_printer_status(ip):
     if result["is_online"] and result["status"] == "Bilinmiyor":
         result["status"] = "Hazır"
         
+    result["status"] = clean_turkish_text(result.get("status", ""))
     return result
 
 def update_live_status_cache(printers):
@@ -434,7 +496,13 @@ def get_live_status_cache():
             return _PRINTER_LIVE_CACHE
             
         with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-            _PRINTER_LIVE_CACHE = json.load(f)
+            raw_cache = json.load(f)
+            cleaned_cache = {}
+            for k, v in raw_cache.items():
+                if isinstance(v, dict):
+                    v['status'] = clean_turkish_text(v.get('status', ''))
+                cleaned_cache[k] = v
+            _PRINTER_LIVE_CACHE = cleaned_cache
             _PRINTER_LIVE_MTIME = current_mtime
             return _PRINTER_LIVE_CACHE
     except Exception:

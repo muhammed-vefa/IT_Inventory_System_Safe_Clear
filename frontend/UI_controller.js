@@ -2741,7 +2741,7 @@ renderPrintersChunk: function() {
                         <div class="flex-column" id="live-status-${p.id}">
                             <span style="font-size: 0.55rem; color: #64748b; font-weight: 800; text-transform: uppercase;">CANLI DURUM (Web)</span>
                             <div class="flex-row gap-2" style="align-items: center; margin-top: 2px; flex-wrap: wrap;">
-                                <span style="font-size: 0.75rem; color: ${p.live_is_online ? '#10b981' : '#ef4444'};"><i class="fas fa-circle" style="font-size: 0.5rem;"></i> ${p.live_status || 'Bilinmiyor'}</span>
+                                <span style="font-size: 0.75rem; color: ${p.live_is_online ? '#10b981' : '#ef4444'};"><i class="fas fa-circle" style="font-size: 0.5rem;"></i> ${this.cleanPrinterStatusText(p.live_status || 'Bilinmiyor')}</span>
                                 <span style="font-size: 0.75rem; color: #cbd5e1; background: rgba(255,255,255,0.1); padding: 1px 6px; border-radius: 4px;">Toner: ${p.live_toner || 'Bilinmiyor'}</span>
                                 <span style="font-size: 0.75rem; color: ${p.cups_state === 'Durduruldu' ? '#ef4444' : (p.cups_state === 'Aktif' ? '#10b981' : '#94a3b8')}; background: rgba(255,255,255,0.1); padding: 1px 6px; border-radius: 4px;" title="CUPS Durumu"><i class="fas fa-print"></i> CUPS: ${p.cups_state || 'Bilinmiyor'}</span>
                             </div>
@@ -2808,6 +2808,15 @@ renderPrintersChunk: function() {
     
         this.updatePeripheralDatalists();
     },
+    cleanPrinterStatusText: function(text) {
+        if (!text || typeof text !== 'string') return text || '';
+        return text
+            .replace(/DeÄŸiÅŸtir/gi, 'Değiştir')
+            .replace(/ÄŸ/g, 'ğ').replace(/ÅŸ/g, 'ş').replace(/Ä°/g, 'İ').replace(/Ä±/g, 'ı')
+            .replace(/Ã§/g, 'ç').replace(/Ã¶/g, 'ö').replace(/Ã¼/g, 'ü')
+            .replace(/Ã‡/g, 'Ç').replace(/Ã–/g, 'Ö').replace(/Ãœ/g, 'Ü')
+            .replace(/Äž/g, 'Ğ').replace(/Åž/g, 'Ş');
+    },
     refreshLivePrinterStatus: async function(id) {
         const icon = document.getElementById(`refresh-icon-${id}`);
         if (icon) icon.classList.add('fa-spin');
@@ -2817,7 +2826,7 @@ renderPrintersChunk: function() {
             if (resp && container) {
                 const data = resp;
                 const color = data.is_online ? '#10b981' : '#ef4444';
-                const status = data.status || 'Bilinmiyor';
+                const status = this.cleanPrinterStatusText(data.status || 'Bilinmiyor');
                 const toner = data.toner || 'Bilinmiyor';
                 container.innerHTML = `
                     <span style="font-size: 0.55rem; color: #64748b; font-weight: 800; text-transform: uppercase;">CANLI DURUM (Web)</span>
@@ -2951,7 +2960,7 @@ renderPrintersChunk: function() {
                     if (resp && container) {
                         const data = resp;
                         const color = data.is_online ? '#10b981' : '#ef4444';
-                        const status = data.status || 'Bilinmiyor';
+                        const status = this.cleanPrinterStatusText(data.status || 'Bilinmiyor');
                         const toner = data.toner || 'Bilinmiyor';
                         container.innerHTML = `
                             <span style="font-size: 0.55rem; color: #64748b; font-weight: 800; text-transform: uppercase;">CANLI DURUM (Web)</span>
