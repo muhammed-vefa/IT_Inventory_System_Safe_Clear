@@ -14,32 +14,47 @@ CACHE_FILE = os.path.join(BASE_DIR, 'database', 'printer_live_status.json')
 
 STATUS_MAP_TR = {
     "ready": "Hazır",
+    "hazır": "Hazır",
     "sleep": "Uyku",
+    "uyku": "Uyku",
+    "uykuda": "Uyku",
     "deep sleep": "Derin Uyku",
+    "derin uyku": "Derin Uyku",
+    "derin uykuda": "Derin Uyku",
     "printing": "Yazdırılıyor",
+    "yazdırılıyor": "Yazdırılıyor",
+    "yazdırıyor": "Yazdırılıyor",
     "warming up": "Isınıyor",
     "warm up": "Isınıyor",
+    "ısınıyor": "Isınıyor",
     "cooling down": "Soğutuluyor",
+    "soğutuluyor": "Soğutuluyor",
     "cover open": "Kapak Açık",
+    "kapak açık": "Kapak Açık",
     "door open": "Kapak Açık",
     "no paper": "Kağıt Yok",
+    "kağıt yok": "Kağıt Yok",
     "paper empty": "Kağıt Yok",
     "out of paper": "Kağıt Yok",
     "paper jam": "Kağıt Sıkışması",
+    "kağıt sıkışması": "Kağıt Sıkışması",
     "jam tray": "Kağıt Sıkışması",
     "jam inside": "Kağıt Sıkışması",
     "jam rear": "Kağıt Sıkışması",
     "toner low": "Toner Az",
+    "toner az": "Toner Az",
     "replace toner": "Toner Bitti / Değiştir",
+    "toner bitti": "Toner Bitti / Değiştir",
     "replace drum": "Drum Değiştir",
+    "drum değiştir": "Drum Değiştir",
     "drum near end": "Drum Ömrü Az",
     "drum end soon": "Drum Ömrü Az",
 }
 
-def _is_ip_reachable(ip, timeout=0.3):
+def _is_ip_reachable(ip, timeout=0.35):
     """
     Hızlı port kontrolü (Port 80 HTTP, 443 HTTPS, 9100 RAW, 515 LPR, 631 IPP).
-    Yazıcı kapalıysa saniyelerce beklemek yerine 0.3 saniyede tespit eder.
+    Yazıcı kapalıysa saniyelerce beklemek yerine 0.35 saniyede tespit eder.
     """
     for port in (80, 443, 9100, 515, 631):
         try:
@@ -79,8 +94,8 @@ def _decode_html(resp):
 
 def _parse_html_status_and_toner(html):
     """
-    Brother yazıcıların tüm modelleri için (MFC-L6900DW, HL-L5210DN, MFC-L5510DN,
-    HL-L5200DW, DCP serisi vb.) web arayüzünden durum ve toner bilgilerini ayrıştırır.
+    Brother yazıcıların tüm modelleri için (MFC-L6900DW, HL-L5210DN, DCP-L5510DN,
+    MFC-L5510DN, HL-L5200DW vb.) web arayüzünden durum ve toner bilgilerini ayrıştırır.
     """
     status = "Bilinmiyor"
     toner = "Bilinmiyor"
@@ -88,6 +103,12 @@ def _parse_html_status_and_toner(html):
     
     soup = BeautifulSoup(html, 'html.parser')
     
+    # 0. Menü, navigasyon, kenar çubuğu ve başlıkları temizle (Menü öğelerinin durum sanılmasını engeller)
+    for nav in soup.find_all(id=re.compile(r'(menu|nav|navigation|headerFrame|footerFrame|LayoutButton)', re.I)):
+        nav.decompose()
+    for nav in soup.find_all(class_=re.compile(r'(menu|nav|sidebar|links)', re.I)):
+        nav.decompose()
+
     # 1. Bakım / Uyarı Mesajları Taraması
     m_keywords = [
         ("Drum Değiştir", "Drum Değiştir"), ("Replace Drum", "Drum Değiştir"),
@@ -110,7 +131,7 @@ def _parse_html_status_and_toner(html):
     moni_span = soup.find('span', class_=re.compile(r'moni', re.I))
     if moni_span:
         t = moni_span.get_text(strip=True)
-        if t:
+        if t and "refresh" not in t.lower() and "interval" not in t.lower():
             status = t
 
     # Yöntem B: ID bazlı arama (moni_data, status, state, disp_area)
@@ -118,7 +139,7 @@ def _parse_html_status_and_toner(html):
         moni_el = soup.find(id=re.compile(r'(moni_data|monidata|status|state|disp_area)', re.I))
         if moni_el:
             t = moni_el.get_text(strip=True)
-            if t:
+            if t and "refresh" not in t.lower() and "interval" not in t.lower():
                 status = t
 
     # Yöntem C: JavaScript moni_data dizisi (Örn: moni_data = ["Sleep", 85, ...])
@@ -126,25 +147,25 @@ def _parse_html_status_and_toner(html):
         js_match = re.search(r"moni_data\s*=\s*\[(.*?)\]", html)
         if js_match:
             parts = [p.strip().replace('"', '').replace("'", '') for p in js_match.group(1).split(',')]
-            if len(parts) > 0 and parts[0]:
+            if len(parts) > 0 and parts[0] and "refresh" not in parts[0].lower():
                 status = parts[0]
 
-    # Yöntem D: Tablo / Etiket (Status / Durum / Cihaz Durumu hücresinin yanındaki değer)
+    # Yöntem D: Etiket (Device Status / Durum hücresinin yanındaki değer)
     if status == "Bilinmiyor":
-        label = soup.find(string=re.compile(r'(Status|Durum|Cihaz Durumu|Printer Status)', re.I))
+        label = soup.find(string=re.compile(r'(Device\s*Status|Cihaz\s*Durumu)', re.I))
         if label:
-            val = label.find_next(['td', 'span', 'div', 'p', 'dd'])
+            val = label.find_next(['dd', 'td', 'span', 'div', 'p'])
             if val:
                 t = val.get_text(strip=True)
-                if t and t.lower() not in ['status', 'durum', 'cihaz durumu', 'printer status']:
+                if t and t.lower() not in ['status', 'durum', 'cihaz durumu', 'device status', 'automatic refresh'] and "refresh" not in t.lower():
                     status = t
 
     # Yöntem E: Genel metin içi durum anahtar kelimeleri
     if status == "Bilinmiyor":
         text_content = soup.get_text()
         kw_list = [
-            ("Derin Uyku", "Derin Uyku"), ("Deep Sleep", "Derin Uyku"),
-            ("Uyku", "Uyku"), ("Sleep", "Uyku"),
+            ("Derin Uykuda", "Derin Uyku"), ("Derin Uyku", "Derin Uyku"), ("Deep Sleep", "Derin Uyku"),
+            ("Uykuda", "Uyku"), ("Uyku", "Uyku"), ("Sleep", "Uyku"),
             ("Hazır", "Hazır"), ("Ready", "Hazır"),
             ("Yazdırılıyor", "Yazdırılıyor"), ("Printing", "Yazdırılıyor"),
             ("Isınıyor", "Isınıyor"), ("Warming Up", "Isınıyor"), ("Warm Up", "Isınıyor"),
@@ -169,7 +190,7 @@ def _parse_html_status_and_toner(html):
         status = f"{status} ({maintenance_msg})"
 
     # 3. TONER SEVİYESİ TESPİTİ
-    # Yöntem A: JS moni_data dizisi (2. eleman genellikle doğrudan yüzde değeridir)
+    # Yöntem A: JS moni_data dizisi
     js_match = re.search(r"moni_data\s*=\s*\[(.*?)\]", html)
     if js_match:
         parts = [p.strip().replace('"', '').replace("'", '') for p in js_match.group(1).split(',')]
@@ -179,7 +200,7 @@ def _parse_html_status_and_toner(html):
                 toner = f"%{val}"
 
     # Yöntem B: 'tonerremain' sınıfı veya toner görseli (Brother 6900/5200/5210/5510)
-    # 6900 modellerinde 50px = %100; 5210 ve 5510 modellerinde genellikle 56px = %100
+    # 6900 modellerinde 50px = %100; 5210 ve 5510 modellerinde 56px = %100
     if toner == "Bilinmiyor":
         toner_imgs = soup.find_all('img', class_=re.compile(r'tonerremain', re.I))
         if not toner_imgs:
@@ -233,16 +254,9 @@ def _parse_html_status_and_toner(html):
 def _query_snmp_status_and_toner(ip, timeout=0.4):
     """
     Brother yazıcılarda SNMP UDP port 161 üzerinden hızlı durum ve toner sorgulaması.
-    Web arayüzü engellendiğinde veya farklı porttayken çalışır.
     """
     try:
-        # Standard Printer MIB OIDs
-        # hrPrinterStatus: 1.3.6.1.2.1.25.3.5.1.1.1
-        # prtMarkerSuppliesLevel: 1.3.6.1.2.1.43.11.1.1.9.1.1
-        # prtMarkerSuppliesMaxCapacity: 1.3.6.1.2.1.43.11.1.1.8.1.1
         oid_status = (1, 3, 6, 1, 2, 1, 25, 3, 5, 1, 1, 1)
-        
-        # Build lightweight SNMPv1 GET request for status
         oid_bytes = bytearray([oid_status[0] * 40 + oid_status[1]])
         for val in oid_status[2:]:
             if val < 128:
@@ -273,10 +287,8 @@ def _query_snmp_status_and_toner(ip, timeout=0.4):
         sock.close()
         
         if data and len(data) > 20:
-            # Parse integer response (last integer tag 0x02)
             pdu_idx = data.find(b'\xA2')
             if pdu_idx != -1:
-                # Value is near the end
                 last_byte = data[-1]
                 status_val = int(last_byte)
                 status_map = {1: "Diğer", 2: "Bilinmiyor", 3: "Hazır", 4: "Yazdırılıyor", 5: "Isınıyor"}
@@ -288,7 +300,7 @@ def _query_snmp_status_and_toner(ip, timeout=0.4):
 
 def fetch_printer_status(ip):
     """
-    Brother yazıcılardan (MFC-L6900DW, HL-L5210DN, MFC-L5510DN, HL-L5200DW vb.)
+    Brother yazıcılardan (MFC-L6900DW, HL-L5210DN, DCP-L5510DN, MFC-L5510DN, HL-L5200DW vb.)
     toner seviyesi ve canlı durum bilgisini çeker.
     """
     result = {
@@ -308,12 +320,37 @@ def fetch_printer_status(ip):
         return result
         
     result["is_online"] = True
-    
-    # 2. Taranacak Web URL'leri (Modellere göre sıralı)
-    # HL-L5210DN gibi tek fonksiyonlu modellerde information.html veya status.html;
-    # MFC serisinde /general/status.html veya /common/status.html sıkça kullanılır.
     proto = "https" if open_port == 443 else "http"
-    urls = [
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+    }
+    
+    session = requests.Session()
+
+    # 2. Öncelikli olarak monitor.html uç noktaları (DCP-L5510DN / HL-L5210DN dinamik canlı LCD durumu)
+    monitor_urls = [
+        f"{proto}://{ip}/home/monitor.html",
+        f"{proto}://{ip}/general/monitor.html",
+        f"{proto}://{ip}/common/monitor.html",
+        f"{proto}://{ip}/monitor.html"
+    ]
+    for m_url in monitor_urls:
+        try:
+            m_resp = session.get(m_url, timeout=1.5, verify=False, headers=headers)
+            if m_resp.status_code == 200 and m_resp.content:
+                html = _decode_html(m_resp)
+                st, _ = _parse_html_status_and_toner(html)
+                if st != "Bilinmiyor":
+                    result["status"] = st
+                    break
+        except Exception:
+            continue
+
+    # 3. Sayfa içi durum ve toner seviyesi uç noktaları
+    status_urls = [
+        f"{proto}://{ip}/home/status.html",
         f"{proto}://{ip}/general/status.html",
         f"{proto}://{ip}/general/information.html",
         f"{proto}://{ip}/common/status.html",
@@ -323,32 +360,25 @@ def fetch_printer_status(ip):
         f"{proto}://{ip}/"
     ]
     
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-    }
-    
-    session = requests.Session()
-    
-    for url in urls:
+    for url in status_urls:
         try:
             resp = session.get(url, timeout=2.0, verify=False, headers=headers, allow_redirects=True)
             if resp.status_code == 200 and resp.content:
                 html = _decode_html(resp)
                 st, tn = _parse_html_status_and_toner(html)
                 
-                if st != "Bilinmiyor":
+                if result["status"] == "Bilinmiyor" and st != "Bilinmiyor":
                     result["status"] = st
-                if tn != "Bilinmiyor":
+                if result["toner"] == "Bilinmiyor" and tn != "Bilinmiyor":
                     result["toner"] = tn
                     
-                # Hem durum hem toner bulunduysa diğer URL'leri denemeye gerek yok
+                # Hem durum hem toner bulunduysa döngüden çık
                 if result["status"] != "Bilinmiyor" and result["toner"] != "Bilinmiyor":
                     return result
         except Exception:
             continue
 
-    # 3. HTTP ile durum bulunamadıysa SNMP Fallback
+    # 4. HTTP ile durum veya toner bulunamadıysa SNMP Fallback
     if result["status"] == "Bilinmiyor" or result["toner"] == "Bilinmiyor":
         snmp_st, snmp_tn, snmp_ok = _query_snmp_status_and_toner(ip, timeout=0.4)
         if snmp_ok:
@@ -357,7 +387,7 @@ def fetch_printer_status(ip):
             if result["toner"] == "Bilinmiyor" and snmp_tn:
                 result["toner"] = snmp_tn
 
-    # 4. Yazıcı erişilebilir fakat web arayüzünde durum yazmıyorsa temel durum ver
+    # 5. Yazıcı online fakat durum henüz okunamadıysa varsayılan 'Hazır' ver
     if result["is_online"] and result["status"] == "Bilinmiyor":
         result["status"] = "Hazır"
         

@@ -68,7 +68,17 @@ const BuildingMap = {
                     if(k !== 'floor' && k !== 'id') wings.add(k); // ignore id if it exists
                 });
             });
-            wings = Array.from(wings).sort();
+            
+            // Kanatlar alfabetik, Çekirdek (C1, C2) en sağda/sonda
+            wings = Array.from(wings).sort((a, b) => {
+                const aUp = a.toUpperCase();
+                const bUp = b.toUpperCase();
+                const isACore = aUp === 'C1' || aUp === 'C2' || aUp.includes('ÇEKİRDEK');
+                const isBCore = bUp === 'C1' || bUp === 'C2' || bUp.includes('ÇEKİRDEK');
+                if (isACore && !isBCore) return 1;
+                if (!isACore && isBCore) return -1;
+                return aUp.localeCompare(bUp);
+            });
             
             if(wings.length === 0) {
                 grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 50px; color: var(--muted);">Kat planı bulunamadı.</div>`;
@@ -81,7 +91,13 @@ const BuildingMap = {
             // Headers
             grid.innerHTML += `<div></div>`;
             wings.forEach(w => {
-                const wName = w.toUpperCase().includes('KANAT') ? w.toUpperCase() : w.toUpperCase() + ' KANADI';
+                const wUpper = w.toUpperCase();
+                let wName = wUpper;
+                if (wUpper === 'C1' || wUpper === 'C2') {
+                    wName = 'ÇEKİRDEK';
+                } else if (!wUpper.includes('KANAT')) {
+                    wName = wUpper + ' KANADI';
+                }
                 grid.innerHTML += `<div class="bm-grid-header">${wName}</div>`;
             });
                 
@@ -137,7 +153,9 @@ const BuildingMap = {
     },
     
     promptEdit: function(floor, wing, currentDept) {
-        const newDept = prompt(`${floor}. Kat ${wing} Kanadı için yeni birim adı girin (Boş bırakmak için iptal edin veya silin):`, currentDept);
+        const wUpper = (wing || '').toUpperCase();
+        const wingLabel = (wUpper === 'C1' || wUpper === 'C2') ? 'Çekirdek' : `${wUpper} Kanadı`;
+        const newDept = prompt(`${floor}. Kat ${wingLabel} için yeni birim adı girin (Boş bırakmak için iptal edin veya silin):`, currentDept);
         if(newDept !== null) {
             this.saveEdit(floor, wing, newDept);
         }
@@ -150,13 +168,13 @@ const BuildingMap = {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + token
+                    'Authorization': token ? ('Bearer ' + token) : ''
                 },
                 body: JSON.stringify({
-                    building_name: this.currentBuilding,
-                    floor_level: floor,
+                    building: this.currentBuilding,
+                    floor: floor,
                     wing: wing,
-                    department_name: newDept
+                    dept: newDept
                 })
             });
             const data = await res.json();
@@ -172,8 +190,10 @@ const BuildingMap = {
     },
     
     openSidebar: async function(dept, floor, wing) {
-        document.getElementById('bm-sb-title').innerText = dept || 'BOŞ DEPARTMAN';
-        document.getElementById('bm-sb-loc').innerHTML = `<i class="fas fa-map-marker-alt"></i> ${this.currentBuilding} / ${floor}. Kat / ${wing} Kanadı`;
+        const wUpper = (wing || '').toUpperCase();
+        const wingDisplay = (wUpper === 'C1' || wUpper === 'C2') ? 'Çekirdek' : `${wUpper} Kanadı`;
+        document.getElementById('bm-sb-title').innerText = dept || ((wUpper === 'C1' || wUpper === 'C2') ? 'ÇEKİRDEK' : 'BOŞ DEPARTMAN');
+        document.getElementById('bm-sb-loc').innerHTML = `<i class="fas fa-map-marker-alt"></i> ${this.currentBuilding} / ${floor}. Kat / ${wingDisplay}`;
         
         const listContainer = document.getElementById('bm-sb-list');
         listContainer.innerHTML = '<div style="text-align:center; padding: 20px;"><i class="fas fa-spinner fa-spin fa-2x" style="color:var(--accent);"></i></div>';
@@ -184,7 +204,7 @@ const BuildingMap = {
         
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`/api/building_map/devices?department=${encodeURIComponent(dept || '')}&wing=${encodeURIComponent(wing)}&floor=${encodeURIComponent(floor)}`, {
+            const res = await fetch(`/api/building_map/devices?building=${encodeURIComponent(this.currentBuilding)}&department=${encodeURIComponent(dept || '')}&wing=${encodeURIComponent(wing)}&floor=${encodeURIComponent(floor)}`, {
                 headers: token ? { 'Authorization': 'Bearer ' + token } : {}
             });
             const data = await res.json();
@@ -219,10 +239,16 @@ const BuildingMap = {
                             displayName = (isPc ? 'PC-' : 'PR-') + displayName.padStart(3, '0');
                         }
                         
+                        const locCode = (d.location_code || '').trim();
+                        const locBadge = locCode ? `<span style="font-size: 0.75rem; color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); padding: 2px 7px; border-radius: 4px; font-weight: 600; font-family: monospace; letter-spacing: 0.3px;" title="Mahal Kodu"><i class="fas fa-map-marker-alt" style="margin-right: 4px; font-size: 0.7rem;"></i>${locCode}</span>` : '';
+                        
                         html += `
                         <div class="bm-device-card ${isErr ? 'broken' : ''}" onclick="app.editDevice(${d.id}, '${d.type}')" style="cursor: pointer; color: #ffffff;">
-                            <div>
-                                <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 5px; color: #ffffff;">${displayName}</div>
+                            <div style="flex: 1; margin-right: 15px;">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                                    <span style="font-weight: 700; font-size: 0.95rem; color: #ffffff;">${displayName}</span>
+                                    ${locBadge}
+                                </div>
                                 <div style="font-size: 0.75rem; color: rgba(255,255,255,0.7); font-family: monospace; background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; display: inline-block;">
                                     <i class="fas ${icon}"></i> ${extra}
                                 </div>
