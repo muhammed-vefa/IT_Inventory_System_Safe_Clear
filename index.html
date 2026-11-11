@@ -302,7 +302,7 @@
     </div>
 
     <nav>
-        <div class="logo" style="cursor: pointer;" onclick="app.navigateTo('dashboard')">
+        <div class="logo" style="cursor: pointer;" onclick="app.navigateHome()">
             <img src="/static/logo/KOCSH.png" alt="SYS KOCAELISH" style="height: 35px; width: auto; object-fit: contain;">
         </div>
         <div class="nav-links">
@@ -311,6 +311,14 @@
             <a href="#" class="nav-link" data-view="general-notes"><i class="fas fa-book" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Bilgi Bankası</a>
             <a href="#" class="nav-link" data-view="areas"><i class="fas fa-network-wired" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Ortak Alanlar</a>
             <a href="#" class="nav-link" data-view="depot"><i class="fas fa-box-open" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Depo</a>
+            <!-- Özel Yetkilendirilmiş Kullanıcılar İçin Üst Menü Linkleri -->
+            <a href="#" class="nav-link nav-link-secondary" data-view="building-map" style="display:none;"><i class="fas fa-layer-group" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Bina Haritası</a>
+            <a href="#" class="nav-link nav-link-secondary" data-view="docs" style="display:none;"><i class="fas fa-file-signature" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Tutanaklar</a>
+            <a href="#" class="nav-link nav-link-secondary" data-view="mahal" style="display:none;"><i class="fas fa-map-marker-alt" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Mahal</a>
+            <a href="#" class="nav-link nav-link-secondary" data-view="network" style="display:none;"><i class="fas fa-server" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Ağ Cihazları</a>
+            <a href="#" class="nav-link nav-link-secondary" data-view="vpn" style="display:none;"><i class="fas fa-shield-alt" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> VPN Yönetimi</a>
+            <a href="#" class="nav-link nav-link-secondary" data-view="keyboard-test" style="display:none;"><i class="fas fa-keyboard" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Klavye Testi</a>
+            <a href="#" class="nav-link nav-link-secondary" data-view="installations" style="display:none;"><i class="fas fa-bolt" style="color:var(--accent); width: 20px; text-align: center; margin-right: 5px;"></i> Hızlı Kurulumlar</a>
         </div>
         <div class="flex-row" style="align-items:center; gap:12px;">
             <div class="custom-dropdown" id="shortcuts-dropdown">
@@ -327,7 +335,7 @@
                     <a href="https://bulut.kocaelish.com/index.php/login" target="_blank"><i class="fas fa-cloud"></i> Bulut</a>
                     <a href="http://ortakalan.kocaelish.com/WebClientNew/Login" target="_blank"><i class="fas fa-network-wired"></i> Ortak Alan</a>
                     <a href="http://speedtest.kocaelish.com/" target="_blank"><i class="fas fa-gauge-high"></i> Speedtest</a>
-                    <a href="#" onclick="event.preventDefault(); app.navigateTo('keyboard-test');"><i class="fas fa-keyboard" style="color:var(--accent);"></i> Klavye Testi</a>
+                    <a href="#" id="shortcut-keyboard-test" onclick="event.preventDefault(); app.navigateTo('keyboard-test');"><i class="fas fa-keyboard" style="color:var(--accent);"></i> Klavye Testi</a>
                     <hr style="border:0; border-top:1px solid rgba(255,255,255,0.05); margin:5px 0;">
                     <div style="padding: 5px 20px; font-size: 0.8rem; color: var(--accent);"><i class="fas fa-tv"></i> Magic Info</div>
                     <div style="display:flex; flex-wrap:wrap; gap:5px; padding: 0 20px 5px 20px;">
@@ -360,7 +368,7 @@
                     <div class="dropdown-menu right">
                           <a href="#" id="menu-users" onclick="app.navigateTo('users')" style="display:none;"><i class="fas fa-users-gear"></i> Kullanıcı Yönetimi</a>
                           <a href="#" onclick="app.openProfileSettingsModal()"><i class="fas fa-user-cog"></i> Hesap Ayarları</a>
-                          <a href="#" onclick="app.openMobilePrintModal()"><i class="fas fa-print"></i> Yazdır</a>
+                          <a href="#" id="menu-mobile-print" onclick="app.openMobilePrintModal()"><i class="fas fa-print"></i> Yazdır</a>
                           <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:5px 0;">
                           
                           <!-- Üst Menüden Taşınan Modüller -->
@@ -407,7 +415,7 @@
 
     <main class="container">
         <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• DASHBOARD VIEW â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
-        <section id="view-dashboard" class="view fade-in">
+        <section id="view-dashboard" class="view fade-in" style="display: none;">
             <div class="section-header-group">
                 <div class="flex-between" style="align-items: center;">
                     <div>
@@ -3225,6 +3233,9 @@
                         <label class="check-container" style="font-size:0.8rem;">Mahal <input type="checkbox" value="mahal"><span class="checkmark"></span></label>
                         <label class="check-container" style="font-size:0.8rem;">Ağ Cihazları <input type="checkbox" value="network"><span class="checkmark"></span></label>
                         <label class="check-container" style="font-size:0.8rem;">Bina Haritası <input type="checkbox" value="building-map"><span class="checkmark"></span></label>
+                        <label class="check-container" style="font-size:0.8rem;">VPN Yönetimi <input type="checkbox" value="vpn"><span class="checkmark"></span></label>
+                        <label class="check-container" style="font-size:0.8rem;">Klavye Testi <input type="checkbox" value="keyboard-test"><span class="checkmark"></span></label>
+                        <label class="check-container" style="font-size:0.8rem;">Yazdır <input type="checkbox" value="mobile-print"><span class="checkmark"></span></label>
                         <label class="check-container" style="font-size:0.8rem;">Hızlı Kurulumlar <input type="checkbox" value="installations"><span class="checkmark"></span></label>
                         <label class="check-container" style="font-size:0.8rem;">Raporlar <input type="checkbox" value="admin-reports"><span class="checkmark"></span></label>
                         <label class="check-container" style="font-size:0.8rem;">Audit Logs <input type="checkbox" value="logs"><span class="checkmark"></span></label>
@@ -3674,7 +3685,7 @@
             animation: myblink 1.5s infinite;
         }
     </style>
-    <script src="frontend/UI_controller.js?v=20260921_perf3"></script>
+    <script src="frontend/UI_controller.js?v=20261111_custom_perms"></script>
     <script src="frontend/network_and_mahal.js?v=20260921_perf2"></script>
     <script src="frontend/vpn_manager.js?v=20261105"></script>
     <script src="frontend/building_map.js"></script>

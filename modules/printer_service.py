@@ -7,7 +7,7 @@ import os
 def get_brother_printer_status(ip):
     """
     Yazıcının web arayüzünden durum, toner ve bakım (Drum vb.) bilgilerini çeker.
-    Brother MFC-L6900DW ve benzeri modeller için optimize edilmiştir.
+    Brother MFC-L6900DW, HL-L5210DN, MFC-L5510DN, HL-L5200DW ve benzeri modeller için optimize edilmiştir.
     """
     status_info = {
         "ip": ip,

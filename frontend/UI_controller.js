@@ -425,46 +425,79 @@ var appData = {
         return role === 'DEPOT' || role === 'DEPO' || role === 'DEPOCU' || role === 'WAREHOUSE';
     },
     hasAccess: function(moduleName) {
-        if (moduleName === 'keyboard-test') return true;
         if (!this.state.activeUser) return false;
         var role = (this.state.activeUser.role || '').toUpperCase();
         if (role === 'ADMIN') return true;
+        // OTHER rol: sadece açıkça verilmiş izinleri kontrol et (keyboard-test dahil)
+        if (role === 'OTHER') {
+            try {
+                var perms = JSON.parse(this.state.activeUser.permissions || "[]");
+                return perms.includes(moduleName);
+            } catch(e) { return false; }
+        }
+        if (moduleName === 'keyboard-test') return true;
         if (role === 'EDITOR' && !['users', 'logs', 'admin-reports'].includes(moduleName)) return true;
         if (role === 'VIEWER' && !['users', 'logs', 'admin-reports'].includes(moduleName)) return true;
         if (this.isDepotRole(role) && (moduleName === 'depot' || moduleName === 'printers' || moduleName === 'service')) return true;
-        if (role === 'OTHER') {
-            try {
-                var perms = JSON.parse(this.state.activeUser.permissions || "[]");
-                return perms.includes(moduleName);
-            } catch(e) { return false; }
-        }
         return false;
     },
     canEdit: function(moduleName) {
-        if (moduleName === 'keyboard-test') return true;
         if (!this.state.activeUser) return false;
         var role = (this.state.activeUser.role || '').toUpperCase();
-        if (role === 'VIEWER') return false;
         if (role === 'ADMIN') return true;
-        if (role === 'EDITOR' && !['users', 'logs', 'admin-reports', 'depot'].includes(moduleName)) return true;
-        if (this.isDepotRole(role) && (moduleName === 'depot' || moduleName === 'printers' || moduleName === 'service')) return true;
         if (role === 'OTHER') {
             try {
                 var perms = JSON.parse(this.state.activeUser.permissions || "[]");
                 return perms.includes(moduleName);
             } catch(e) { return false; }
         }
+        if (moduleName === 'keyboard-test') return true;
+        if (role === 'VIEWER') return false;
+        if (role === 'EDITOR' && !['users', 'logs', 'admin-reports', 'depot'].includes(moduleName)) return true;
+        if (this.isDepotRole(role) && (moduleName === 'depot' || moduleName === 'printers' || moduleName === 'service')) return true;
         return false;
+    },
+    getFirstAllowedView: function() {
+        if (!this.state.activeUser) return 'dashboard';
+        const role = String(this.state.activeUser.role || '').toUpperCase();
+        if (role === 'OTHER') {
+            try {
+                const perms = JSON.parse(this.state.activeUser.permissions || "[]");
+                if (Array.isArray(perms) && perms.length > 0) {
+                    const validViews = ['dashboard', 'building-map', 'inventory', 'general-notes', 'areas', 'depot', 'docs', 'service', 'mahal', 'network', 'vpn', 'keyboard-test', 'installations', 'logs', 'users', 'admin-reports'];
+                    const match = perms.find(p => validViews.includes(p));
+                    if (match && this.hasAccess(match)) return match;
+                }
+            } catch(e) {}
+        }
+        if (this.hasAccess('dashboard')) return 'dashboard';
+        if (this.hasAccess('building-map')) return 'building-map';
+        if (this.hasAccess('inventory')) return 'inventory';
+        if (this.hasAccess('general-notes')) return 'general-notes';
+        if (this.hasAccess('areas')) return 'areas';
+        if (this.hasAccess('depot')) return 'depot';
+        return 'dashboard';
+    },
+    navigateHome: function() {
+        this.navigateTo(this.getFirstAllowedView());
     },
     applyRoleRestrictions: function() {
         var self = this;
-        // Sidebar sekmelerini gizle
+        var role = (self.state.activeUser && self.state.activeUser.role) ? String(self.state.activeUser.role).toUpperCase() : '';
+        var isOther = role === 'OTHER';
+
+        // Navigasyon sekmelerini gizle / göster
         document.querySelectorAll('.nav-link').forEach(link => {
             var view = link.dataset.view;
+            var isSecondary = link.classList.contains('nav-link-secondary');
             if (view && !self.hasAccess(view)) {
                 link.style.display = 'none';
+            } else if (isOther) {
+                // OTHER rolü: izin verilen her modülü doğrudan üst menüde göster
+                link.style.display = 'flex';
             } else {
-                link.style.display = '';
+                // Standart roller: ikincil modüller üst menüyü kalabalıklaştırmasın, dropdown'da kalsın
+                link.style.display = isSecondary ? 'none' : '';
             }
         });
         
@@ -474,10 +507,13 @@ var appData = {
             {id: 'menu-docs', module: 'docs'},
             {id: 'menu-mahal', module: 'mahal'},
             {id: 'menu-network', module: 'network'},
+            {id: 'menu-vpn', module: 'vpn'},
             {id: 'menu-building-map', module: 'building-map'},
             {id: 'menu-keyboard-test', module: 'keyboard-test'},
             {id: 'menu-installations', module: 'installations'},
             {id: 'menu-admin-reports', module: 'admin-reports'},
+            {id: 'menu-mobile-print', module: 'printers'},
+            {id: 'shortcut-keyboard-test', module: 'keyboard-test'},
             {id: 'menu-backup', module: 'users'}, // users yetkisi olan backup alabilir
             {id: 'menu-keyos-query', module: 'users'},
             {id: 'menu-cups-query', module: 'printers'},
@@ -490,7 +526,13 @@ var appData = {
         ];
         ids.forEach(item => {
             var el = document.getElementById(item.id);
-            if (el) el.style.display = self.hasAccess(item.module) ? 'flex' : 'none';
+            if (el) {
+                var canShow = self.hasAccess(item.module);
+                if (item.id === 'menu-mobile-print') {
+                    canShow = self.hasAccess('printers') || self.hasAccess('mobile-print');
+                }
+                el.style.display = canShow ? 'flex' : 'none';
+            }
         });
 
         // Dashboard Health Panel
@@ -555,12 +597,9 @@ checkLoginStatus: function() {
                 this.loadMahalList();
                 this.renderAll();
                 
-                var savedView = localStorage.getItem('active_view') || 'dashboard';
-                // Rol DEPO artık Depo yanında Yazıcılar/Servis işlemlerini de görebilir; son açık ekran erişilebilirse korunur.
-                if (!this.hasAccess(savedView)) {
-                    if (this.hasAccess('dashboard')) savedView = 'dashboard';
-                    else if (this.hasAccess('inventory')) savedView = 'inventory';
-                    else savedView = 'dashboard'; // fallback
+                var savedView = localStorage.getItem('active_view');
+                if (!savedView || !this.hasAccess(savedView)) {
+                    savedView = this.getFirstAllowedView();
                 }
                 this.navigateTo(savedView);
                 this.setPrinterMainType('PRINTER');
@@ -753,27 +792,37 @@ checkLoginStatus: function() {
         const isOther = role === 'OTHER';
         let allowedViews = [];
         if (isAdmin) {
-            allowedViews = ['dashboard', 'building-map', 'inventory', 'general-notes', 'areas', 'depot', 'docs', 'service', 'logs', 'users', 'admin-reports', 'installations', 'mahal', 'network'];
+            allowedViews = ['dashboard', 'building-map', 'inventory', 'general-notes', 'areas', 'depot', 'docs', 'service', 'logs', 'users', 'admin-reports', 'installations', 'mahal', 'network', 'vpn', 'keyboard-test'];
         } else if (isOther && user.permissions) {
             try {
                 allowedViews = JSON.parse(user.permissions);
+                if (!Array.isArray(allowedViews)) allowedViews = [];
                 if (allowedViews.includes('printers') && !allowedViews.includes('inventory')) {
                     allowedViews.push('inventory');
                 }
             } catch(e) { allowedViews = []; }
         } else if (role === 'EDITOR') {
-            allowedViews = ['dashboard', 'building-map', 'inventory', 'general-notes', 'areas', 'docs', 'service', 'installations', 'mahal', 'network'];
+            allowedViews = ['dashboard', 'building-map', 'inventory', 'general-notes', 'areas', 'docs', 'service', 'installations', 'mahal', 'network', 'vpn', 'keyboard-test'];
         } else if (this.isDepotRole(role)) {
             allowedViews = ['dashboard', 'building-map', 'inventory', 'service', 'depot', 'mahal', 'network'];
         } else {
             // VIEWER
-            allowedViews = ['dashboard', 'building-map', 'inventory', 'general-notes', 'areas', 'service', 'mahal', 'network'];
+            allowedViews = ['dashboard', 'building-map', 'inventory', 'general-notes', 'areas', 'service', 'mahal', 'network', 'keyboard-test'];
         }
-        if (!allowedViews.includes('keyboard-test')) allowedViews.push('keyboard-test');
+        if (!isOther && !allowedViews.includes('keyboard-test')) allowedViews.push('keyboard-test');
         // Navigasyon linklerini gizle/göster
         document.querySelectorAll('.nav-link').forEach(link => {
             const view = link.getAttribute('data-view');
-            link.style.display = allowedViews.includes(view) ? 'block' : 'none';
+            const isSecondary = link.classList.contains('nav-link-secondary');
+            if (isOther) {
+                link.style.display = allowedViews.includes(view) ? 'flex' : 'none';
+            } else {
+                if (isSecondary) {
+                    link.style.display = 'none';
+                } else {
+                    link.style.display = allowedViews.includes(view) ? 'flex' : 'none';
+                }
+            }
         });
         // Dropdown menü öğelerini gizle/göster
         const navUsers = document.getElementById('menu-users');
@@ -793,16 +842,22 @@ checkLoginStatus: function() {
         const navDocs = document.getElementById('menu-docs');
         const navMahal = document.getElementById('menu-mahal');
         const navNetwork = document.getElementById('menu-network');
+        const navVpn = document.getElementById('menu-vpn');
         const navBuildingMap = document.getElementById('menu-building-map');
         const navKeyboardTest = document.getElementById('menu-keyboard-test');
         const navInstallations = document.getElementById('menu-installations');
+        const navMobilePrint = document.getElementById('menu-mobile-print');
+        const shortcutKeyboard = document.getElementById('shortcut-keyboard-test');
 
         if(navDocs) navDocs.style.display = allowedViews.includes('docs') ? 'flex' : 'none';
         if(navMahal) navMahal.style.display = allowedViews.includes('mahal') ? 'flex' : 'none';
         if(navNetwork) navNetwork.style.display = allowedViews.includes('network') ? 'flex' : 'none';
+        if(navVpn) navVpn.style.display = allowedViews.includes('vpn') ? 'flex' : 'none';
         if(navBuildingMap) navBuildingMap.style.display = allowedViews.includes('building-map') ? 'flex' : 'none';
         if(navKeyboardTest) navKeyboardTest.style.display = allowedViews.includes('keyboard-test') ? 'flex' : 'none';
         if(navInstallations) navInstallations.style.display = allowedViews.includes('installations') ? 'flex' : 'none';
+        if(navMobilePrint) navMobilePrint.style.display = (isAdmin || allowedViews.includes('printers') || allowedViews.includes('mobile-print')) ? 'flex' : 'none';
+        if(shortcutKeyboard) shortcutKeyboard.style.display = allowedViews.includes('keyboard-test') ? 'flex' : 'none';
         if(navSync) navSync.style.display = isAdmin ? 'block' : 'none';
         if(navKeyosSync) navKeyosSync.style.display = isAdmin ? 'block' : 'none';
         if(navKeyosReport) navKeyosReport.style.display = isAdmin ? 'block' : 'none';
@@ -866,7 +921,7 @@ checkLoginStatus: function() {
             localStorage.setItem("token", response.token || "");
             localStorage.setItem("user", JSON.stringify(user));
             localStorage.setItem('it_user_data', JSON.stringify(user));
-            localStorage.setItem('active_view', 'dashboard');
+            localStorage.removeItem('active_view');
 
             console.log("Login Successful, redirecting...");
             location.reload();
@@ -1341,6 +1396,15 @@ checkLoginStatus: function() {
         }
     },
     navigateTo: function(view) {
+        if (view && !this.hasAccess(view)) {
+            console.warn("Access denied for view:", view);
+            const fallback = this.getFirstAllowedView();
+            if (fallback && fallback !== view) {
+                return this.navigateTo(fallback);
+            }
+            this.showToast('Bu ekrana erişim yetkiniz bulunmamaktadır.', 'warning');
+            return;
+        }
         if (this.stopLiveConsoleStream) this.stopLiveConsoleStream();
         this.state.view = view;
         localStorage.setItem('active_view', view);
@@ -7547,8 +7611,9 @@ rmdir "$M" 2>/dev/null`;
         });
         document.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', (e) => {
-                const view = e.target.dataset.view;
-                this.navigateTo(view);
+                const targetLink = e.target.closest('.nav-link') || e.target;
+                const view = targetLink ? targetLink.dataset.view : null;
+                if (view) this.navigateTo(view);
                 // Lazy-load printers when tab is clicked
                 if (view === 'inventory' && ['PRINTER', 'BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER'].includes(this.state.invCategory) && !this.state.printers.length) {
                     this.renderPrinters();

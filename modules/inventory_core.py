@@ -1460,9 +1460,9 @@ def export_full_report():
                     pr_no_full = str(pr.get('pr_no', ''))
                     pr_no_short = pr_no_full.replace("PR-", "")
                     
-                    if "6900" in model:
+                    if "6900" in model or "5510" in model:
                         pr6900_no = pr_no_short
-                    elif "5200" in model:
+                    elif "5200" in model or "5210" in model:
                         pr5200_no = pr_no_short
                     elif "8690" in model:
                         pr8690_no = pr_no_short
