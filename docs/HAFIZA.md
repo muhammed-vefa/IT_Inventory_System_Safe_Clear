@@ -188,3 +188,10 @@ Bir yazıcı arızalandığında veya bakıma alındığında, o yazıcıya bağ
 * **Kural:** Kullanıcı bir hatanın çözüldüğünü (kodda yapılmış göründüğünü) ancak fiilen düzelmediğini (CUPS veya sunucu) rapor ettiğinde; "Cihazı yeniden başlatın", "Önbelleği (cache) temizleyin", "Sunucu güncellenmemiş olabilir" gibi **bahaneler ASLA sunulmayacaktır.**
 * **Kullanıcının İş Akışı:** Kullanıcı, kod değişikliğini onayladıktan sonra değişiklikleri sunucuya *manuel olarak kopyalar*, sunucuyu (veya siteyi) *kendi eliyle yeniden başlatır* ve *CTRL+F5* ile arayüzü sıfırlar. Bu nedenle, hata devam ediyorsa sorun **kesinlikle yazılan kodun mantığında veya API çağrısındadır** (örn: eksik parametre, hatalı JSON parse, SQL kısıtlaması, sessizce yutulan try-catch bloku vb.).
 * **Ajanın Sorumluluğu:** Kullanıcı "Değişen bir şey olmadı" dediğinde, kodun uçtan uca (Frontend JSON -> Backend Route -> DB SQL -> CUPS POST) akışı tekrar, daha derinlemesine (değişken isimleri, HTTP Payload tipleri, SQL syntax vs. açısından) denetlenmelidir. Cache veya restart bahanesi üretilmeyecektir.
+
+
+### [12.11.2026] - DEPOT Rolü Yetki Genişletmesi & Rol Matrisi
+* **Kapsam:** DEPOT (Depocu) rolünün Envanter altındaki Yazıcılar, Barkod Yazıcıları ve Servis İşlemlerine tam erişimi ve düzenleme yetkisi sağlandı.
+* **Backend (core/auth.py):** 
+equire_editor rotalarında yazıcı yolu tespiti printer in path olarak genişletildi.
+* **Frontend (UI_controller.js):** hasAccess('inventory') ve canEdit('inventory') metotlarına DEPOT eklendi; Envanter sekmesinde DEPOT rolüne sadece PRINTER ve BARCODE_PRINTER kategorileri filtrelendi; Servis modal ve buton kısıtlamaları DEPOT için açıldı; Kısayollar menüsüne Servis İşlemleri eklendi.
