@@ -509,7 +509,6 @@ var appData = {
             {id: 'menu-mahal', module: 'mahal'},
             {id: 'menu-network', module: 'network'},
             {id: 'menu-vpn', module: 'vpn'},
-            {id: 'menu-service', module: 'service'},
             {id: 'menu-building-map', module: 'building-map'},
             {id: 'menu-keyboard-test', module: 'keyboard-test'},
             {id: 'menu-installations', module: 'installations'},
@@ -845,7 +844,6 @@ checkLoginStatus: function() {
         const navMahal = document.getElementById('menu-mahal');
         const navNetwork = document.getElementById('menu-network');
         const navVpn = document.getElementById('menu-vpn');
-        const navService = document.getElementById('menu-service');
         const navBuildingMap = document.getElementById('menu-building-map');
         const navKeyboardTest = document.getElementById('menu-keyboard-test');
         const navInstallations = document.getElementById('menu-installations');
@@ -856,7 +854,6 @@ checkLoginStatus: function() {
         if(navMahal) navMahal.style.display = allowedViews.includes('mahal') ? 'flex' : 'none';
         if(navNetwork) navNetwork.style.display = allowedViews.includes('network') ? 'flex' : 'none';
         if(navVpn) navVpn.style.display = allowedViews.includes('vpn') ? 'flex' : 'none';
-        if(navService) navService.style.display = allowedViews.includes('service') ? 'flex' : 'none';
         if(navBuildingMap) navBuildingMap.style.display = allowedViews.includes('building-map') ? 'flex' : 'none';
         if(navKeyboardTest) navKeyboardTest.style.display = allowedViews.includes('keyboard-test') ? 'flex' : 'none';
         if(navInstallations) navInstallations.style.display = allowedViews.includes('installations') ? 'flex' : 'none';
@@ -1446,7 +1443,7 @@ checkLoginStatus: function() {
                 this.setInvCategory('PRINTER');
                 document.querySelectorAll('#view-inventory .filter-chips button[data-category]').forEach(btn => {
                     const cat = btn.getAttribute('data-category');
-                    btn.style.display = (cat === 'PRINTER' || cat === 'BARCODE_PRINTER') ? 'inline-block' : 'none';
+                    btn.style.display = (cat === 'PRINTER') ? 'inline-block' : 'none';
                 });
             } else {
                 this.setInvCategory('PC');
@@ -1907,6 +1904,9 @@ checkLoginStatus: function() {
         this._invTimer = setTimeout(() => this.filterInventory(), 300);
     },
     setInvCategory: function(cat) {
+        if (this.isDepotRole(this.state.activeUser ? this.state.activeUser.role : '')) {
+            cat = 'PRINTER';
+        }
         const isChanged = (this.state.invCategory !== (cat || 'PC'));
         this.state.invCategory = cat || 'PC';
         document.querySelectorAll('#device-type-filters .btn-chip').forEach(btn => btn.classList.toggle('active', btn.dataset.category === cat));
@@ -2840,7 +2840,9 @@ renderPrintersChunk: function() {
 
     getMahalBlockAndFloor: function(locCode) {
         if (!locCode || typeof locCode !== 'string') return { block: '', floor: '' };
-        const clean = locCode.trim().toUpperCase();
+        let clean = locCode.trim().toUpperCase();
+        // Geçici durum etiketlerini (SERVİSTE, ARIZALI, TAMİRDE, BAKIMDA vb.) mahal kodunun başından temizle
+        clean = clean.replace(/^(SERVİSTE|SERVISTE|ARIZALI|ARZ|TAMİRDE|TAMIRDE|BAKIMDA|GEÇİCİ|GECICI|YEDEK)[\.\s\-_:]+/gi, '').trim();
         const parts = clean.split('.');
         if (parts.length >= 2) {
             let block = parts[0];
@@ -7208,7 +7210,7 @@ rmdir "$M" 2>/dev/null`;
 
             // Role tabanlı tarih kısıtlaması
             const userRole = (this.state.activeUser && this.state.activeUser.role) ? this.state.activeUser.role.toUpperCase() : '';
-            const canEditOtherDates = (userRole === 'ADMIN' || userRole === 'DEPOT');
+            const canEditOtherDates = (userRole === 'ADMIN' || this.isDepotRole(userRole));
             const sentDate = document.getElementById('service-sent-date');
             if (sentDate) sentDate.readOnly = !canEditOtherDates;
             if (retDate) retDate.readOnly = !canEditOtherDates;
