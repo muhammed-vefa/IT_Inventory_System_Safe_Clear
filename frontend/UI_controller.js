@@ -2918,7 +2918,12 @@ renderPrintersChunk: function() {
     },
 
     removePrinterFromSpecificPc: async function(pcId, pcName, pcIp, prNo, printerId) {
-        if (!confirm(`${pcName} (${pcIp || 'IP Yok'}) bilgisayarından ${prNo} yazıcısını kaldırmak istediğinize emin misiniz?`)) {
+        if (!pcIp || pcIp === 'IP Yok' || pcIp === '0' || pcIp.trim() === '') {
+            alert(`Hata: ${pcName} bilgisayarının IP adresi bulunamadığından uzaktan yazıcı kaldırma işlemi yapılamaz.`);
+            return;
+        }
+
+        if (!confirm(`${pcName} (${pcIp}) bilgisayarından ${prNo} yazıcısını kaldırmak istediğinize emin misiniz?`)) {
             return;
         }
         
@@ -2929,24 +2934,23 @@ renderPrintersChunk: function() {
         this.showToast(`${pcName} üzerinden ${prNo} kaldırılıyor...`, 'info');
         
         try {
-            const resp = await this.apiRequest('/inventory/printers/batch_action', {
+            // Yazıcı kartındaki kaldırma ile birebir aynı mekanizma (/bim/run_command, RemovePrinter)
+            const resp = await this.apiRequest('/bim/run_command', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: 'remove',
-                    bim_function: 'RemovePrinter',
+                    ip: pcIp,
                     command: prNo,
-                    printer_id: printerId,
-                    targets: [{ type: 'pc', value: pcId, ip: pcIp }],
-                    user: user.name || user.username || 'System',
-                    bim_user: bimUser,
-                    bim_pass: bimPass
+                    username: bimUser,
+                    password: bimPass,
+                    function: 'RemovePrinter'
                 })
             });
             
-            if (resp && resp.success && resp.success_count > 0) {
+            if (resp && (resp.success || resp.result)) {
                 this.showToast(`${pcName} üzerinden ${prNo} başarıyla kaldırıldı.`, 'success');
                 
+                // Frontend durumunu güncelle
                 const pcItem = (this.state.inventory || []).find(i => i.id == pcId);
                 if (pcItem && pcItem.bagli_yazicilar) {
                     const currentPrs = pcItem.bagli_yazicilar.split(/\s+/);
@@ -2954,6 +2958,26 @@ renderPrintersChunk: function() {
                     pcItem.bagli_yazicilar = filtered.join(' ');
                 }
                 
+                // Veritabanı ile çift yönlü sync
+                try {
+                    await this.apiRequest('/inventory/printers/batch_action', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'remove',
+                            bim_function: 'RemovePrinter',
+                            command: prNo,
+                            printer_id: printerId,
+                            targets: [{ type: 'pc', value: pcId, ip: pcIp }],
+                            user: user.name || user.username || 'System',
+                            bim_user: bimUser,
+                            bim_pass: bimPass
+                        })
+                    });
+                } catch(e_sync) {
+                    console.log('DB sync logged', e_sync);
+                }
+
                 const rowEl = document.getElementById(`conn-pc-row-${pcId}`);
                 if (rowEl) {
                     rowEl.style.transition = 'all 0.3s';
@@ -2986,7 +3010,7 @@ renderPrintersChunk: function() {
                 
                 this.renderPrinters();
             } else {
-                const errMsg = (resp && resp.failed && resp.failed[0]) || (resp && resp.error) || 'İşlem tamamlanamadı.';
+                const errMsg = (resp && resp.error) || 'İşlem tamamlanamadı.';
                 alert(`Kaldırma Hatası: ${errMsg}`);
             }
         } catch (e) {
@@ -5369,7 +5393,7 @@ rmdir "$M" 2>/dev/null`;
                                         onmouseover="this.style.background='#ef4444'; this.style.color='#fff';"
                                         onmouseout="this.style.background='rgba(239,68,68,0.15)'; this.style.color='#ef4444';"
                                         title="Bu yazıcıyı ${pc.displayName} bilgisayarından kaldır">
-                                    <i class="fas fa-minus"></i> Kaldır
+                                    Kaldır
                                 </button>
                             </div>`;
                         }).join('');
