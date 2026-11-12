@@ -197,3 +197,5 @@ equire_editor rotalarında yazıcı yolu tespiti printer in path olarak genişle
 * **Frontend (UI_controller.js):** hasAccess('inventory') ve canEdit('inventory') metotlarına DEPOT eklendi; Envanter sekmesinde DEPOT rolüne sadece PRINTER ve BARCODE_PRINTER kategorileri filtrelendi; Servis modal ve buton kısıtlamaları DEPOT için açıldı; Kısayollar menüsüne Servis İşlemleri eklendi.
 
 * **Kısayollar & Barkod Yazıcı İyileştirmesi:** Kısayollar menüsünden Servis İşlemleri çıkarıldı (Envanter > Yazıcılar araç çubuğundaki servis butonu aktif). Depocu rolü için Barkod Yazıcılar gizlenip sadece normal Yazıcılar (PRINTER) ve Servis Kayıtları erişimine kilitlendi.
+
+* **Depocu UI & Servis Kaydı Butonu:** Depocu rolü için üst menüden Dashboard ve Bina Haritası, Kısayollardan Envanter Rapor gizlendi. Yazıcı kartlarında 'SERVİS KAYDI OLUŞTUR' butonu depocu için görünür ve tıklanabilir hale getirildi.
