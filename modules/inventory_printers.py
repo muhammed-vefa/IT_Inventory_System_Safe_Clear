@@ -1742,3 +1742,157 @@ def local_windows_install():
         return jsonify({"success": True, "message": f"{name} ({ip}) başarıyla kuruldu! \n" + chr(10).join(logs)})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+
+@inventory_printers_bp.route('/weekly_executive_report', methods=['GET'])
+@require_auth
+def weekly_executive_report():
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"success": False, "error": "Veritabanı bağlantısı kurulamadı."}), 500
+        cursor = conn.cursor()
+        
+        # 1. Tüm yazıcıları çek
+        cursor.execute("""
+            SELECT id, pr_no, model, serial_no, mac, ip, location_code, on_field, warehouse, is_faulty, in_service
+            FROM printers
+            WHERE (is_deleted = 0 OR is_deleted IS NULL)
+            ORDER BY pr_no ASC
+        """)
+        cols = [c[0].lower() for c in cursor.description]
+        pr_rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+        
+        # 2. Servis tablosundaki aktif kayıtları çek (en son durumlar için)
+        cursor.execute("""
+            SELECT pr_no, fault_description, sent_date, return_date, has_substitute, substitute_pr_no, status, user_name, last_edit_date
+            FROM printer_service
+            WHERE (is_deleted = 0 OR is_deleted IS NULL)
+            ORDER BY id DESC
+        """)
+        service_cols = [c[0].lower() for c in cursor.description]
+        service_rows = [dict(zip(service_cols, r)) for r in cursor.fetchall()]
+        
+        # pr_no eşleştirmesi için harita
+        service_map = {}
+        for s in service_rows:
+            p_no = str(s.get('pr_no') or '').strip()
+            if p_no and p_no not in service_map:
+                service_map[p_no] = s
+                
+        # 3. İstatistikleri hesapla
+        total_count = len(pr_rows)
+        on_field_count = 0
+        faulty_count = 0
+        warehouse_count = 0
+        in_service_count = 0
+        
+        model_stats = {}
+        faulty_and_service_list = []
+        
+        from datetime import datetime
+        now = datetime.now()
+        
+        for p in pr_rows:
+            pr_num = str(p.get('pr_no') or '').strip()
+            model = str(p.get('model') or 'Belirtilmemiş').strip()
+            if not model: model = 'Belirtilmemiş'
+            
+            is_service = bool(p.get('in_service'))
+            is_wh = bool(p.get('warehouse'))
+            is_flt = bool(p.get('is_faulty'))
+            is_field = bool(p.get('on_field'))
+            
+            # Servis kayıt kontrolü
+            srv_info = service_map.get(pr_num)
+            if srv_info and not is_service:
+                s_status = str(srv_info.get('status') or '').lower()
+                if ('servis' in s_status or 'gitti' in s_status) and not srv_info.get('return_date'):
+                    is_service = True
+            
+            # Durum belirleme (öncelik: serviste > depoda > arızalı > kurulu)
+            status_label = 'KURULU'
+            if is_service:
+                in_service_count += 1
+                status_label = 'SERVISTE'
+            elif is_wh:
+                warehouse_count += 1
+                status_label = 'DEPO'
+            elif is_flt:
+                faulty_count += 1
+                status_label = 'ARIZALI'
+            else:
+                on_field_count += 1
+                status_label = 'KURULU'
+                
+            # Model grubu
+            if model not in model_stats:
+                model_stats[model] = {
+                    "model": model,
+                    "total": 0,
+                    "on_field": 0,
+                    "faulty": 0,
+                    "warehouse": 0,
+                    "in_service": 0
+                }
+            model_stats[model]["total"] += 1
+            if status_label == 'KURULU': model_stats[model]["on_field"] += 1
+            elif status_label == 'ARIZALI': model_stats[model]["faulty"] += 1
+            elif status_label == 'DEPO': model_stats[model]["warehouse"] += 1
+            elif status_label == 'SERVISTE': model_stats[model]["in_service"] += 1
+            
+            # Servis veya Arızalı listesine ekleme
+            if status_label in ['SERVISTE', 'ARIZALI']:
+                sent_d_str = ''
+                days_in_service = None
+                if srv_info and srv_info.get('sent_date'):
+                    sd = srv_info.get('sent_date')
+                    if isinstance(sd, datetime):
+                        sent_d_str = sd.strftime('%d.%m.%Y')
+                        days_in_service = (now - sd).days
+                    else:
+                        sent_d_str = str(sd)[:10]
+                        
+                fault_desc = srv_info.get('fault_description') if srv_info else ''
+                sub_pr = srv_info.get('substitute_pr_no') if srv_info else ''
+                
+                faulty_and_service_list.append({
+                    "id": p.get('id'),
+                    "pr_no": pr_num,
+                    "model": model,
+                    "serial_no": p.get('serial_no') or '',
+                    "location_code": p.get('location_code') or '',
+                    "ip": p.get('ip') or '',
+                    "status": status_label,
+                    "sent_date": sent_d_str,
+                    "days_in_service": days_in_service,
+                    "fault_description": fault_desc or ('Serviste bekliyor' if status_label == 'SERVISTE' else 'Arıza kaydı var'),
+                    "substitute_pr_no": sub_pr or ''
+                })
+                
+        conn.close()
+        
+        # Modelleri toplam sayıya göre sırala
+        sorted_models = sorted(model_stats.values(), key=lambda x: x['total'], reverse=True)
+        today_str = now.strftime('%d.%m.%Y')
+        
+        return jsonify({
+            "success": True,
+            "report_date": today_str,
+            "summary": {
+                "total": total_count,
+                "on_field": on_field_count,
+                "faulty": faulty_count,
+                "warehouse": warehouse_count,
+                "in_service": in_service_count,
+                "on_field_rate": round((on_field_count / total_count * 100), 1) if total_count > 0 else 0,
+                "faulty_rate": round((faulty_count / total_count * 100), 1) if total_count > 0 else 0,
+                "warehouse_rate": round((warehouse_count / total_count * 100), 1) if total_count > 0 else 0,
+                "in_service_rate": round((in_service_count / total_count * 100), 1) if total_count > 0 else 0,
+            },
+            "models": sorted_models,
+            "issues": faulty_and_service_list
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500

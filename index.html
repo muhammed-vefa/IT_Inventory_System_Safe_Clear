@@ -388,6 +388,7 @@
                           
                           <a href="#" id="menu-cups-query" onclick="app.manualCUPSQuery()" style="display:none; color:#ffb400;"><i class="fas fa-print"></i> CUPS Yazıcı Sorgu</a>
                           <a href="#" id="menu-printer-pages-report" onclick="app.showPrinterPagesReportModal()" style="display:none; color:#00ff88;"><i class="fas fa-print"></i> Yazıcı Total Çıktı</a>
+                          <a href="#" id="menu-printer-weekly-report" onclick="app.showPrinterWeeklyReportModal()" style="display:none; color:#38bdf8;"><i class="fas fa-file-invoice"></i> Haftalık Yazıcı Raporu</a>
                           <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:5px 0;">
                           
                           <a href="#" id="menu-full-inventory-report" class="admin-only" onclick="app.exportFullInventoryReport()" style="color:#20b2aa;"><i class="fas fa-file-excel"></i> Genel Envanter Raporu</a>
@@ -1041,6 +1042,9 @@
                         </button>
                         <button id="btn-printers-service" onclick="app.navigateTo('service')" title="Servis İşlemleri" style="display:none; width: 46px; height: 36px; border-radius: 20px; background: rgba(0, 0, 0, 0.5); border: 1px solid #00d2ff; color: #00d2ff; align-items: center; justify-content: center; font-size: 1.1rem; cursor: pointer; box-shadow: 0 0 10px rgba(0, 210, 255, 0.2), inset 0 0 5px rgba(0, 210, 255, 0.1); transition: all 0.3s ease; padding: 0; outline: none;" onmouseover="this.style.boxShadow='0 0 15px rgba(0, 210, 255, 0.4), inset 0 0 10px rgba(0, 210, 255, 0.2)'; this.style.background='rgba(0, 210, 255, 0.05)';" onmouseout="this.style.boxShadow='0 0 10px rgba(0, 210, 255, 0.2), inset 0 0 5px rgba(0, 210, 255, 0.1)'; this.style.background='rgba(0, 0, 0, 0.5)';">
                             <i class="fas fa-tools"></i>
+                        </button>
+                        <button id="btn-printers-weekly-report" onclick="app.showPrinterWeeklyReportModal()" title="Haftalık İdare Raporu" style="display:none; width: 46px; height: 36px; border-radius: 20px; background: rgba(0, 0, 0, 0.5); border: 1px solid #38bdf8; color: #38bdf8; align-items: center; justify-content: center; font-size: 1.1rem; cursor: pointer; box-shadow: 0 0 10px rgba(56, 189, 248, 0.2), inset 0 0 5px rgba(56, 189, 248, 0.1); transition: all 0.3s ease; padding: 0; outline: none;" onmouseover="this.style.boxShadow='0 0 15px rgba(56, 189, 248, 0.4), inset 0 0 10px rgba(56, 189, 248, 0.2)'; this.style.background='rgba(56, 189, 248, 0.05)';" onmouseout="this.style.boxShadow='0 0 10px rgba(56, 189, 248, 0.2), inset 0 0 5px rgba(56, 189, 248, 0.1)'; this.style.background='rgba(0, 0, 0, 0.5)';">
+                            <i class="fas fa-file-invoice"></i>
                         </button>
                         <div class="search-wrapper" id="printer-search-wrapper" style="display:none; max-width: 300px;">
                             <input type="text" id="printer-search" class="search-bar" placeholder="Hızlı ara..." oninput="app.searchPrinters()">
@@ -3498,6 +3502,170 @@
                         <tr><td colspan="8" style="text-align: center;">Lütfen tarih aralığı seçip Raporla butonuna basın.</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- HAFTALIK YAZICI DURUM RAPORU (İDARE) MODAL -->
+    <div id="printer-weekly-report-modal" class="modal-backdrop" style="display: none; z-index: 10001;">
+        <div class="card" style="max-width: 1050px; width: 95%; max-height: 92vh; display: flex; flex-direction: column; padding: 22px; border: 1px solid rgba(56, 189, 248, 0.3); box-shadow: 0 10px 40px rgba(0,0,0,0.7);">
+            <!-- Modal Header -->
+            <div class="flex-between mb-3" style="align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
+                <div>
+                    <h3 style="color:#38bdf8; margin: 0; font-size: 1.3rem; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-file-invoice"></i> Haftalık Yazıcı Durum Raporu
+                        <span id="printer-weekly-report-date-badge" style="font-size: 0.8rem; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 3px 10px; border-radius: 12px;">--.--.----</span>
+                    </h3>
+                    <p style="margin: 4px 0 0 0; color: #94a3b8; font-size: 0.85rem;">İdareye sunulmak üzere anlık saha, arıza, depo ve servis istatistikleri.</p>
+                </div>
+                <div class="flex-row gap-2" style="align-items: center;">
+                    <button class="btn btn-secondary" onclick="app.refreshPrinterWeeklyReport()" title="Verileri Yenile" style="background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.15); color: #e2e8f0; padding: 6px 12px; font-size: 0.85rem;">
+                        <i class="fas fa-sync-alt"></i> Yenile
+                    </button>
+                    <button class="btn btn-secondary" onclick="app.exportPrinterWeeklyReportExcel()" title="Excel Olarak İndir" style="background: rgba(0,255,136,0.1); border-color: rgba(0,255,136,0.3); color: #00ff88; padding: 6px 14px; font-size: 0.85rem;">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </button>
+                    <button class="btn btn-secondary" onclick="app.exportPrinterWeeklyReportPDF()" title="Resmi A4 PDF İndir" style="background: rgba(239,68,110,0.15); border-color: rgba(239,68,110,0.4); color: #ef446e; padding: 6px 16px; font-weight: 600; font-size: 0.85rem;">
+                        <i class="fas fa-file-pdf"></i> Resmi PDF Çıktı (A4)
+                    </button>
+                    <i class="fas fa-times modal-close" onclick="document.getElementById('printer-weekly-report-modal').style.display='none'" style="margin-left: 10px; cursor: pointer; font-size: 1.2rem; color: #94a3b8;"></i>
+                </div>
+            </div>
+
+            <!-- Modal Body (Scrollable) -->
+            <div style="flex: 1; overflow-y: auto; padding-right: 6px; display: flex; flex-direction: column; gap: 16px;">
+                <!-- KPI 4 Cards Grid -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px;">
+                    <!-- KURULU (SAHADA) -->
+                    <div style="background: linear-gradient(145deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.03)); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 12px; padding: 14px 16px; position: relative;">
+                        <div class="flex-between" style="align-items: center; margin-bottom: 6px;">
+                            <span style="font-size: 0.82rem; color: #a7f3d0; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Kurulu (Sahada)</span>
+                            <i class="fas fa-check-circle" style="color: #10b981; font-size: 1.2rem;"></i>
+                        </div>
+                        <div style="display: flex; align-items: baseline; gap: 8px;">
+                            <span id="pwr-kpi-on-field" style="font-size: 1.9rem; font-weight: 800; color: #34d399;">0</span>
+                            <span style="font-size: 0.85rem; color: #94a3b8;">Adet</span>
+                        </div>
+                        <div style="margin-top: 4px; font-size: 0.78rem; color: #6ee7b7;">
+                            Toplamın <span id="pwr-kpi-on-field-rate" style="font-weight: 700;">%0</span>'ı sahada aktif
+                        </div>
+                    </div>
+
+                    <!-- ARIZALI -->
+                    <div style="background: linear-gradient(145deg, rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.03)); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 12px; padding: 14px 16px; position: relative;">
+                        <div class="flex-between" style="align-items: center; margin-bottom: 6px;">
+                            <span style="font-size: 0.82rem; color: #fca5a5; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Arızalı Cihaz</span>
+                            <i class="fas fa-exclamation-triangle" style="color: #ef4444; font-size: 1.2rem;"></i>
+                        </div>
+                        <div style="display: flex; align-items: baseline; gap: 8px;">
+                            <span id="pwr-kpi-faulty" style="font-size: 1.9rem; font-weight: 800; color: #f87171;">0</span>
+                            <span style="font-size: 0.85rem; color: #94a3b8;">Adet</span>
+                        </div>
+                        <div style="margin-top: 4px; font-size: 0.78rem; color: #fca5a5;">
+                            Toplamın <span id="pwr-kpi-faulty-rate" style="font-weight: 700;">%0</span>'ı arıza bildirimli
+                        </div>
+                    </div>
+
+                    <!-- DEPO (STOKTA) -->
+                    <div style="background: linear-gradient(145deg, rgba(56, 189, 248, 0.12), rgba(56, 189, 248, 0.03)); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 12px; padding: 14px 16px; position: relative;">
+                        <div class="flex-between" style="align-items: center; margin-bottom: 6px;">
+                            <span style="font-size: 0.82rem; color: #bae6fd; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Stokta (Depoda)</span>
+                            <i class="fas fa-warehouse" style="color: #38bdf8; font-size: 1.2rem;"></i>
+                        </div>
+                        <div style="display: flex; align-items: baseline; gap: 8px;">
+                            <span id="pwr-kpi-warehouse" style="font-size: 1.9rem; font-weight: 800; color: #38bdf8;">0</span>
+                            <span style="font-size: 0.85rem; color: #94a3b8;">Adet</span>
+                        </div>
+                        <div style="margin-top: 4px; font-size: 0.78rem; color: #7dd3fc;">
+                            Toplamın <span id="pwr-kpi-warehouse-rate" style="font-weight: 700;">%0</span>'ı yedek stok
+                        </div>
+                    </div>
+
+                    <!-- SERVİSTE -->
+                    <div style="background: linear-gradient(145deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.03)); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 12px; padding: 14px 16px; position: relative;">
+                        <div class="flex-between" style="align-items: center; margin-bottom: 6px;">
+                            <span style="font-size: 0.82rem; color: #fde68a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Dış Serviste</span>
+                            <i class="fas fa-tools" style="color: #f59e0b; font-size: 1.2rem;"></i>
+                        </div>
+                        <div style="display: flex; align-items: baseline; gap: 8px;">
+                            <span id="pwr-kpi-in-service" style="font-size: 1.9rem; font-weight: 800; color: #fbbf24;">0</span>
+                            <span style="font-size: 0.85rem; color: #94a3b8;">Adet</span>
+                        </div>
+                        <div style="margin-top: 4px; font-size: 0.78rem; color: #fde68a;">
+                            Toplamın <span id="pwr-kpi-in-service-rate" style="font-weight: 700;">%0</span>'ı serviste/firmada
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Summary Bar -->
+                <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-info-circle" style="color: #38bdf8;"></i>
+                        <span style="color: #cbd5e1; font-size: 0.9rem;">Toplam Kayıtlı Yazıcı Envanteri:</span>
+                        <strong id="pwr-kpi-total" style="color: #fff; font-size: 1.15rem;">0</strong>
+                        <span style="color: #94a3b8; font-size: 0.85rem;">Adet</span>
+                    </div>
+                    <div style="font-size: 0.82rem; color: #94a3b8;">
+                        * Veriler veritabanı ve servis kayıtlarıyla anlık olarak çapraz doğrulanmıştır.
+                    </div>
+                </div>
+
+                <!-- Model Breakdown Section -->
+                <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 14px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                        <i class="fas fa-cubes" style="color: #38bdf8;"></i>
+                        <h4 style="margin: 0; color: #f1f5f9; font-size: 0.95rem;">1. Model Bazlı Yazıcı Dağılımı</h4>
+                    </div>
+                    <div class="table-container" style="max-height: 220px; overflow-y: auto;">
+                        <table class="inventory-table" id="pwr-models-table" style="width: 100%; font-size: 0.85rem;">
+                            <thead>
+                                <tr>
+                                    <th>Model Adı</th>
+                                    <th style="text-align: center; color: #34d399;">Sahada (Kurulu)</th>
+                                    <th style="text-align: center; color: #f87171;">Arızalı</th>
+                                    <th style="text-align: center; color: #38bdf8;">Depoda</th>
+                                    <th style="text-align: center; color: #fbbf24;">Serviste</th>
+                                    <th style="text-align: center;">Toplam</th>
+                                    <th style="text-align: center;">Kurulu Oranı</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pwr-models-tbody">
+                                <tr><td colspan="7" style="text-align:center; padding: 12px; color: #94a3b8;">Yükleniyor...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Faulty & Service Active Issues Section -->
+                <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 14px;">
+                    <div class="flex-between" style="align-items: center; margin-bottom: 10px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-exclamation-circle" style="color: #ef4444;"></i>
+                            <h4 style="margin: 0; color: #f1f5f9; font-size: 0.95rem;">2. Aktif Arıza ve Servis Takip Listesi</h4>
+                        </div>
+                        <span id="pwr-issues-count" style="font-size: 0.8rem; background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); padding: 2px 8px; border-radius: 10px;">0 Kayıt</span>
+                    </div>
+                    <div class="table-container" style="max-height: 260px; overflow-y: auto;">
+                        <table class="inventory-table" id="pwr-issues-table" style="width: 100%; font-size: 0.85rem;">
+                            <thead>
+                                <tr>
+                                    <th>Cihaz No</th>
+                                    <th>Model</th>
+                                    <th>Seri No</th>
+                                    <th>Bulunduğu Mahal</th>
+                                    <th style="text-align: center;">Durum</th>
+                                    <th style="text-align: center;">Gönderim Tarihi</th>
+                                    <th style="text-align: center;">Süre</th>
+                                    <th>Arıza Açıklaması</th>
+                                    <th>İkame Cihaz</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pwr-issues-tbody">
+                                <tr><td colspan="9" style="text-align:center; padding: 12px; color: #94a3b8;">Yükleniyor...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

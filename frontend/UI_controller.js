@@ -502,6 +502,11 @@ var appData = {
             }
         });
         
+        const btnNetworkInv = document.querySelector('#device-type-filters button[data-category="NETWORK"]');
+        if (btnNetworkInv) {
+            btnNetworkInv.style.display = self.hasAccess('network') ? 'inline-block' : 'none';
+        }
+
         // Sağ üst dropdown menüler ve özel sayfalar
         var ids = [
             {id: 'menu-users', module: 'users'},
@@ -805,7 +810,7 @@ checkLoginStatus: function() {
         } else if (role === 'EDITOR') {
             allowedViews = ['dashboard', 'building-map', 'inventory', 'general-notes', 'areas', 'docs', 'service', 'installations', 'mahal', 'network', 'vpn', 'keyboard-test'];
         } else if (this.isDepotRole(role)) {
-            allowedViews = ['dashboard', 'building-map', 'inventory', 'service', 'depot', 'mahal', 'network'];
+            allowedViews = ['inventory', 'service', 'depot', 'mahal', 'network'];
         } else {
             // VIEWER
             allowedViews = ['dashboard', 'building-map', 'inventory', 'general-notes', 'areas', 'service', 'mahal', 'network', 'keyboard-test'];
@@ -871,7 +876,7 @@ checkLoginStatus: function() {
         if(navDepotReport) navDepotReport.style.display = (isAdmin || this.isDepotRole(role) || allowedViews.includes('depot')) ? 'block' : 'none';
         
         const navWeeklyReport = document.getElementById('menu-weekly-report');
-        if(navWeeklyReport) navWeeklyReport.style.display = (isAdmin || allowedViews.includes('inventory')) ? 'block' : 'none';
+        if(navWeeklyReport) navWeeklyReport.style.display = (isAdmin || (allowedViews.includes('inventory') && !this.isDepotRole(role))) ? 'block' : 'none';
         
         const navAdminReports = document.getElementById('menu-admin-reports');
         if(navAdminReports) navAdminReports.style.display = (isAdmin || allowedViews.includes('admin-reports')) ? 'block' : 'none';
@@ -1400,6 +1405,11 @@ checkLoginStatus: function() {
         }
     },
     navigateTo: function(view) {
+        if (view === 'network') {
+            this.navigateTo('inventory');
+            this.setInvCategory('NETWORK');
+            return;
+        }
         if (view && !this.hasAccess(view)) {
             console.warn("Access denied for view:", view);
             const fallback = this.getFirstAllowedView();
@@ -1446,9 +1456,18 @@ checkLoginStatus: function() {
                     btn.style.display = (cat === 'PRINTER') ? 'inline-block' : 'none';
                 });
             } else {
-                this.setInvCategory('PC');
+                if (this.state.invCategory !== 'NETWORK') {
+                    this.setInvCategory('PC');
+                } else {
+                    this.setInvCategory('NETWORK');
+                }
                 document.querySelectorAll('#view-inventory .filter-chips button[data-category]').forEach(btn => {
-                    btn.style.display = 'inline-block';
+                    const cat = btn.getAttribute('data-category');
+                    if (cat === 'NETWORK') {
+                        btn.style.display = this.hasAccess('network') ? 'inline-block' : 'none';
+                    } else {
+                        btn.style.display = 'inline-block';
+                    }
                 });
             }
         } else if (view === 'kb') {
@@ -1914,14 +1933,17 @@ checkLoginStatus: function() {
         if (dd) { dd.value = ["BARKOD YAZICI", "BARKOD OKUYUCU", "TARAYICI"].includes(cat) ? cat : ""; }
         
         const isPrinterCat = ['PRINTER', 'BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER'].includes(cat);
+        const isNetworkCat = (cat === 'NETWORK');
         
         // UI Toggles
         const invGrid = document.getElementById('inventory-grid');
         const prGrid = document.getElementById('printers-grid');
         const prSentinel = document.getElementById('printers-scroll-sentinel');
-        if(invGrid) invGrid.style.display = isPrinterCat ? 'none' : 'grid';
+        const netContainer = document.getElementById('network-inventory-container');
+        if(invGrid) invGrid.style.display = (isPrinterCat || isNetworkCat) ? 'none' : 'grid';
         if(prGrid) prGrid.style.display = isPrinterCat ? 'grid' : 'none';
         if(prSentinel) prSentinel.style.display = isPrinterCat ? 'block' : 'none';
+        if(netContainer) netContainer.style.display = isNetworkCat ? 'block' : 'none';
         
         const prModelFilters = document.getElementById('printer-model-filters-container');
         if(prModelFilters) prModelFilters.style.display = (cat === 'PRINTER') ? 'flex' : 'none';
@@ -1935,6 +1957,11 @@ checkLoginStatus: function() {
         const tabletFilters = document.getElementById('tablet-type-filters-container');
         if(tabletFilters) tabletFilters.style.display = (cat === 'TABLET') ? 'flex' : 'none';
         
+        const invBlockFilters = document.getElementById('inventory-filters');
+        if (invBlockFilters) {
+            invBlockFilters.style.display = isNetworkCat ? 'none' : 'flex';
+        }
+
         const devCount = document.getElementById('device-count');
         if(devCount) {
             let catName = 'Cihaz';
@@ -1946,13 +1973,15 @@ checkLoginStatus: function() {
             else if(cat === 'BARCODE_PRINTER') catName = 'Barkod Yazıcı';
             else if(cat === 'BARCODE_READER') catName = 'Barkod Okuyucu';
             else if(cat === 'SK') catName = 'Sıramatik & Kiosk';
+            else if(cat === 'NETWORK') catName = 'Ağ Cihazı';
             devCount.dataset.catName = catName;
+            devCount.style.display = isNetworkCat ? 'none' : 'inline-block';
         }
         
         const mainSearch = document.getElementById('main-search');
         if(mainSearch) {
             const msWrap = mainSearch.closest('.search-wrapper');
-            if(msWrap) msWrap.style.display = isPrinterCat ? 'none' : 'flex';
+            if(msWrap) msWrap.style.display = (isPrinterCat || isNetworkCat) ? 'none' : 'flex';
         }
         const prSearchWrap = document.getElementById('printer-search-wrapper');
         if(prSearchWrap) prSearchWrap.style.display = isPrinterCat ? 'flex' : 'none';
@@ -1960,23 +1989,30 @@ checkLoginStatus: function() {
         const addBtn = document.getElementById('btn-device-add');
         const printerAddBtn = document.getElementById('btn-printer-add');
         const printerServiceBtn = document.getElementById('btn-printers-service');
+        const btnAddNetwork = document.getElementById('btn-add-network');
         
         const isAdm = this.state.activeUser && this.state.activeUser.role === 'ADMIN';
 
         if (addBtn) addBtn.style.display = (isAdm && (cat === 'SK' || cat === 'TABLET' || cat === 'MONITOR' || cat === 'PC')) ? 'inline-flex' : 'none';
         if (printerAddBtn) printerAddBtn.style.display = (isAdm && isPrinterCat) ? 'flex' : 'none';
         if (printerServiceBtn) printerServiceBtn.style.display = (cat === 'PRINTER' || cat === 'BARCODE_PRINTER') ? 'flex' : 'none';
+        if (btnAddNetwork) btnAddNetwork.style.display = (isNetworkCat && this.canEdit('network')) ? 'flex' : 'none';
         
         const countModeBtn = document.getElementById('btn-count-mode');
-        if (countModeBtn) countModeBtn.style.display = (isAdm || (this.state.activeUser && this.state.activeUser.role === 'EDITOR')) ? 'inline-flex' : 'none';
+        if (countModeBtn) countModeBtn.style.display = (!isNetworkCat && (isAdm || (this.state.activeUser && this.state.activeUser.role === 'EDITOR'))) ? 'inline-flex' : 'none';
         
         const floorFilters = document.getElementById('floor-filters');
         if (floorFilters) {
-            if (this.state.invBlock !== 'ALL') {
+            if (!isNetworkCat && this.state.invBlock !== 'ALL') {
                 floorFilters.style.display = 'flex';
             } else {
                 floorFilters.style.display = 'none';
             }
+        }
+
+        if (isNetworkCat) {
+            if (this.loadNetwork) this.loadNetwork();
+            return;
         }
 
         if (isPrinterCat) {
@@ -2502,6 +2538,8 @@ checkLoginStatus: function() {
         const modelType = this.state.printerModelType || 'ALL';
         const query = (document.getElementById('printer-search').value || "").toUpperCase();
         const isAdmin = this.state.activeUser && ['ADMIN', 'EDITOR'].includes(this.state.activeUser.role);
+        const isDepot = this.isDepotRole(this.state.activeUser ? this.state.activeUser.role : '');
+        const canService = isAdmin || isDepot;
         const block = this.state.invBlock || 'ALL';
         const floor = this.state.invKat || 'ALL';
         
@@ -2671,6 +2709,8 @@ renderPrintersChunk: function() {
         if (chunk.length === 0) return;
         
         const isAdmin = this.state.activeUser && ['ADMIN', 'EDITOR'].includes(this.state.activeUser.role);
+        const isDepot = this.isDepotRole(this.state.activeUser ? this.state.activeUser.role : '');
+        const canService = isAdmin || isDepot;
         
         const html = chunk.map(p => {
             const status = (p.status || '').toUpperCase();
@@ -2786,7 +2826,8 @@ renderPrintersChunk: function() {
                 </div>
 
 
-                ${(isAdmin && !isSpecial) ? `
+                ${(!isSpecial && canService) ? `
+                ${isAdmin ? `
                 <div class="flex-row mb-3" style="justify-content: space-around; align-items: center;">
                     <div class="icon-action-container" onclick="event.stopPropagation(); app.runPrinterAction(${p.id}, 'add')">
                         <div class="icon-action-circle" style="width: 36px; height: 36px; font-size: 0.9rem; color: #10b981;"><i class="fas fa-plus"></i></div>
@@ -2805,9 +2846,8 @@ renderPrintersChunk: function() {
                         <div class="icon-action-label" style="font-size: 0.55rem;">TEMİZLE</div>
                     </div>
                 </div>
+                ` : ''}
 
-
-                
                 <button class="btn btn-service-add" style="width: 100%; font-size: 0.75rem; padding: 10px;" onclick="event.stopPropagation(); app.openAddServiceModal(${p.id}, '${p.device_class || 'PRINTER'}')">
                     <i class="fas fa-tools" style="margin-right: 6px;"></i> SERVİS KAYDI OLUŞTUR
                 </button>
@@ -4136,6 +4176,8 @@ rmdir "$M" 2>/dev/null`;
         if (chunk.length === 0) return;
         
         const isAdmin = this.state.activeUser && ['ADMIN', 'EDITOR'].includes(this.state.activeUser.role);
+        const isDepot = this.isDepotRole(this.state.activeUser ? this.state.activeUser.role : '');
+        const canService = isAdmin || isDepot;
         
         const html = chunk.map(item => {
             const ratio = item.critical_stock > 0 ? (item.current_stock / item.critical_stock) : 999;
