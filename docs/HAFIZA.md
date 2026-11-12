@@ -199,3 +199,10 @@ equire_editor rotalarında yazıcı yolu tespiti printer in path olarak genişle
 * **Kısayollar & Barkod Yazıcı İyileştirmesi:** Kısayollar menüsünden Servis İşlemleri çıkarıldı (Envanter > Yazıcılar araç çubuğundaki servis butonu aktif). Depocu rolü için Barkod Yazıcılar gizlenip sadece normal Yazıcılar (PRINTER) ve Servis Kayıtları erişimine kilitlendi.
 
 * **Depocu UI & Servis Kaydı Butonu:** Depocu rolü için üst menüden Dashboard ve Bina Haritası, Kısayollardan Envanter Rapor gizlendi. Yazıcı kartlarında 'SERVİS KAYDI OLUŞTUR' butonu depocu için görünür ve tıklanabilir hale getirildi.
+
+### [12.11.2026] - Haftalık Yazıcı Durum Raporu (İdare / Yönetim İçin)
+* **Talep:** İdareye her cuma günü sunulmak üzere hastanedeki tüm yazıcıların anlık durumunu (Kurulu/Sahada, Arızalı, Stokta/Depoda, Serviste) gösteren, model bazlı kırılımlı ve aktif arıza/servis takip detaylı haftalık rapor.
+* **Backend:** `modules/inventory_printers.py -> @inventory_printers_bp.route('/weekly_executive_report', methods=['GET'])` rotası eklendi. `printers` ve `printer_service` tablolarını çapraz tarayarak özet sayıları, oranları, model dağılımını ve açık arıza/servis cihazlarını döndürür.
+* **Frontend:**
+  - `index.html`: Profil menüsüne (#menu-printer-weekly-report) ve Envanter > Yazıcılar araç çubuğuna (#btn-printers-weekly-report) buton eklendi. `#printer-weekly-report-modal` interaktif dashboard modalı oluşturuldu.
+  - `frontend/UI_controller.js`: `showPrinterWeeklyReportModal()`, `refreshPrinterWeeklyReport()`, `renderPrinterWeeklyReport()`, `exportPrinterWeeklyReportPDF()` (Resmi A4 antetli, özet tablolu, çift imza bloklu PDF), `exportPrinterWeeklyReportExcel()` fonksiyonları tamamlandı.
