@@ -144,7 +144,7 @@ def require_editor(f):
             module = 'inventory' # Veya 'areas' kendi başına olabilir ama genel olarak inventory
         if '/notes/' in path: module = 'general-notes'
         if '/areas/' in path: module = 'areas'
-        if '/printers/' in path or '/cups/' in path: module = 'printers'
+        if 'printer' in path or '/cups/' in path: module = 'printers'
         if '/depot/' in path: module = 'depot'
         if '/document/' in path: module = 'docs'
         if '/service/' in path: module = 'service'

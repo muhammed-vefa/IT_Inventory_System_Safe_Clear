@@ -438,7 +438,7 @@ var appData = {
         if (moduleName === 'keyboard-test') return true;
         if (role === 'EDITOR' && !['users', 'logs', 'admin-reports'].includes(moduleName)) return true;
         if (role === 'VIEWER' && !['users', 'logs', 'admin-reports'].includes(moduleName)) return true;
-        if (this.isDepotRole(role) && (moduleName === 'depot' || moduleName === 'printers' || moduleName === 'service')) return true;
+        if (this.isDepotRole(role) && (moduleName === 'depot' || moduleName === 'printers' || moduleName === 'service' || moduleName === 'inventory')) return true;
         return false;
     },
     canEdit: function(moduleName) {
@@ -454,7 +454,7 @@ var appData = {
         if (moduleName === 'keyboard-test') return true;
         if (role === 'VIEWER') return false;
         if (role === 'EDITOR' && !['users', 'logs', 'admin-reports', 'depot'].includes(moduleName)) return true;
-        if (this.isDepotRole(role) && (moduleName === 'depot' || moduleName === 'printers' || moduleName === 'service')) return true;
+        if (this.isDepotRole(role) && (moduleName === 'depot' || moduleName === 'printers' || moduleName === 'service' || moduleName === 'inventory')) return true;
         return false;
     },
     getFirstAllowedView: function() {
@@ -470,6 +470,7 @@ var appData = {
                 }
             } catch(e) {}
         }
+        if (this.isDepotRole(role)) return 'depot';
         if (this.hasAccess('dashboard')) return 'dashboard';
         if (this.hasAccess('building-map')) return 'building-map';
         if (this.hasAccess('inventory')) return 'inventory';
@@ -508,6 +509,7 @@ var appData = {
             {id: 'menu-mahal', module: 'mahal'},
             {id: 'menu-network', module: 'network'},
             {id: 'menu-vpn', module: 'vpn'},
+            {id: 'menu-service', module: 'service'},
             {id: 'menu-building-map', module: 'building-map'},
             {id: 'menu-keyboard-test', module: 'keyboard-test'},
             {id: 'menu-installations', module: 'installations'},
@@ -843,6 +845,7 @@ checkLoginStatus: function() {
         const navMahal = document.getElementById('menu-mahal');
         const navNetwork = document.getElementById('menu-network');
         const navVpn = document.getElementById('menu-vpn');
+        const navService = document.getElementById('menu-service');
         const navBuildingMap = document.getElementById('menu-building-map');
         const navKeyboardTest = document.getElementById('menu-keyboard-test');
         const navInstallations = document.getElementById('menu-installations');
@@ -853,6 +856,7 @@ checkLoginStatus: function() {
         if(navMahal) navMahal.style.display = allowedViews.includes('mahal') ? 'flex' : 'none';
         if(navNetwork) navNetwork.style.display = allowedViews.includes('network') ? 'flex' : 'none';
         if(navVpn) navVpn.style.display = allowedViews.includes('vpn') ? 'flex' : 'none';
+        if(navService) navService.style.display = allowedViews.includes('service') ? 'flex' : 'none';
         if(navBuildingMap) navBuildingMap.style.display = allowedViews.includes('building-map') ? 'flex' : 'none';
         if(navKeyboardTest) navKeyboardTest.style.display = allowedViews.includes('keyboard-test') ? 'flex' : 'none';
         if(navInstallations) navInstallations.style.display = allowedViews.includes('installations') ? 'flex' : 'none';
@@ -1383,11 +1387,14 @@ checkLoginStatus: function() {
                 const text = (btn.innerText || '').toUpperCase();
                 const click = (btn.getAttribute('onclick') || '').toLowerCase();
                 const isSafe = btn.classList.contains('ignore-rbac') || 
+                               btn.classList.contains('btn-service-add') ||
+                               click.includes('service') ||
                                click.includes('print') || 
                                click.includes('export') || 
                                click.includes('generate') ||
                                text.includes('YAZICI') || 
-                               text.includes('YAZDIR');
+                               text.includes('YAZDIR') ||
+                               text.includes('SERVİS');
                                
                 if (!isSafe) {
                     btn.style.display = 'none';
@@ -1438,7 +1445,8 @@ checkLoginStatus: function() {
             if (this.isDepotRole(role)) {
                 this.setInvCategory('PRINTER');
                 document.querySelectorAll('#view-inventory .filter-chips button[data-category]').forEach(btn => {
-                    btn.style.display = (btn.getAttribute('data-category') === 'PRINTER') ? 'inline-block' : 'none';
+                    const cat = btn.getAttribute('data-category');
+                    btn.style.display = (cat === 'PRINTER' || cat === 'BARCODE_PRINTER') ? 'inline-block' : 'none';
                 });
             } else {
                 this.setInvCategory('PC');
@@ -1957,10 +1965,10 @@ checkLoginStatus: function() {
 
         if (addBtn) addBtn.style.display = (isAdm && (cat === 'SK' || cat === 'TABLET' || cat === 'MONITOR' || cat === 'PC')) ? 'inline-flex' : 'none';
         if (printerAddBtn) printerAddBtn.style.display = (isAdm && isPrinterCat) ? 'flex' : 'none';
-        if (printerServiceBtn) printerServiceBtn.style.display = (cat === 'PRINTER') ? 'flex' : 'none';
+        if (printerServiceBtn) printerServiceBtn.style.display = (cat === 'PRINTER' || cat === 'BARCODE_PRINTER') ? 'flex' : 'none';
         
         const countModeBtn = document.getElementById('btn-count-mode');
-        if (countModeBtn) countModeBtn.style.display = this.canEdit('inventory') ? 'inline-flex' : 'none';
+        if (countModeBtn) countModeBtn.style.display = (isAdm || (this.state.activeUser && this.state.activeUser.role === 'EDITOR')) ? 'inline-flex' : 'none';
         
         const floorFilters = document.getElementById('floor-filters');
         if (floorFilters) {
@@ -2695,12 +2703,24 @@ renderPrintersChunk: function() {
                 }
             }
 
+            // Kat/Blok Uyuşmazlığı Kontrolü
+            const connectedPcs = (!isSpecial && dClass === 'PRINTER') ? this.getPrinterConnectedPcs(p) : [];
+            const mismatchedPcs = connectedPcs.filter(c => c.isMismatch);
+            const hasMismatch = mismatchedPcs.length > 0;
+            
+            const mismatchBadgeHtml = hasMismatch ? `
+            <span class="printer-mismatch-badge" title="UYARI: Bu yazıcı ${mismatchedPcs.length} bilgisayarda kat/blok dışı tanımlı!\n(Yazıcı: ${p.mahal || '-'})" onclick="event.stopPropagation(); app.openDeviceDetail(${p.id}, 'pr', '${p.device_class || 'PRINTER'}')">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span style="font-size: 0.65rem; margin-left: 3px;">${mismatchedPcs.length}</span>
+            </span>` : '';
+
             return `
             <div class="card printer-card-modern fade-in" style="cursor:pointer; min-height: ${isSpecial ? 'auto' : '280px'};" onclick="app.openDeviceDetail(${p.id}, 'pr', '${p.device_class || 'PRINTER'}')">
                 <div class="flex-row mb-3" style="align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
                     <div class="flex-row gap-2" style="align-items: center;">
                         <div style="color: #38bdf8; font-weight: 900; font-size: 1.3rem; letter-spacing: -0.5px;">${prNoDisplay}</div>
                         ${durumHtml}
+                        ${mismatchBadgeHtml}
                     </div>
                     <div class="flex-row gap-3" style="align-items: center;">
                         <div class="flex-row gap-2">
@@ -2816,6 +2836,163 @@ renderPrintersChunk: function() {
             .replace(/Ã§/g, 'ç').replace(/Ã¶/g, 'ö').replace(/Ã¼/g, 'ü')
             .replace(/Ã‡/g, 'Ç').replace(/Ã–/g, 'Ö').replace(/Ãœ/g, 'Ü')
             .replace(/Äž/g, 'Ğ').replace(/Åž/g, 'Ş');
+    },
+
+    getMahalBlockAndFloor: function(locCode) {
+        if (!locCode || typeof locCode !== 'string') return { block: '', floor: '' };
+        const clean = locCode.trim().toUpperCase();
+        const parts = clean.split('.');
+        if (parts.length >= 2) {
+            let block = parts[0];
+            let floor = parts[1];
+            if (['FTR', 'YGAP', 'TSB', 'MHA', 'MH'].includes(block) && parts.length >= 3) {
+                block = parts[0] + '.' + parts[1];
+                floor = parts[2];
+            }
+            return { block, floor };
+        }
+        return { block: '', floor: '' };
+    },
+
+    getPrinterConnectedPcs: function(printer) {
+        if (!printer || !this.state.inventory) return [];
+        let prNo = (printer.pr_no || printer.name || '').trim().toUpperCase();
+        if (!prNo) return [];
+        if (!prNo.startsWith('PR-') && !isNaN(prNo)) {
+            prNo = `PR-${prNo.padStart(3, '0')}`;
+        }
+        
+        const prRegex = new RegExp(`(^|\\s|,|;)${prNo.replace(/[-\\/\\\\^$*+?.()|[\\]{}]/g, '\\$&')}(\\s|,|;|$)`, 'i');
+        
+        const prLoc = (printer.mahal || printer.location_code || '').trim();
+        const prInfo = this.getMahalBlockAndFloor(prLoc);
+        const hasValidPrLocation = Boolean(prInfo.block && prInfo.floor && !['DEPO', 'ARŞİV', 'ARZ', 'BİLİNMİYOR', 'KAYIP'].includes(prInfo.block));
+
+        return this.state.inventory
+            .filter(item => {
+                const type = (item.device_type || 'PC').toUpperCase();
+                const isPC = (type === 'PC' || type === '' || type === 'BİLGİSAYAR');
+                if (!isPC) return false;
+                
+                const connectedPr = (item.bagli_yazicilar || '').toUpperCase();
+                return prRegex.test(connectedPr) || connectedPr.includes(prNo);
+            })
+            .map(pc => {
+                let pcLabel = pc.pc_no || '---';
+                if (pcLabel !== '---' && !isNaN(pcLabel)) pcLabel = `PC-${pcLabel.toString().padStart(3, '0')}`;
+                
+                let isMismatch = false;
+                let mismatchReason = '';
+                
+                if (hasValidPrLocation) {
+                    const pcLoc = (pc.location_code || '').trim();
+                    const pcInfo = this.getMahalBlockAndFloor(pcLoc);
+                    if (pcInfo.block && pcInfo.floor) {
+                        const blockDiff = (pcInfo.block !== prInfo.block);
+                        const floorDiff = (pcInfo.floor !== prInfo.floor);
+                        if (blockDiff || floorDiff) {
+                            isMismatch = true;
+                            if (blockDiff && floorDiff) {
+                                mismatchReason = `Farklı Blok (${pcInfo.block}) ve Kat (${pcInfo.floor})`;
+                            } else if (blockDiff) {
+                                mismatchReason = `Farklı Blok (${pcInfo.block})`;
+                            } else {
+                                mismatchReason = `Farklı Kat (${pcInfo.floor})`;
+                            }
+                        }
+                    }
+                }
+                
+                return {
+                    ...pc,
+                    displayName: pcLabel,
+                    isMismatch: isMismatch,
+                    mismatchReason: mismatchReason
+                };
+            })
+            .sort((a, b) => {
+                if (a.isMismatch && !b.isMismatch) return -1;
+                if (!a.isMismatch && b.isMismatch) return 1;
+                return (a.displayName || '').localeCompare(b.displayName || '');
+            });
+    },
+
+    removePrinterFromSpecificPc: async function(pcId, pcName, pcIp, prNo, printerId) {
+        if (!confirm(`${pcName} (${pcIp || 'IP Yok'}) bilgisayarından ${prNo} yazıcısını kaldırmak istediğinize emin misiniz?`)) {
+            return;
+        }
+        
+        const user = this.state.activeUser || {};
+        const bimUser = user.bim_user || user.username || '';
+        const bimPass = user.bim_pass || '********';
+        
+        this.showToast(`${pcName} üzerinden ${prNo} kaldırılıyor...`, 'info');
+        
+        try {
+            const resp = await this.apiRequest('/inventory/printers/batch_action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'remove',
+                    bim_function: 'RemovePrinter',
+                    command: prNo,
+                    printer_id: printerId,
+                    targets: [{ type: 'pc', value: pcId, ip: pcIp }],
+                    user: user.name || user.username || 'System',
+                    bim_user: bimUser,
+                    bim_pass: bimPass
+                })
+            });
+            
+            if (resp && resp.success && resp.success_count > 0) {
+                this.showToast(`${pcName} üzerinden ${prNo} başarıyla kaldırıldı.`, 'success');
+                
+                const pcItem = (this.state.inventory || []).find(i => i.id == pcId);
+                if (pcItem && pcItem.bagli_yazicilar) {
+                    const currentPrs = pcItem.bagli_yazicilar.split(/\s+/);
+                    const filtered = currentPrs.filter(p => p.toUpperCase() !== prNo.toUpperCase());
+                    pcItem.bagli_yazicilar = filtered.join(' ');
+                }
+                
+                const rowEl = document.getElementById(`conn-pc-row-${pcId}`);
+                if (rowEl) {
+                    rowEl.style.transition = 'all 0.3s';
+                    rowEl.style.opacity = '0';
+                    rowEl.style.transform = 'translateX(20px)';
+                    setTimeout(() => {
+                        rowEl.remove();
+                        const prItem = (this.state.printers || []).find(p => p.id == printerId);
+                        if (prItem) {
+                            const remaining = this.getPrinterConnectedPcs(prItem);
+                            const labelEl = document.getElementById('printer-connected-pcs-title');
+                            if (labelEl) {
+                                labelEl.innerHTML = `<i class="fas fa-desktop"></i> BU YAZICININ TANIMLI OLDUĞU BİLGİSAYARLAR (${remaining.length})`;
+                            }
+                            const warnBadgeEl = document.getElementById('printer-mismatch-header-badge');
+                            const remMismatch = remaining.filter(c => c.isMismatch).length;
+                            if (warnBadgeEl) {
+                                warnBadgeEl.style.display = remMismatch > 0 ? 'inline-flex' : 'none';
+                                if (remMismatch > 0) {
+                                    warnBadgeEl.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${remMismatch} Kat/Blok Dışı Uyuşmazlık!`;
+                                }
+                            }
+                            if (remaining.length === 0) {
+                                const cont = document.getElementById('printer-connected-pcs-container');
+                                if (cont) cont.innerHTML = '<div style="padding: 15px; text-align: center; color: #64748b; font-size: 0.8rem;">Bu yazıcının tanımlı olduğu bilgisayar bulunamadı.</div>';
+                            }
+                        }
+                    }, 300);
+                }
+                
+                this.renderPrinters();
+            } else {
+                const errMsg = (resp && resp.failed && resp.failed[0]) || (resp && resp.error) || 'İşlem tamamlanamadı.';
+                alert(`Kaldırma Hatası: ${errMsg}`);
+            }
+        } catch (e) {
+            console.error('removePrinterFromSpecificPc hatası:', e);
+            alert(`Hata: ${e.message}`);
+        }
     },
     refreshLivePrinterStatus: async function(id) {
         const icon = document.getElementById(`refresh-icon-${id}`);
@@ -5143,6 +5320,64 @@ rmdir "$M" 2>/dev/null`;
                         </div>
                     </div>
                 </div>
+
+                ${(() => {
+                    if (isSpecial || dClass !== 'PRINTER') return '';
+                    const connectedPcs = this.getPrinterConnectedPcs(item);
+                    const mismatchedCount = connectedPcs.filter(c => c.isMismatch).length;
+                    const prNoClean = item.pr_no || item.name || '';
+                    
+                    let html = `
+                    <div class="form-group mt-3" style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <label id="printer-connected-pcs-title" style="font-weight: 800; font-size: 0.8rem; color: #38bdf8; text-transform: uppercase; margin: 0; display: flex; align-items: center; gap: 6px;">
+                                <i class="fas fa-desktop"></i> BU YAZICININ TANIMLI OLDUĞU BİLGİSAYARLAR (${connectedPcs.length})
+                            </label>
+                            <span id="printer-mismatch-header-badge" style="display: ${mismatchedCount > 0 ? 'inline-flex' : 'none'}; align-items: center; gap: 5px; color: #ef4444; font-size: 0.72rem; font-weight: 800; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); padding: 2px 8px; border-radius: 4px;">
+                                <i class="fas fa-exclamation-triangle"></i> ${mismatchedCount} Kat/Blok Dışı Uyuşmazlık!
+                            </span>
+                        </div>
+                        
+                        <div id="printer-connected-pcs-container" style="max-height: 220px; overflow-y: auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 6px;">
+                    `;
+                    
+                    if (connectedPcs.length === 0) {
+                        html += `
+                            <div style="padding: 15px; text-align: center; color: #64748b; font-size: 0.8rem;">
+                                Bu yazıcının tanımlı olduğu bilgisayar bulunamadı.
+                            </div>
+                        `;
+                    } else {
+                        html += connectedPcs.map(pc => {
+                            const warnBadge = pc.isMismatch ? `
+                            <span style="color: #ef4444; font-size: 0.7rem; font-weight: 800; background: rgba(239,68,68,0.2); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.4);" title="${pc.mismatchReason}">
+                                <i class="fas fa-exclamation-triangle"></i> ${pc.mismatchReason}
+                            </span>` : '';
+                            
+                            return `
+                            <div id="conn-pc-row-${pc.id}" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 6px 8px; background: ${pc.isMismatch ? 'rgba(239,68,68,0.08)' : 'transparent'}; border-radius: 6px; margin-bottom: 3px;">
+                                <div style="display: flex; align-items: center; gap: 12px; flex: 1; flex-wrap: wrap;">
+                                    <i class="fas fa-desktop" style="color: var(--accent); font-size: 0.95rem;"></i>
+                                    <span style="color: #fff; font-weight: bold; font-size: 0.9rem; min-width: 65px;">${pc.displayName}</span>
+                                    <span style="color: var(--accent); font-family: monospace; font-size: 0.8rem; min-width: 105px;">${pc.ip || 'IP Yok'}</span>
+                                    <span style="color: #00ff88; font-size: 0.72rem; opacity: 0.85;">[${pc.location_code || '-'}]</span>
+                                    <span style="color: #ffcc00; font-size: 0.72rem; font-weight: 700;"><i class="fas fa-print" style="font-size: 0.65rem;"></i> ${pc.bagli_yazicilar}</span>
+                                    ${warnBadge}
+                                </div>
+                                <button type="button" class="btn" onclick="app.removePrinterFromSpecificPc(${pc.id}, '${pc.displayName}', '${pc.ip || ''}', '${prNoClean}', ${item.id})"
+                                        style="background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; border-radius: 5px; padding: 4px 10px; font-size: 0.72rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 4px; flex-shrink: 0;"
+                                        onmouseover="this.style.background='#ef4444'; this.style.color='#fff';"
+                                        onmouseout="this.style.background='rgba(239,68,68,0.15)'; this.style.color='#ef4444';"
+                                        title="Bu yazıcıyı ${pc.displayName} bilgisayarından kaldır">
+                                    <i class="fas fa-minus"></i> Kaldır
+                                </button>
+                            </div>`;
+                        }).join('');
+                    }
+                    html += `</div></div>`;
+                    return html;
+                })()}
+
                 </div>
                 ${this.loadEditFormFooter('pr')}`;
         }
@@ -5660,20 +5895,6 @@ rmdir "$M" 2>/dev/null`;
         const isAdmin = this.state.activeUser && this.state.activeUser.role === 'ADMIN';
         const deleteBtnHtml = isAdmin ? `<button class="btn btn-danger" style="flex: 0.5;" onclick="app.deleteDeviceFromModal()"><i class="fas fa-trash"></i> Sil</button>` : '';
 
-        if (type === 'pr') {
-            const dClass = item.device_class || 'PRINTER';
-            const isSpecial = dClass === 'BARCODE_PRINTER' || dClass === 'BARCODE_READER' || dClass === 'SCANNER' || dClass === 'MONITOR';
-            return `
-            <div class="flex-row gap-2 mt-4">
-                ${deleteBtnHtml}
-                <button class="btn btn-secondary" style="flex: 1;" onclick="app.closeDeviceDetail()">İptal</button>
-                <button class="btn btn-accent" style="flex: 1;" id="btn-save-device" onclick="app.saveEdit()">Güncelle</button>
-            </div>
-            <div class="flex-row gap-2 mt-2">
-                <button class="btn btn-outline" style="flex: 1; border-color:#00ff88; color:#00ff88;" onclick="app.openLocalInstallModal('${item.ip}', '${item.pr_no || item.model}')"><i class="fas fa-print"></i> Windows'a Kur</button>
-            </div>`;
-        }
-        
         return `
         <div class="flex-row gap-2 mt-4">
             ${deleteBtnHtml}
@@ -6911,7 +7132,7 @@ rmdir "$M" 2>/dev/null`;
     },
     openAddServiceModal: function(printer_id = null, deviceClass = null) {
         try {
-            const isAdmin = this.state.activeUser && (this.state.activeUser.role === 'ADMIN' || this.state.activeUser.role === 'EDITOR');
+            const isAdmin = this.state.activeUser && (this.state.activeUser.role === 'ADMIN' || this.state.activeUser.role === 'EDITOR' || this.isDepotRole(this.state.activeUser.role));
             // Formu sıfırla
             const modalTitle = document.getElementById('service-modal-title');
             if(modalTitle) modalTitle.innerHTML = '<i class="fas fa-tools"></i> Yeni Servis Kaydı';
@@ -7017,7 +7238,7 @@ rmdir "$M" 2>/dev/null`;
         if (!record) return;
 
         const role = this.state.activeUser ? this.state.activeUser.role : '';
-        if (role !== 'ADMIN' && role !== 'DEPOT') {
+        if (role !== 'ADMIN' && !this.isDepotRole(role)) {
             alert("Servis kaydı üzerinde sadece Admin ve Depocu işlem yapabilir.");
             return;
         }

@@ -128,10 +128,61 @@ def run_command():
             cmd_resp = session.post(base_url, data=encoded_post_data, headers=headers, timeout=45, verify=False)
             
             if cmd_resp.status_code == 200:
+                # Yazıcı Ekle/Kaldır başarılı olduysa IT Envanter DB'sindeki pcs.connected_printers alanını güncelle
+                if func in ["AddPrinter", "RemovePrinter"] and target_ip:
+                    try:
+                        from core.database_sql import get_db_connection
+                        clean_cmd = str(command).split('/')[0].strip().upper()
+                        if clean_cmd:
+                            conn_sync = get_db_connection()
+                            if conn_sync:
+                                cursor_sync = conn_sync.cursor()
+                                cursor_sync.execute("SELECT id, connected_printers FROM pcs WHERE ip = ?", (target_ip,))
+                                cp_rows = cursor_sync.fetchall()
+                                for cp_row in cp_rows:
+                                    pc_id_sync = cp_row[0]
+                                    current_printers = (cp_row[1] or '').split() if cp_row[1] else []
+                                    if func == "RemovePrinter":
+                                        new_printers = [p for p in current_printers if p.upper() != clean_cmd]
+                                    else: # AddPrinter
+                                        new_printers = list(current_printers)
+                                        if clean_cmd not in [p.upper() for p in new_printers]:
+                                            new_printers.append(clean_cmd)
+                                    new_cp_str = " ".join(new_printers)
+                                    cursor_sync.execute("UPDATE pcs SET connected_printers = ? WHERE id = ?", (new_cp_str, pc_id_sync))
+                                conn_sync.commit()
+                                conn_sync.close()
+                    except Exception as e_sync:
+                        print(f"[BIM PC Printer Sync Error] {e_sync}")
                 return jsonify({"success": True, "result": cmd_resp.text.strip()})
             else:
                 return jsonify({"error": f"BIM Servis Hatası: {cmd_resp.status_code} - {cmd_resp.text.strip()}"}), 500
         except requests.exceptions.Timeout:
+            if func in ["AddPrinter", "RemovePrinter"] and target_ip:
+                try:
+                    from core.database_sql import get_db_connection
+                    clean_cmd = str(command).split('/')[0].strip().upper()
+                    if clean_cmd:
+                        conn_sync = get_db_connection()
+                        if conn_sync:
+                            cursor_sync = conn_sync.cursor()
+                            cursor_sync.execute("SELECT id, connected_printers FROM pcs WHERE ip = ?", (target_ip,))
+                            cp_rows = cursor_sync.fetchall()
+                            for cp_row in cp_rows:
+                                pc_id_sync = cp_row[0]
+                                current_printers = (cp_row[1] or '').split() if cp_row[1] else []
+                                if func == "RemovePrinter":
+                                    new_printers = [p for p in current_printers if p.upper() != clean_cmd]
+                                else:
+                                    new_printers = list(current_printers)
+                                    if clean_cmd not in [p.upper() for p in new_printers]:
+                                        new_printers.append(clean_cmd)
+                                new_cp_str = " ".join(new_printers)
+                                cursor_sync.execute("UPDATE pcs SET connected_printers = ? WHERE id = ?", (new_cp_str, pc_id_sync))
+                            conn_sync.commit()
+                            conn_sync.close()
+                except Exception as e_sync:
+                    print(f"[BIM PC Printer Sync Error] {e_sync}")
             return jsonify({"success": True, "result": "BIM sunucusuna komut iletildi ancak yanıt süresi aşıldı (45 sn). Uzun süren komutlar arka planda tamamlanabilir."})
 
     except Exception as e:

@@ -1221,14 +1221,17 @@ def batch_action():
         bim_pass = data.get('bim_pass')
         user = data.get('user', 'system')
         
-        if bim_pass == '********':
+        if not bim_user or not bim_pass or bim_pass == '********':
             user_id = request.current_user.get('user_id')
             if user_id:
                 from core.encryption import decrypt_password
-                cursor.execute("SELECT bim_pass FROM users WHERE id = ?", (user_id,))
+                cursor.execute("SELECT bim_user, bim_pass FROM users WHERE id = ?", (user_id,))
                 user_row = cursor.fetchone()
-                if user_row and user_row[0]:
-                    bim_pass = decrypt_password(user_row[0])
+                if user_row:
+                    if not bim_user and user_row[0]:
+                        bim_user = user_row[0]
+                    if (not bim_pass or bim_pass == '********') and user_row[1]:
+                        bim_pass = decrypt_password(user_row[1])
 
         success_count = 0
         failed_targets = []
@@ -1294,20 +1297,44 @@ def batch_action():
                 send_data["UserName"] = bim_user
                 send_data["Commands"] = command
 
-            # Request headers remain exactly the same as login headers for jQuery match
+            # Request headers
             headers = browser_headers.copy()
-            headers["IPASession"] = ipa_session
+            if bim_function not in ["AddPrinter", "RemovePrinter"]:
+                headers["IPASession"] = ipa_session
 
             encoded_send_data = urllib.parse.urlencode(send_data)
 
             try:
-                cmd_resp = session.post(base_url, data=encoded_send_data, headers=headers, timeout=15, verify=False)
+                cmd_resp = session.post(base_url, data=encoded_send_data, headers=headers, timeout=45, verify=False)
                 if cmd_resp.status_code != 200 or "Error" in cmd_resp.text:
                     failed_targets.append(f"{p_name} (BIM Hatasi: {cmd_resp.status_code} - {cmd_resp.text.strip()})")
                     continue
+            except requests.exceptions.Timeout:
+                # 45sn zaman asimi BIM tarafindan arka planda islenir, basarili kabul edilir
+                pass
             except Exception as e:
                 failed_targets.append(f"{p_name} (BIM Cmd Hatasi)")
                 continue
+
+            try:
+                clean_cmd = command.split('/')[0].strip().upper()
+                if clean_cmd:
+                    cursor.execute("SELECT connected_printers FROM pcs WHERE id = ?", (pc_id,))
+                    cp_row = cursor.fetchone()
+                    current_printers = (cp_row[0] or '').split() if cp_row and cp_row[0] else []
+                    
+                    if action == 'remove':
+                        new_printers = [p for p in current_printers if p.upper() != clean_cmd]
+                    else: # 'add'
+                        new_printers = list(current_printers)
+                        if clean_cmd not in [p.upper() for p in new_printers]:
+                            new_printers.append(clean_cmd)
+                            
+                    new_cp_str = " ".join(new_printers)
+                    cursor.execute("UPDATE pcs SET connected_printers = ? WHERE id = ?", (new_cp_str, pc_id))
+                    conn.commit()
+            except Exception as e_sync:
+                print(f"[PC Printer Sync Error] {e_sync}")
 
             success_count += 1
         
