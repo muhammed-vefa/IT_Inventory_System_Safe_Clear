@@ -528,6 +528,7 @@ var appData = {
             {id: 'menu-clear-data', module: 'users'},
             {id: 'menu-keyos-excel', module: 'users'},
             {id: 'menu-printer-pages-report', module: 'printers'},
+            {id: 'menu-printer-weekly-report', module: 'printers'},
             {id: 'menu-hard-test', module: 'users'}
         ];
         ids.forEach(item => {
@@ -840,6 +841,7 @@ checkLoginStatus: function() {
         const navKeyosExcel = document.getElementById('menu-keyos-excel');
         const navKeyosForceSync = document.getElementById('menu-keyos-force-sync');
         const navPrinterPagesReport = document.getElementById('menu-printer-pages-report');
+        const navPrinterWeeklyReport = document.getElementById('menu-printer-weekly-report');
         const navCupsQuery = document.getElementById('menu-cups-query');
         const navHardTest = document.getElementById('menu-hard-test');
         if(navUsers) navUsers.style.display = allowedViews.includes('users') ? 'flex' : 'none';
@@ -870,6 +872,7 @@ checkLoginStatus: function() {
         if(navKeyosExcel) navKeyosExcel.style.display = isAdmin ? 'block' : 'none';
         if(navKeyosForceSync) navKeyosForceSync.style.display = isAdmin ? 'block' : 'none';
         if(navPrinterPagesReport) navPrinterPagesReport.style.display = isAdmin ? 'block' : 'none';
+        if(navPrinterWeeklyReport) navPrinterWeeklyReport.style.display = (isAdmin || allowedViews.includes('printers') || allowedViews.includes('inventory')) ? 'block' : 'none';
         if(navCupsQuery) navCupsQuery.style.display = isAdmin ? 'block' : 'none';
         if(navHardTest) navHardTest.style.display = isAdmin ? 'block' : 'none';
         const navDepotReport = document.getElementById('menu-depot-report');
@@ -1989,6 +1992,7 @@ checkLoginStatus: function() {
         const addBtn = document.getElementById('btn-device-add');
         const printerAddBtn = document.getElementById('btn-printer-add');
         const printerServiceBtn = document.getElementById('btn-printers-service');
+        const printerWeeklyReportBtn = document.getElementById('btn-printers-weekly-report');
         const btnAddNetwork = document.getElementById('btn-add-network');
         
         const isAdm = this.state.activeUser && this.state.activeUser.role === 'ADMIN';
@@ -1996,6 +2000,7 @@ checkLoginStatus: function() {
         if (addBtn) addBtn.style.display = (isAdm && (cat === 'SK' || cat === 'TABLET' || cat === 'MONITOR' || cat === 'PC')) ? 'inline-flex' : 'none';
         if (printerAddBtn) printerAddBtn.style.display = (isAdm && isPrinterCat) ? 'flex' : 'none';
         if (printerServiceBtn) printerServiceBtn.style.display = (cat === 'PRINTER' || cat === 'BARCODE_PRINTER') ? 'flex' : 'none';
+        if (printerWeeklyReportBtn) printerWeeklyReportBtn.style.display = (cat === 'PRINTER') ? 'flex' : 'none';
         if (btnAddNetwork) btnAddNetwork.style.display = (isNetworkCat && this.canEdit('network')) ? 'flex' : 'none';
         
         const countModeBtn = document.getElementById('btn-count-mode');
@@ -3621,6 +3626,10 @@ renderPrintersChunk: function() {
         const btnService = document.getElementById('btn-printers-service');
         if (btnService) {
             btnService.style.display = (this.state.invCategory === 'PRINTER' && type === 'PRINTER') ? 'flex' : 'none';
+        }
+        const btnWeekly = document.getElementById('btn-printers-weekly-report');
+        if (btnWeekly) {
+            btnWeekly.style.display = (this.state.invCategory === 'PRINTER' && type === 'PRINTER') ? 'flex' : 'none';
         }
         
         document.querySelectorAll('#printer-main-filters .btn-chip').forEach(btn => {
@@ -10867,6 +10876,436 @@ app.exportPrinterPagesReportPDF = function() {
 
 app.downloadKeyOSWeeklyExcel = function() {
     window.location.href = this.state.API_BASE + '/keyos/weekly_excel';
+};
+
+// ==================== HAFTALIK YAZICI DURUM RAPORU (İDARE) ====================
+app.showPrinterWeeklyReportModal = function() {
+    const modal = document.getElementById('printer-weekly-report-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    this.refreshPrinterWeeklyReport();
+};
+
+app.refreshPrinterWeeklyReport = async function() {
+    const mBody = document.getElementById('pwr-models-tbody');
+    const iBody = document.getElementById('pwr-issues-tbody');
+    if (mBody) mBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 15px; color: #94a3b8;"><i class="fas fa-spinner fa-spin"></i> Veriler yükleniyor...</td></tr>';
+    if (iBody) iBody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding: 15px; color: #94a3b8;"><i class="fas fa-spinner fa-spin"></i> Veriler yükleniyor...</td></tr>';
+
+    try {
+        const res = await this.apiRequest('/inventory/printers/weekly_executive_report');
+        if (!res || !res.success) {
+            throw new Error((res && res.error) || 'Rapor verisi alınamadı.');
+        }
+        this.state.printerWeeklyReportData = res;
+        this.renderPrinterWeeklyReport(res);
+    } catch (e) {
+        console.error('Weekly report fetch error:', e);
+        this.showToast('Haftalık rapor verileri alınamadı: ' + e.message, 'error');
+        if (mBody) mBody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#ef4444; padding:15px;">Hata: ${this.escapeHtml(e.message)}</td></tr>`;
+        if (iBody) iBody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:#ef4444; padding:15px;">Hata: ${this.escapeHtml(e.message)}</td></tr>`;
+    }
+};
+
+app.renderPrinterWeeklyReport = function(data) {
+    if (!data) return;
+    const summary = data.summary || {};
+    const reportDate = data.report_date || new Date().toLocaleDateString('tr-TR');
+
+    const dateBadge = document.getElementById('printer-weekly-report-date-badge');
+    if (dateBadge) dateBadge.innerText = reportDate;
+
+    // Set KPI numbers & rates
+    const setElem = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = val;
+    };
+
+    setElem('pwr-kpi-total', summary.total || 0);
+    setElem('pwr-kpi-on-field', summary.on_field || 0);
+    setElem('pwr-kpi-on-field-rate', '%' + (summary.on_field_rate !== undefined ? summary.on_field_rate : 0));
+    setElem('pwr-kpi-faulty', summary.faulty || 0);
+    setElem('pwr-kpi-faulty-rate', '%' + (summary.faulty_rate !== undefined ? summary.faulty_rate : 0));
+    setElem('pwr-kpi-warehouse', summary.warehouse || 0);
+    setElem('pwr-kpi-warehouse-rate', '%' + (summary.warehouse_rate !== undefined ? summary.warehouse_rate : 0));
+    setElem('pwr-kpi-in-service', summary.in_service || 0);
+    setElem('pwr-kpi-in-service-rate', '%' + (summary.in_service_rate !== undefined ? summary.in_service_rate : 0));
+
+    // Render Model Distribution Table
+    const mBody = document.getElementById('pwr-models-tbody');
+    if (mBody) {
+        const models = data.models || [];
+        if (models.length === 0) {
+            mBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 12px; color: #94a3b8;">Kayıtlı model bulunamadı.</td></tr>';
+        } else {
+            mBody.innerHTML = models.map(m => {
+                const total = m.total || 0;
+                const field = m.on_field || 0;
+                const rate = total > 0 ? Math.round((field / total) * 100) : 0;
+                return `<tr>
+                    <td style="font-weight: 600; color: #f1f5f9;">${this.escapeHtml(m.model || 'Belirtilmemiş')}</td>
+                    <td style="text-align: center; color: #34d399; font-weight: 700;">${field}</td>
+                    <td style="text-align: center; color: #f87171; font-weight: 700;">${m.faulty || 0}</td>
+                    <td style="text-align: center; color: #38bdf8; font-weight: 700;">${m.warehouse || 0}</td>
+                    <td style="text-align: center; color: #fbbf24; font-weight: 700;">${m.in_service || 0}</td>
+                    <td style="text-align: center; font-weight: 700; color: #fff;">${total}</td>
+                    <td style="text-align: center;"><span style="background: rgba(56,189,248,0.15); color: #38bdf8; padding: 2px 8px; border-radius: 8px; font-weight: 600; font-size: 0.8rem;">%${rate}</span></td>
+                </tr>`;
+            }).join('');
+        }
+    }
+
+    // Render Faulty & Service Issues Table
+    const iBody = document.getElementById('pwr-issues-tbody');
+    const issuesCount = document.getElementById('pwr-issues-count');
+    if (iBody) {
+        const issues = data.issues || [];
+        if (issuesCount) issuesCount.innerText = `${issues.length} Kayıt`;
+
+        if (issues.length === 0) {
+            iBody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding: 14px; color: #34d399;"><i class="fas fa-check-circle"></i> Şu anda serviste veya arızalı kayıtlı yazıcı bulunmamaktadır.</td></tr>';
+        } else {
+            iBody.innerHTML = issues.map(item => {
+                const isSrv = item.status === 'SERVISTE';
+                const badgeStyle = isSrv 
+                    ? 'background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4);' 
+                    : 'background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);';
+                const daysStr = (item.days_in_service !== null && item.days_in_service !== undefined) 
+                    ? `${item.days_in_service} Gün` 
+                    : '-';
+                return `<tr>
+                    <td><strong style="color: #38bdf8;">${this.escapeHtml(item.pr_no || '')}</strong></td>
+                    <td style="font-weight: 500; color: #f1f5f9;">${this.escapeHtml(item.model || '')}</td>
+                    <td><code style="color: #94a3b8; font-size: 0.8rem;">${this.escapeHtml(item.serial_no || '-')}</code></td>
+                    <td style="color: #cbd5e1;">${this.escapeHtml(item.location_code || '-')}</td>
+                    <td style="text-align: center;"><span style="padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; ${badgeStyle}">${item.status}</span></td>
+                    <td style="text-align: center; color: #94a3b8; font-size: 0.8rem;">${this.escapeHtml(item.sent_date || '-')}</td>
+                    <td style="text-align: center; font-weight: 700; color: #fbbf24;">${daysStr}</td>
+                    <td style="max-width: 220px; white-space: normal; color: #cbd5e1; font-size: 0.8rem;">${this.escapeHtml(item.fault_description || '-')}</td>
+                    <td style="color: #34d399; font-weight: 600;">${item.substitute_pr_no ? this.escapeHtml(item.substitute_pr_no) : '-'}</td>
+                </tr>`;
+            }).join('');
+        }
+    }
+};
+
+app.exportPrinterWeeklyReportPDF = function() {
+    const data = this.state.printerWeeklyReportData;
+    if (!data || !data.summary) {
+        this.showToast('Lütfen önce verilerin yüklenmesini bekleyin.', 'warning');
+        return;
+    }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4'); // Portrait A4
+    const s = data.summary;
+    const dateStr = data.report_date || new Date().toLocaleDateString('tr-TR');
+
+    // Logos
+    try {
+        const logoLeft = "/static/logo/ht_left.png";
+        doc.addImage(logoLeft, 'PNG', 14, 10, 22, 11);
+    } catch (e) {}
+
+    // Title
+    doc.setFontSize(14);
+    doc.setTextColor(30, 41, 59);
+    doc.text(this.fixTurkishForPDF("HAFTALIK YAZICI DURUM RAPORU"), 105, 16, null, null, "center");
+
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text(this.fixTurkishForPDF(`T.C. Saglik Bakanligi Hastane Yonetimi - Bilgi Islem Birimi`), 105, 21, null, null, "center");
+    doc.text(this.fixTurkishForPDF(`Rapor Tarihi: ${dateStr}`), 105, 26, null, null, "center");
+
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.4);
+    doc.line(14, 29, 196, 29);
+
+    // KPI Summary Table
+    const summaryRows = [
+        [
+            this.fixTurkishForPDF('Toplam Envanter'),
+            this.fixTurkishForPDF('Kurulu (Sahada Aktif)'),
+            this.fixTurkishForPDF('Arizali Cihaz'),
+            this.fixTurkishForPDF('Stokta (Depoda)'),
+            this.fixTurkishForPDF('Dis Serviste')
+        ],
+        [
+            `${s.total || 0} Adet`,
+            `${s.on_field || 0} Adet (%${s.on_field_rate || 0})`,
+            `${s.faulty || 0} Adet (%${s.faulty_rate || 0})`,
+            `${s.warehouse || 0} Adet (%${s.warehouse_rate || 0})`,
+            `${s.in_service || 0} Adet (%${s.in_service_rate || 0})`
+        ]
+    ];
+
+    doc.autoTable({
+        startY: 32,
+        head: [summaryRows[0]],
+        body: [summaryRows[1]],
+        theme: 'grid',
+        headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 8 },
+        styles: { fontSize: 8.5, fontStyle: 'bold', halign: 'center', cellPadding: 2.5 },
+        columnStyles: {
+            0: { textColor: [15, 23, 42] },
+            1: { textColor: [16, 185, 129] },
+            2: { textColor: [239, 68, 68] },
+            3: { textColor: [14, 116, 144] },
+            4: { textColor: [217, 119, 6] }
+        }
+    });
+
+    let currentY = doc.lastAutoTable.finalY + 6;
+
+    // Section 1: Model Dağılımı
+    doc.setFontSize(10);
+    doc.setTextColor(30, 41, 59);
+    doc.text(this.fixTurkishForPDF("1. Model Bazli Yazici Envanter Dagilimi"), 14, currentY);
+
+    const modelRows = (data.models || []).map(m => {
+        const tot = m.total || 0;
+        const fld = m.on_field || 0;
+        const rate = tot > 0 ? Math.round((fld / tot) * 100) : 0;
+        return [
+            this.fixTurkishForPDF(m.model || 'Belirtilmemis'),
+            String(fld),
+            String(m.faulty || 0),
+            String(m.warehouse || 0),
+            String(m.in_service || 0),
+            String(tot),
+            `%${rate}`
+        ];
+    });
+
+    doc.autoTable({
+        startY: currentY + 2,
+        head: [[
+            this.fixTurkishForPDF('Model Adi'),
+            this.fixTurkishForPDF('Kurulu (Sahada)'),
+            this.fixTurkishForPDF('Arizali'),
+            this.fixTurkishForPDF('Depoda'),
+            this.fixTurkishForPDF('Serviste'),
+            this.fixTurkishForPDF('Toplam'),
+            this.fixTurkishForPDF('Kurulu Orani')
+        ]],
+        body: modelRows,
+        theme: 'striped',
+        headStyles: { fillColor: [6, 182, 212], textColor: 255, halign: 'center', fontSize: 8 },
+        styles: { fontSize: 7.5, cellPadding: 2 },
+        columnStyles: {
+            0: { cellWidth: 52 },
+            1: { halign: 'center', cellWidth: 24 },
+            2: { halign: 'center', cellWidth: 20 },
+            3: { halign: 'center', cellWidth: 20 },
+            4: { halign: 'center', cellWidth: 20 },
+            5: { halign: 'center', fontStyle: 'bold', cellWidth: 22 },
+            6: { halign: 'center', cellWidth: 24 }
+        }
+    });
+
+    currentY = doc.lastAutoTable.finalY + 6;
+
+    // Section 2: Arıza ve Servis Listesi
+    const issues = data.issues || [];
+    if (issues.length > 0) {
+        if (currentY > 230) {
+            doc.addPage();
+            currentY = 15;
+        }
+
+        doc.setFontSize(10);
+        doc.setTextColor(30, 41, 59);
+        doc.text(this.fixTurkishForPDF(`2. Aktif Servis ve Ariza Takip Listesi (${issues.length} Adet Cihaz)`), 14, currentY);
+
+        const issueRows = issues.map(it => [
+            this.fixTurkishForPDF(it.pr_no || ''),
+            this.fixTurkishForPDF(it.model || ''),
+            this.fixTurkishForPDF(it.serial_no || '-'),
+            this.fixTurkishForPDF(it.location_code || '-'),
+            this.fixTurkishForPDF(it.status || ''),
+            this.fixTurkishForPDF(it.sent_date || '-'),
+            it.days_in_service !== null && it.days_in_service !== undefined ? `${it.days_in_service} Gun` : '-',
+            this.fixTurkishForPDF(it.fault_description || '-'),
+            this.fixTurkishForPDF(it.substitute_pr_no || '-')
+        ]);
+
+        doc.autoTable({
+            startY: currentY + 2,
+            head: [[
+                this.fixTurkishForPDF('Cihaz No'),
+                this.fixTurkishForPDF('Model'),
+                this.fixTurkishForPDF('Seri No'),
+                this.fixTurkishForPDF('Mahal'),
+                this.fixTurkishForPDF('Durum'),
+                this.fixTurkishForPDF('Tarih'),
+                this.fixTurkishForPDF('Sure'),
+                this.fixTurkishForPDF('Ariza Aciklamasi'),
+                this.fixTurkishForPDF('Ikame')
+            ]],
+            body: issueRows,
+            theme: 'striped',
+            headStyles: { fillColor: [239, 68, 68], textColor: 255, halign: 'center', fontSize: 7.5 },
+            styles: { fontSize: 7, cellPadding: 1.8 },
+            columnStyles: {
+                0: { cellWidth: 18, fontStyle: 'bold' },
+                1: { cellWidth: 26 },
+                2: { cellWidth: 22 },
+                3: { cellWidth: 20 },
+                4: { cellWidth: 16, halign: 'center' },
+                5: { cellWidth: 18, halign: 'center' },
+                6: { cellWidth: 14, halign: 'center' },
+                7: { cellWidth: 32 },
+                8: { cellWidth: 16 }
+            }
+        });
+        currentY = doc.lastAutoTable.finalY + 8;
+    }
+
+    // Signature Block (İdare ve BİT İmzaları)
+    if (currentY > 250) {
+        doc.addPage();
+        currentY = 25;
+    } else {
+        currentY = Math.max(currentY + 10, 248);
+    }
+
+    doc.setFontSize(8.5);
+    doc.setTextColor(50, 50, 50);
+
+    // Left Signature
+    doc.text(this.fixTurkishForPDF("Raporu Hazirlayan"), 35, currentY, null, null, "center");
+    doc.text(this.fixTurkishForPDF("Bilgi Islem Sorumlusu"), 35, currentY + 4, null, null, "center");
+    doc.text(this.fixTurkishForPDF("Imza / Tarih"), 35, currentY + 16, null, null, "center");
+
+    // Right Signature
+    doc.text(this.fixTurkishForPDF("Teslim Alan"), 155, currentY, null, null, "center");
+    doc.text(this.fixTurkishForPDF("Idari ve Mali Isler Mudurlugu"), 155, currentY + 4, null, null, "center");
+    doc.text(this.fixTurkishForPDF("Imza / Tarih"), 155, currentY + 16, null, null, "center");
+
+    const safeDate = dateStr.replace(/\./g, '_');
+    doc.save(`Haftalik_Yazici_Durum_Raporu_${safeDate}.pdf`);
+    this.showToast('Resmi PDF Raporu başarıyla oluşturuldu ve indirildi.', 'success');
+};
+
+app.exportPrinterWeeklyReportExcel = function() {
+    const data = this.state.printerWeeklyReportData;
+    if (!data || !data.summary) {
+        this.showToast('Lütfen önce verilerin yüklenmesini bekleyin.', 'warning');
+        return;
+    }
+    const s = data.summary;
+    const dateStr = data.report_date || new Date().toLocaleDateString('tr-TR');
+
+    let html = `<html><head><meta charset="UTF-8"><style>
+        table { border-collapse: collapse; font-family: Calibri, sans-serif; margin-bottom: 20px; width: 100%; }
+        th, td { border: 1px solid #94a3b8; padding: 6px 10px; font-size: 11pt; }
+        th { background-color: #0f172a; color: #ffffff; text-align: center; }
+        .hdr { background-color: #0284c7; color: #ffffff; font-weight: bold; font-size: 13pt; text-align: center; }
+        .subhdr { background-color: #38bdf8; color: #000; font-weight: bold; }
+        .center { text-align: center; }
+        .green { color: #16a34a; font-weight: bold; }
+        .red { color: #dc2626; font-weight: bold; }
+        .blue { color: #0284c7; font-weight: bold; }
+        .amber { color: #d97706; font-weight: bold; }
+    </style></head><body>`;
+
+    html += `<table>
+        <tr><td colspan="7" class="hdr">HAFTALIK YAZICI DURUM VE ENVANTER RAPORU</td></tr>
+        <tr><td colspan="7" class="center">Rapor Tarihi: ${dateStr} | Bilgi İşlem Birimi</td></tr>
+    </table>`;
+
+    // Summary KPI
+    html += `<table>
+        <tr>
+            <th>Toplam Envanter</th>
+            <th>Kurulu (Sahada Aktif)</th>
+            <th>Arızalı</th>
+            <th>Stokta (Depo)</th>
+            <th>Dış Serviste</th>
+        </tr>
+        <tr>
+            <td class="center"><b>${s.total || 0} Adet</b></td>
+            <td class="center green">${s.on_field || 0} Adet (%${s.on_field_rate || 0})</td>
+            <td class="center red">${s.faulty || 0} Adet (%${s.faulty_rate || 0})</td>
+            <td class="center blue">${s.warehouse || 0} Adet (%${s.warehouse_rate || 0})</td>
+            <td class="center amber">${s.in_service || 0} Adet (%${s.in_service_rate || 0})</td>
+        </tr>
+    </table>`;
+
+    // Model breakdown
+    html += `<table>
+        <tr><td colspan="7" class="subhdr">1. Model Bazlı Dağılım</td></tr>
+        <tr>
+            <th>Model Adı</th>
+            <th>Sahada (Kurulu)</th>
+            <th>Arızalı</th>
+            <th>Depoda</th>
+            <th>Serviste</th>
+            <th>Toplam</th>
+            <th>Kurulu Oranı</th>
+        </tr>`;
+
+    (data.models || []).forEach(m => {
+        const tot = m.total || 0;
+        const fld = m.on_field || 0;
+        const rate = tot > 0 ? Math.round((fld / tot) * 100) : 0;
+        html += `<tr>
+            <td>${m.model || 'Belirtilmemiş'}</td>
+            <td class="center green">${fld}</td>
+            <td class="center red">${m.faulty || 0}</td>
+            <td class="center blue">${m.warehouse || 0}</td>
+            <td class="center amber">${m.in_service || 0}</td>
+            <td class="center"><b>${tot}</b></td>
+            <td class="center">%${rate}</td>
+        </tr>`;
+    });
+    html += `</table>`;
+
+    // Issues list
+    const issues = data.issues || [];
+    html += `<table>
+        <tr><td colspan="9" class="subhdr">2. Aktif Arıza ve Servis Takip Listesi (${issues.length} Kayıt)</td></tr>
+        <tr>
+            <th>Cihaz No</th>
+            <th>Model</th>
+            <th>Seri No</th>
+            <th>Bulunduğu Mahal</th>
+            <th>Durum</th>
+            <th>Gönderim Tarihi</th>
+            <th>Servis Süresi</th>
+            <th>Arıza Açıklaması</th>
+            <th>İkame Cihaz</th>
+        </tr>`;
+
+    if (issues.length === 0) {
+        html += `<tr><td colspan="9" class="center">Aktif arızalı veya serviste kayıtlı cihaz bulunmamaktadır.</td></tr>`;
+    } else {
+        issues.forEach(it => {
+            const days = it.days_in_service !== null && it.days_in_service !== undefined ? `${it.days_in_service} Gün` : '-';
+            html += `<tr>
+                <td class="center"><b>${it.pr_no || ''}</b></td>
+                <td>${it.model || ''}</td>
+                <td class="center">${it.serial_no || '-'}</td>
+                <td>${it.location_code || '-'}</td>
+                <td class="center">${it.status || ''}</td>
+                <td class="center">${it.sent_date || '-'}</td>
+                <td class="center">${days}</td>
+                <td>${it.fault_description || '-'}</td>
+                <td class="center">${it.substitute_pr_no || '-'}</td>
+            </tr>`;
+        });
+    }
+    html += `</table></body></html>`;
+
+    const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Haftalik_Yazici_Raporu_${dateStr.replace(/\./g, '_')}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    this.showToast('Excel raporu başarıyla indirildi.', 'success');
 };
 
 app.toggleFullscreen = function(elementId) {
