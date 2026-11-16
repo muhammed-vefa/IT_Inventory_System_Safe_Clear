@@ -206,3 +206,24 @@ equire_editor rotalarında yazıcı yolu tespiti printer in path olarak genişle
 * **Frontend:**
   - `index.html`: Profil menüsüne (#menu-printer-weekly-report) ve Envanter > Yazıcılar araç çubuğuna (#btn-printers-weekly-report) buton eklendi. `#printer-weekly-report-modal` interaktif dashboard modalı oluşturuldu.
   - `frontend/UI_controller.js`: `showPrinterWeeklyReportModal()`, `refreshPrinterWeeklyReport()`, `renderPrinterWeeklyReport()`, `exportPrinterWeeklyReportPDF()` (Resmi A4 antetli, özet tablolu, çift imza bloklu PDF), `exportPrinterWeeklyReportExcel()` fonksiyonları tamamlandı.
+
+### [16.11.2026] - PC Modal Durum/İşletim Sistemi Düzeni, Kutulu Seçeneği, Depo Filtresi & Rapor Merkezi
+* **PC Detay Modalı (Resim 1):**
+  - **1. Satır (Durum Bildirme):** Yalnızca `Sahada`, `Depoda`, `Kayıp` seçenekleri bırakıldı. Arızalı 2. satıra taşındı. Seçimler birbirini dışlar (exclusive).
+  - **2. Satır (İşletim Sistemi & Depo Durumu):** `Windows`, `Keyos`, `RDP`, `Arızalı` ve yeni eklenen `Kutulu` seçenekleri yerleştirildi.
+  - **Dinamik Kilit Mantığı:** `Sahada` seçildiğinde OS aktif, Arızalı ve Kutulu devre dışı bırakılır. `Depoda` seçildiğinde OS temizlenir ve devre dışı kalır; Arızalı ve Kutulu seçilebilir hale gelir. `Kayıp` seçildiğinde tüm alt seçenekler pasifleşir.
+  - **Zorunlu Alan Validasyonu:** Kayıt sırasında `Mahal Kodu` ve `Durum` zorunludur. `Sahada` seçildiyse `Windows` veya `KeyOS` seçimi zorunlu kılındı.
+* **Depo Alt Filtreleri (Resim 2):**
+  - Envanter blok filtrelerine `MH` sonrasına `[ DEPO ]` çipi eklendi.
+  - Depo tıklandığında kat filtreleri gizlenip `#depo-sub-filters-container` (`TÜMÜ`, `HAZIR`, `ARIZALI`, `KUTULU`, `EKRANSIZ`) açılır.
+  - Mantık:
+    - `HAZIR`: Ekran seri no girili AND !Arızalı AND !Kutulu.
+    - `ARIZALI`: is_faulty == 1.
+    - `KUTULU`: kutulu == 1 veya açıklamasında `[KUTULU]`.
+    - `EKRANSIZ`: Ekran seri no girili değil AND !Arızalı AND !Kutulu.
+    - `TÜMÜ`: Tüm depodaki cihazlar.
+* **Rapor Merkezi & Profil Menüsü Sadeleştirme:**
+  - 25+ satırlık profil menüsü `Modüller`, `Entegrasyonlar`, `Sistem` alt flyout menülerine ayrıldı.
+  - 5 ayrı rapor maddesi tek bir **"Rapor Merkezi"** menü elemanı ve `#report-center-modal` ile birleştirildi. 6 rapor kartı sunuldu.
+* **Backend Uyumluluğu:**
+  - `modules/inventory_core.py` ve `modules/inventory_pcs.py` dosyalarında `kutulu` alanı için dynamic column check ve `[KUTULU]` açıklama fallback'i entegre edildi. SQL Server migration gerektirmeden tam veri kalıcılığı sağlandı.
