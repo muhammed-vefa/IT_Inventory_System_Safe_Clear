@@ -1753,8 +1753,12 @@ checkLoginStatus: function() {
                 return `
                 <div class="card printer-card-modern fade-in" style="cursor:pointer; min-height: auto;" onclick="app.openDeviceDetail(${p.id}, 'pr', '${p.device_class || 'MONITOR'}')">
                     ${noteBubble}
-                    <div class="flex-row mb-3" style="align-items: center; justify-content: space-between;">
-                        <div style="color: #38bdf8; font-weight: 900; font-size: 1.3rem; letter-spacing: -0.5px;">${p.pr_no}</div>
+                    <!-- BAŞLIK: MONİTÖR NO -->
+                    <div class="flex-row" style="align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                        <div style="color: #38bdf8; font-weight: 900; font-size: 1.25rem; letter-spacing: -0.5px; white-space: nowrap;">${p.pr_no}</div>
+                    </div>
+                    <!-- 2. SATIR: DURUM ROZETİ (1 SATIR ALTA ALINDI) -->
+                    <div class="flex-row gap-2 mb-3" style="align-items: center; flex-wrap: wrap; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
                         ${durumHtml}
                     </div>
                     <div class="printer-model-text" style="font-size: 1.1rem; color: #fff; font-weight: 600; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; display: flex; align-items: center;">
@@ -1816,7 +1820,7 @@ checkLoginStatus: function() {
                     }
                 }
                 
-                keyosBadgeHtml = `<div style="background: rgba(0,0,0,0.3); border: 1px solid ${k_color}; border-radius: 12px; padding: 2px 6px; display: inline-flex; align-items: center; gap: 4px; font-size: 0.65rem; color: #fff; margin-left: auto;" title="Son Aktiflik: ${k_active || '-'}">
+                keyosBadgeHtml = `<div style="background: rgba(0,0,0,0.3); border: 1px solid ${k_color}; border-radius: 12px; padding: 2px 6px; display: inline-flex; align-items: center; gap: 4px; font-size: 0.65rem; color: #fff;" title="Son Aktiflik: ${k_active || '-'}">
                     <div style="width: 6px; height: 6px; border-radius: 50%; background: ${k_color};"></div>
                     ${k_text}
                 </div>`;
@@ -1857,18 +1861,13 @@ checkLoginStatus: function() {
             return `
             <div class="card printer-card-modern fade-in ${this.state.countMode && countedAt ? 'counted-card' : ''}" 
                  onclick="app.openDeviceDetail(${i.id}, 'pc')"
-                 style="cursor:pointer; min-height: 140px; padding: 12px;">
+                 style="cursor:pointer; min-height: 150px; padding: 12px;">
                 
-                <!-- BAŞLIK SATIRI: PC NO + DURUM -->
-                <div class="flex-row" style="justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
-                    <div class="flex-row gap-2" style="align-items: center;">
-                        <div style="color: #38bdf8; font-weight: 900; font-size: 1.1rem; letter-spacing: -0.5px; display: flex; align-items: center; gap: 5px;">
-                            ${pcLabel}
-                            ${i.description && i.description.trim() !== '' ? `<i class="fas fa-exclamation-circle blink-icon" style="color:#ff4b2b; font-size: 1rem;" title="${i.description.replace(/"/g, '&quot;')}"></i>` : ''}
-                        </div>
-                        ${keyosBadgeHtml}
-                        ${durumHtml}
-                        ${pcPrinterMismatchBadgeHtml}
+                <!-- BAŞLIK SATIRI: PC NO + AKSİYONLAR -->
+                <div class="flex-row" style="justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <div style="color: #38bdf8; font-weight: 900; font-size: 1.15rem; letter-spacing: -0.5px; display: flex; align-items: center; gap: 5px; white-space: nowrap;">
+                        ${pcLabel}
+                        ${i.description && i.description.trim() !== '' ? `<i class="fas fa-exclamation-circle blink-icon" style="color:#ff4b2b; font-size: 0.95rem;" title="${i.description.replace(/"/g, '&quot;')}"></i>` : ''}
                     </div>
                     <div class="flex-row gap-2" style="align-items: center;">
                         ${this.state.invCategory === 'PC' ? `
@@ -1877,6 +1876,13 @@ checkLoginStatus: function() {
                         ` : ''}
                         <i class="fas fa-clock-rotate-left" style="color: #64748b; font-size: 0.85rem; cursor: pointer; opacity: 0.7;" title="Geçmiş" onclick="event.stopPropagation(); app.openHistoryPopup(${i.id}, 'pc', event)"></i>
                     </div>
+                </div>
+
+                <!-- 2. SATIR: DURUM VE ROZETLER (1 SATIR ALTA ALINDI) -->
+                <div class="flex-row gap-2" style="align-items: center; flex-wrap: wrap; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+                    ${keyosBadgeHtml}
+                    ${durumHtml}
+                    ${pcPrinterMismatchBadgeHtml}
                 </div>
 
                 <!-- İÇERİK 1. SATIR: MAHAL KODU (SOL) & HOSTNAME (SAĞ) -->
@@ -2846,21 +2852,22 @@ renderPrintersChunk: function() {
 
             return `
             <div class="card printer-card-modern fade-in" style="cursor:pointer; min-height: ${isSpecial ? 'auto' : '280px'};" onclick="app.openDeviceDetail(${p.id}, 'pr', '${p.device_class || 'PRINTER'}')">
-                <div class="flex-row mb-3" style="align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+                <!-- BAŞLIK: YAZICI NO & AKSİYONLAR -->
+                <div class="flex-row" style="align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                    <div style="color: #38bdf8; font-weight: 900; font-size: 1.25rem; letter-spacing: -0.5px; white-space: nowrap;">${prNoDisplay}</div>
                     <div class="flex-row gap-2" style="align-items: center;">
-                        <div style="color: #38bdf8; font-weight: 900; font-size: 1.3rem; letter-spacing: -0.5px;">${prNoDisplay}</div>
-                        ${durumHtml}
-                        ${mismatchBadgeHtml}
-                        ${undefinedBadgeHtml}
+                         <i class="fas fa-history" style="font-size: 0.95rem; color: #64748b; cursor: pointer;" title="Servis Geçmişi" onclick="event.stopPropagation(); app.openPrinterServiceHistoryModal(${p.id}, '${prNoDisplay}', '${p.device_class || 'PRINTER'}')"></i>
+                         ${!isSpecial ? `
+                         <i class="fas fa-globe" style="font-size: 0.95rem; color: #10b981; cursor: pointer;" title="Arayüz & CUPS" onclick="event.stopPropagation(); app.openPrinterInterfaceDual('${p.ip}', '${prNoDisplay}')"></i>
+                         ` : ''}
                     </div>
-                    <div class="flex-row gap-3" style="align-items: center;">
-                        <div class="flex-row gap-2">
-                             <i class="fas fa-history" style="font-size: 1rem; color: #64748b; cursor: pointer;" title="Servis Geçmişi" onclick="event.stopPropagation(); app.openPrinterServiceHistoryModal(${p.id}, '${prNoDisplay}', '${p.device_class || 'PRINTER'}')"></i>
-                             ${!isSpecial ? `
-                             <i class="fas fa-globe" style="font-size: 1rem; color: #10b981; cursor: pointer;" title="Arayüz & CUPS" onclick="event.stopPropagation(); app.openPrinterInterfaceDual('${p.ip}', '${prNoDisplay}')"></i>
-                             ` : ''}
-                        </div>
-                    </div>
+                </div>
+
+                <!-- 2. SATIR: DURUM VE ROZETLER (1 SATIR ALTA ALINDI) -->
+                <div class="flex-row gap-2 mb-3" style="align-items: center; flex-wrap: wrap; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+                    ${durumHtml}
+                    ${mismatchBadgeHtml}
+                    ${undefinedBadgeHtml}
                 </div>
 
                 <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 10px; margin-bottom: 12px;">

@@ -6,6 +6,16 @@ Bu dosya, yapay zeka ajanlarının (Antigravity) geçmişte çözdüğü spesifi
 
 ## 📝 Kronik Sorunlar ve Çözüm Arşivi
 
+### [16.11.2026] - Envanter Kartları Başlık Rozetleri (Durum & Aktiflik) 1 Satır Alta Alma ve Sıkışma Çözümü
+* **Sorun:** Envanter kartlarının tek satırlı başlık alanında (PC No + KeyOS Aktiflik + Durum/Depo Rozetleri + Alakasız Yazıcı Uyarısı + Kapat/Yeniden Başlat/Geçmiş Butonları) çok fazla eleman biriktiği için dar ekranlarda veya birden fazla rozet eklendiğinde `PC-005` gibi cihaz isimleri 2 satıra kırılıyor (`PC-` ve `005`), görsel sıkışma yaşanıyordu.
+* **Kök Neden:** Tüm başlık elemanlarının aynı `flex-row` container'ı içinde yan yana konumlandırılması ve eklenen yeni özelliklerle (`DEPODA`, `HAZIR`, `ARIZALI`, `KUTULU`, `EKRANSIZ`, Alakasız Yazıcı rozetleri) başlık genişliğinin kart sınırını aşması.
+* **Çözüm:**
+  1. **Envanter Kartları (PC, SK, Tablet, Çağrı Ekranı vb.):** Başlık 1. satırına sadece cihaz numarası (`pcLabel`) ve aksiyon butonları (`power`, `reboot`, `history`) yerleştirildi. `white-space: nowrap;` verilerek cihaz etiketinin asla kırılmaması garanti altına alındı.
+  2. **Durum ve Rozetler (2. Satır):** KeyOS aktiflik rozeti (`keyosBadgeHtml`), durum rozetleri (`durumHtml` - KURULU, DEPODA, HAZIR vb.) ve alakasız yazıcı rozeti (`pcPrinterMismatchBadgeHtml`) 1 satır alta bağımsız bir `flex-row` olarak alındı. `flex-wrap: wrap;` ve `gap-2` ile rozetlerin birbirini veya cihaz adını sıkıştırmadan ferahça dizilmesi sağlandı. Altına hafif çizgi (`border-bottom`) eklendi.
+  3. **Yazıcı ve Monitör Kartları:** Yazıcı kartlarında (`renderPrintersChunk`) ve Monitör kartlarında da aynı tasarım hiyerarşisi uygulanarak durum rozetleri 2. satıra taşındı, sistem çapında görsel bütünlük sağlandı.
+* **Dosya Değişiklikleri:** `frontend/UI_controller.js`
+
+
 ### [16.11.2026] - KeyOS MGT Mahal ve Hostname Eşzamanlı Güncelleme Çözümü
 * **Sorun:** Bilgisayar envanter güncellemesi sırasında mahal değiştirildiğinde, KeyOS MGT üzerinde mahal doğru güncelleniyor ancak hostname eski değerinde kalıyor (güncellenmiyordu).
 * **Kök Neden:** 
