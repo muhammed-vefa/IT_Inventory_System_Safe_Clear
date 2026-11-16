@@ -227,3 +227,6 @@ equire_editor rotalarında yazıcı yolu tespiti printer in path olarak genişle
   - 5 ayrı rapor maddesi tek bir **"Rapor Merkezi"** menü elemanı ve `#report-center-modal` ile birleştirildi. 6 rapor kartı sunuldu.
 * **Backend Uyumluluğu:**
   - `modules/inventory_core.py` ve `modules/inventory_pcs.py` dosyalarında `kutulu` alanı için dynamic column check ve `[KUTULU]` açıklama fallback'i entegre edildi. SQL Server migration gerektirmeden tam veri kalıcılığı sağlandı.
+* **Depo Filtreleme Düzeltmesi (Mahal Adından Bağımsızlaştırma):**
+  - Depo filtresinin mahal adı veya mahal kodunda 'DEPO' geçen ancak durumu 'KURULU' (Sahada) olan cihazları depoda gösterme sorunu giderildi.
+  - Filtreleme doğrudan ve yalnızca cihazın durum alanlarına (`!on_field && !without_location && (warehouse || is_faulty)`) kilitlendi; mahal adı bağımlılığı tamamen kaldırıldı.

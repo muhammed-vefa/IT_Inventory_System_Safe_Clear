@@ -2363,7 +2363,7 @@ checkLoginStatus: function() {
             
             // Block & DEPO Filter
             if (block === 'DEPO') {
-                const isWh = this.isTrue(i.warehouse) || (this.isTrue(i.is_faulty) && !this.isTrue(i.on_field) && !this.isTrue(i.without_location)) || ((i.location_code || i.mahal || '').toUpperCase().includes('DEPO'));
+                const isWh = !this.isTrue(i.on_field) && !this.isTrue(i.without_location) && (this.isTrue(i.warehouse) || (this.isTrue(i.is_faulty) && !this.isTrue(i.on_field) && !this.isTrue(i.without_location)) || (i.status || '').toUpperCase() === 'DEPODA' || (i.status || '').toUpperCase() === 'DEPO');
                 if (!isWh) return false;
 
                 const sub = this.state.depoSubFilter || 'ALL';
@@ -2673,7 +2673,7 @@ checkLoginStatus: function() {
             mahalUP = mahalUP.replace(/^(SERVİSTE|SERVISTE|KONTROLDE|DEPO|KAYIP|HURDA)[\.\s-]+/g, '');
 
             if (block === 'DEPO') {
-                const isDepo = (p.warehouse == 1 || (p.mahal || p.location_code || '').toUpperCase().includes('DEPO') || (p.status || '').toUpperCase().includes('DEPO'));
+                const isDepo = !this.isTrue(p.on_field) && !this.isTrue(p.without_location) && (this.isTrue(p.warehouse) || (p.status || '').toUpperCase() === 'DEPODA' || (p.status || '').toUpperCase() === 'DEPO');
                 if (!isDepo) return false;
             } else if (block !== 'ALL') {
                 const tower = (p.tower || "").toUpperCase();
@@ -5296,7 +5296,7 @@ rmdir "$M" 2>/dev/null`;
                                 <span class="checkmark"></span>
                             </label>
                             <label class="check-container" style="font-size:0.75rem; font-weight:700;">Depoda
-                                <input type="checkbox" id="edit-warehouse" ${(this.isTrue(item.warehouse) || (this.isTrue(item.is_faulty) && !this.isTrue(item.on_field) && !this.isTrue(item.without_location))) ? 'checked' : ''} onclick="app.handlePcStatusCheck('edit-warehouse')">
+                                <input type="checkbox" id="edit-warehouse" ${(!this.isTrue(item.on_field) && !this.isTrue(item.without_location) && (this.isTrue(item.warehouse) || (this.isTrue(item.is_faulty) && !this.isTrue(item.on_field) && !this.isTrue(item.without_location)))) ? 'checked' : ''} onclick="app.handlePcStatusCheck('edit-warehouse')">
                                 <span class="checkmark"></span>
                             </label>
                             <label class="check-container" style="font-size:0.75rem; font-weight:700;">Kayıp
@@ -10070,9 +10070,10 @@ exit
     //  PHASE 4 - HELPER FUNCTIONS (INLINE HTML REDUCTION)
     // =========================================================================
     getPcDurumBadges: function(i) {
+        const isSahada = this.isTrue(i.on_field);
+        const isLost = !isSahada && this.isTrue(i.without_location);
         const isFaulty = this.isTrue(i.is_faulty);
-        const isWarehouse = this.isTrue(i.warehouse) || (isFaulty && !this.isTrue(i.on_field) && !this.isTrue(i.without_location));
-        const isLost = this.isTrue(i.without_location);
+        const isWarehouse = !isSahada && !isLost && (this.isTrue(i.warehouse) || (isFaulty && !isSahada && !isLost) || (i.status || '').toUpperCase() === 'DEPODA' || (i.status || '').toUpperCase() === 'DEPO');
         const isKutulu = this.isTrue(i.kutulu) || ((i.description || i.aciklama || '').toUpperCase().includes('[KUTULU]'));
         const hasScreen = Boolean(
             (i.monitor_seri && i.monitor_seri.trim() !== '' && i.monitor_seri.trim() !== '0' && i.monitor_seri.trim() !== '---') ||
