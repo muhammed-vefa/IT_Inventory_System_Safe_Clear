@@ -54,7 +54,7 @@ def get_pcs():
             "description", "last_counted_at", "counted_by", "hostname", "device_type", 
             "last_edit_date", "last_edit_user", "hostname_mismatch", "created_at",
             "connected_printers", "keyos", "rdp_address", "rdp_reason", "is_deleted",
-            "last_active"
+            "last_active", "kutulu"
         ]
         cols = get_safe_columns(table, requested)
         include_archived = request.args.get('include_archived') == 'true'
@@ -80,6 +80,11 @@ def get_pcs():
             # DB'deki last_active en guncel olanidir (KeyOS veya DC tarafindan guncellenir)
             for item in items:
                 item["keyos_last_active"] = item.get("last_active")
+                desc = item.get("description") or item.get("aciklama") or ""
+                if not item.get("kutulu") and "[KUTULU]" in desc.upper():
+                    item["kutulu"] = 1
+                elif "kutulu" not in item:
+                    item["kutulu"] = 0
 
         return success_response(items if items is not None else [])
     except Exception as e:

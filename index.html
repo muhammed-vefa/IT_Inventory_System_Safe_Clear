@@ -369,43 +369,45 @@
                           <a href="#" id="menu-users" onclick="app.navigateTo('users')" style="display:none;"><i class="fas fa-users-gear"></i> Kullanıcı Yönetimi</a>
                           <a href="#" onclick="app.openProfileSettingsModal()"><i class="fas fa-user-cog"></i> Hesap Ayarları</a>
                           <a href="#" id="menu-mobile-print" onclick="app.openMobilePrintModal()"><i class="fas fa-print"></i> Yazdır</a>
-                          <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:5px 0;">
-                          
-                          <!-- Üst Menüden Taşınan Modüller -->
-                          <a href="#" id="menu-docs" onclick="app.navigateTo('docs')"><i class="fas fa-file-signature" style="color:var(--accent);"></i> Tutanaklar</a>
-                          <a href="#" id="menu-mahal" onclick="app.navigateTo('mahal')"><i class="fas fa-map-marker-alt" style="color:var(--accent);"></i> Mahal</a>
-                          <a href="#" id="menu-network" onclick="app.navigateTo('network')"><i class="fas fa-server" style="color:var(--accent);"></i> Ağ Cihazları</a>
-                            <a href="#" id="menu-vpn" onclick="app.navigateTo('vpn')"><i class="fas fa-shield-alt" style="color:var(--accent);"></i> VPN Yönetimi</a>
-                          <a href="#" id="menu-keyboard-test" onclick="app.navigateTo('keyboard-test')"><i class="fas fa-keyboard" style="color:var(--accent);"></i> Klavye Testi</a>
-                          <a href="#" id="menu-installations" onclick="app.navigateTo('installations')"><i class="fas fa-bolt" style="color:var(--accent);"></i> Hızlı Kurulumlar</a>
-                          <hr class="admin-only" style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:5px 0;">
-                          
-                          <a href="#" id="menu-keyos-sync" onclick="app.manualKeyOSSync()" style="display:none; color:var(--accent);"><i class="fas fa-magnifying-glass-chart"></i> KeyOS MGT Sorgu</a>
-                          <a href="#" id="menu-keyos-report" onclick="app.showKeyOSReportModal()" style="display:none; color:#00ff88;"><i class="fas fa-file-contract"></i> KeyOS MGT Sonuç</a>
-                          <a href="#" id="menu-keyos-excel" onclick="app.downloadKeyOSWeeklyExcel()" style="display:none; color:#38bdf8;"><i class="fas fa-file-excel"></i> KeyOS MGT Aktiflik</a>
-                          <a href="#" id="menu-dc-sync" onclick="app.manualDesktopCentralSync()" style="display:none; color:#ff4b2b;"><i class="fas fa-desktop"></i> Desktop Central Sorgu</a>
-                          <hr class="admin-only" style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:5px 0;">
-                          
-                          <a href="#" id="menu-cups-query" onclick="app.manualCUPSQuery()" style="display:none; color:#ffb400;"><i class="fas fa-print"></i> CUPS Yazıcı Sorgu</a>
-                          <a href="#" id="menu-printer-pages-report" onclick="app.showPrinterPagesReportModal()" style="display:none; color:#00ff88;"><i class="fas fa-print"></i> Yazıcı Total Çıktı</a>
-                          <a href="#" id="menu-printer-weekly-report" onclick="app.showPrinterWeeklyReportModal()" style="display:none; color:#38bdf8;"><i class="fas fa-file-invoice"></i> Haftalık Yazıcı Raporu</a>
-                          <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:5px 0;">
-                          
-                          <a href="#" id="menu-full-inventory-report" class="admin-only" onclick="app.exportFullInventoryReport()" style="color:#20b2aa;"><i class="fas fa-file-excel"></i> Genel Envanter Raporu</a>
-                          <a href="#" id="menu-weekly-report" onclick="app.generateWeeklyInventoryReport()" style="color:#ffcc00;"><i class="fas fa-file-invoice"></i> Envanter Rapor</a>
-                          <a href="#" id="menu-depot-report" onclick="app.generateDepotWeeklyReport()" style="color:#00ff88;"><i class="fas fa-file-pdf"></i> Depo Rapor</a>
-                          <hr class="admin-only" style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:5px 0;">
-                          
-                          <a href="#" id="menu-admin-reports" onclick="app.navigateTo('admin-reports')" style="display:none; color:#00ffff;"><i class="fas fa-folder-open"></i> Sistem Raporu</a>
-                          <a href="#" id="menu-history" onclick="app.navigateTo('logs')" style="display:none;"><i class="fas fa-history"></i> İşlem Geçmişi</a>
-                          <hr class="admin-only" style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:5px 0;">
-
-                          <a href="#" id="menu-hard-test" onclick="event.preventDefault(); app.runSpeedTest();" style="display:none;"><i class="fas fa-tachometer-alt"></i> Hız Testi</a>
-                          <hr class="admin-only" style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:5px 0;">
-
-                          <a href="#" id="menu-backup" onclick="app.backupDatabase()" class="admin-only" style="display:none; color:#00d2ff;"><i class="fas fa-database"></i> Yedek Al</a>
+                          <a href="#" id="menu-report-center" onclick="app.openReportCenterModal()"><i class="fas fa-chart-pie" style="color:#ffcc00;"></i> Rapor Merkezi</a>
                           <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:5px 0;">
 
+                          <!-- ═══ MODÜLLER (Flyout) ═══ -->
+                          <div class="dropdown-flyout-parent" id="flyout-modules">
+                              <a href="#" onclick="event.preventDefault()"><i class="fas fa-cubes" style="color:var(--accent);"></i> Modüller <i class="fas fa-chevron-left flyout-arrow"></i></a>
+                              <div class="dropdown-flyout-menu">
+                                  <a href="#" id="menu-docs" onclick="app.navigateTo('docs')"><i class="fas fa-file-signature" style="color:var(--accent);"></i> Tutanaklar</a>
+                                  <a href="#" id="menu-mahal" onclick="app.navigateTo('mahal')"><i class="fas fa-map-marker-alt" style="color:var(--accent);"></i> Mahal</a>
+                                  <a href="#" id="menu-network" onclick="app.navigateTo('network')"><i class="fas fa-server" style="color:var(--accent);"></i> Ağ Cihazları</a>
+                                  <a href="#" id="menu-vpn" onclick="app.navigateTo('vpn')"><i class="fas fa-shield-alt" style="color:var(--accent);"></i> VPN Yönetimi</a>
+                                  <a href="#" id="menu-keyboard-test" onclick="app.navigateTo('keyboard-test')"><i class="fas fa-keyboard" style="color:var(--accent);"></i> Klavye Testi</a>
+                                  <a href="#" id="menu-installations" onclick="app.navigateTo('installations')"><i class="fas fa-bolt" style="color:var(--accent);"></i> Hızlı Kurulumlar</a>
+                              </div>
+                          </div>
+
+                          <!-- ═══ ENTEGRASYONLAR (Flyout — Admin) ═══ -->
+                          <div class="dropdown-flyout-parent admin-only" id="flyout-integrations">
+                              <a href="#" onclick="event.preventDefault()"><i class="fas fa-plug" style="color:#ff4b2b;"></i> Entegrasyonlar <i class="fas fa-chevron-left flyout-arrow"></i></a>
+                              <div class="dropdown-flyout-menu">
+                                  <a href="#" id="menu-keyos-sync" onclick="app.manualKeyOSSync()" style="color:var(--accent);"><i class="fas fa-magnifying-glass-chart"></i> KeyOS MGT Sorgu</a>
+                                  <a href="#" id="menu-keyos-report" onclick="app.showKeyOSReportModal()" style="color:#00ff88;"><i class="fas fa-file-contract"></i> KeyOS MGT Sonuç</a>
+                                  <a href="#" id="menu-keyos-excel" onclick="app.downloadKeyOSWeeklyExcel()" style="color:#38bdf8;"><i class="fas fa-file-excel"></i> KeyOS MGT Aktiflik</a>
+                                  <a href="#" id="menu-dc-sync" onclick="app.manualDesktopCentralSync()" style="color:#ff4b2b;"><i class="fas fa-desktop"></i> Desktop Central Sorgu</a>
+                                  <a href="#" id="menu-cups-query" onclick="app.manualCUPSQuery()" style="color:#ffb400;"><i class="fas fa-print"></i> CUPS Yazıcı Sorgu</a>
+                              </div>
+                          </div>
+
+                          <!-- ═══ SİSTEM (Flyout — Admin) ═══ -->
+                          <div class="dropdown-flyout-parent admin-only" id="flyout-system">
+                              <a href="#" onclick="event.preventDefault()"><i class="fas fa-cogs" style="color:#94a3b8;"></i> Sistem <i class="fas fa-chevron-left flyout-arrow"></i></a>
+                              <div class="dropdown-flyout-menu">
+                                  <a href="#" id="menu-history" onclick="app.navigateTo('logs')"><i class="fas fa-history"></i> İşlem Geçmişi</a>
+                                  <a href="#" id="menu-hard-test" onclick="event.preventDefault(); app.runSpeedTest();"><i class="fas fa-tachometer-alt"></i> Hız Testi</a>
+                                  <a href="#" id="menu-backup" onclick="app.backupDatabase()" style="color:#00d2ff;"><i class="fas fa-database"></i> Yedek Al</a>
+                              </div>
+                          </div>
+
+                          <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:5px 0;">
                           <a href="#" onclick="app.handleLogout()" style="color: #ff4b2b;"><i class="fas fa-right-from-bracket"></i> Çıkış Yap</a>
                       </div>
                 </div>
@@ -1098,7 +1100,8 @@
                     <button class="btn-chip" data-block="YGAP" onclick="app.setInvBlock('YGAP')">YGAP</button>
                     <button class="btn-chip" data-block="TSB" onclick="app.setInvBlock('TSB')">TSB</button>
                     <button class="btn-chip" data-block="MH" onclick="app.setInvBlock('MH')">MH</button>
-                                                        </div>
+                    <button class="btn-chip" data-block="DEPO" onclick="app.setInvBlock('DEPO')"><i class="fas fa-warehouse"></i> DEPO</button>
+                </div>
                 
                 
                 
@@ -1136,6 +1139,14 @@
 
 
             <div class="filter-chips mb-4" id="floor-filters" style="display: none; padding-top: 5px; border-top: 1px dashed rgba(255,255,255,0.1);"></div>
+            <div class="filter-chips mb-4" id="depo-sub-filters-container" style="display: none; padding-top: 5px; border-top: 1px dashed rgba(255,255,255,0.1);">
+                <span style="font-size:0.7rem; color:var(--text-secondary); margin-right:10px; align-self:center; font-weight:700;"><i class="fas fa-boxes-stacked"></i> DEPO DURUM:</span>
+                <button class="btn-chip active" data-depo-sub="ALL" onclick="app.setDepoSubFilter('ALL')">TÜMÜ</button>
+                <button class="btn-chip" data-depo-sub="HAZIR" onclick="app.setDepoSubFilter('HAZIR')">HAZIR</button>
+                <button class="btn-chip" data-depo-sub="ARIZALI" onclick="app.setDepoSubFilter('ARIZALI')">ARIZALI</button>
+                <button class="btn-chip" data-depo-sub="KUTULU" onclick="app.setDepoSubFilter('KUTULU')">KUTULU</button>
+                <button class="btn-chip" data-depo-sub="EKRANSIZ" onclick="app.setDepoSubFilter('EKRANSIZ')">EKRANSIZ</button>
+            </div>
             <div class="grid" id="inventory-grid">            </div>
             <div id="inventory-scroll-sentinel" style="height: 20px; width: 100%;"></div>
 
@@ -2677,6 +2688,105 @@
 
 
     <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• DEVICE EDIT MODAL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    
+    <!-- ==================== RAPOR MERKEZI MODAL ==================== -->
+    <div id="report-center-modal" class="modal-backdrop" style="display: none;" onclick="if(event.target === this) app.closeModal('report-center-modal')">
+        <div class="card modal-card-lg" style="max-width: 750px; padding: 25px;">
+            <div class="flex-between mb-3" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 15px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(255,204,0,0.1); display: flex; align-items: center; justify-content: center; color: #ffcc00; font-size: 1.2rem;">
+                        <i class="fas fa-chart-pie"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.2rem; color: #f8fafc;">Rapor Merkezi</h3>
+                        <p style="margin: 0; font-size: 0.75rem; color: var(--text-secondary);">Tüm envanter, depo, yazıcı ve sistem raporlarına tek merkezden erişin.</p>
+                    </div>
+                </div>
+                <i class="fas fa-times modal-close" onclick="app.closeModal('report-center-modal')" style="cursor: pointer; font-size: 1.2rem; opacity: 0.7;"></i>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 15px; margin-top: 15px;">
+                <!-- 1. Genel Envanter Raporu -->
+                <div class="card" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(32,178,170,0.3); border-radius: 10px; padding: 15px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px; color: #20b2aa; font-weight: 700; font-size: 0.95rem; margin-bottom: 6px;">
+                            <i class="fas fa-file-excel"></i> Genel Envanter
+                        </div>
+                        <p style="font-size: 0.75rem; color: #94a3b8; margin: 0; line-height: 1.4;">Tüm bilgisayar ve çevre birimlerinin kapsamlı Excel dökümü.</p>
+                    </div>
+                    <button class="btn-chip admin-only" onclick="app.exportFullInventoryReport()" style="background: rgba(32,178,170,0.15); color: #20b2aa; border: 1px solid rgba(32,178,170,0.4); justify-content: center; font-weight: 700;">
+                        <i class="fas fa-download"></i> Excel İndir
+                    </button>
+                </div>
+
+                <!-- 2. Envanter Haftalık Değişiklik Raporu -->
+                <div class="card" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,204,0,0.3); border-radius: 10px; padding: 15px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px; color: #ffcc00; font-weight: 700; font-size: 0.95rem; margin-bottom: 6px;">
+                            <i class="fas fa-file-invoice"></i> Envanter Değişiklik
+                        </div>
+                        <p style="font-size: 0.75rem; color: #94a3b8; margin: 0; line-height: 1.4;">Son 7 günde eklenen, güncellenen veya silinen cihazlar.</p>
+                    </div>
+                    <button class="btn-chip" onclick="app.generateWeeklyInventoryReport()" style="background: rgba(255,204,0,0.15); color: #ffcc00; border: 1px solid rgba(255,204,0,0.4); justify-content: center; font-weight: 700;">
+                        <i class="fas fa-file-export"></i> Rapor Al
+                    </button>
+                </div>
+
+                <!-- 3. Depo Raporu -->
+                <div class="card" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(0,255,136,0.3); border-radius: 10px; padding: 15px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px; color: #00ff88; font-weight: 700; font-size: 0.95rem; margin-bottom: 6px;">
+                            <i class="fas fa-file-pdf"></i> Depo Durum
+                        </div>
+                        <p style="font-size: 0.75rem; color: #94a3b8; margin: 0; line-height: 1.4;">Depodaki cihazlar, hazır/arızalı stokları ve sarf malzeme PDF'i.</p>
+                    </div>
+                    <button class="btn-chip" onclick="app.generateDepotWeeklyReport()" style="background: rgba(0,255,136,0.15); color: #00ff88; border: 1px solid rgba(0,255,136,0.4); justify-content: center; font-weight: 700;">
+                        <i class="fas fa-file-pdf"></i> PDF Oluştur
+                    </button>
+                </div>
+
+                <!-- 4. Haftalık Yazıcı Raporu -->
+                <div class="card" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(56,189,248,0.3); border-radius: 10px; padding: 15px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px; color: #38bdf8; font-weight: 700; font-size: 0.95rem; margin-bottom: 6px;">
+                            <i class="fas fa-print"></i> Haftalık Yazıcı
+                        </div>
+                        <p style="font-size: 0.75rem; color: #94a3b8; margin: 0; line-height: 1.4;">Yazıcı sayaç farkları, toner durumları ve servis geçmişi.</p>
+                    </div>
+                    <button class="btn-chip" onclick="app.showPrinterWeeklyReportModal()" style="background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.4); justify-content: center; font-weight: 700;">
+                        <i class="fas fa-eye"></i> İncele & İndir
+                    </button>
+                </div>
+
+                <!-- 5. Yazıcı Total Çıktı -->
+                <div class="card" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(168,85,247,0.3); border-radius: 10px; padding: 15px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px; color: #c084fc; font-weight: 700; font-size: 0.95rem; margin-bottom: 6px;">
+                            <i class="fas fa-receipt"></i> Yazıcı Total Çıktı
+                        </div>
+                        <p style="font-size: 0.75rem; color: #94a3b8; margin: 0; line-height: 1.4;">Cihaz bazlı toplam sayfa basım adetleri ve kullanım analizi.</p>
+                    </div>
+                    <button class="btn-chip" onclick="app.showPrinterPagesReportModal()" style="background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.4); justify-content: center; font-weight: 700;">
+                        <i class="fas fa-chart-bar"></i> Görüntüle
+                    </button>
+                </div>
+
+                <!-- 6. Sistem Raporu -->
+                <div class="card" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(6,182,212,0.3); border-radius: 10px; padding: 15px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px; color: #06b6d4; font-weight: 700; font-size: 0.95rem; margin-bottom: 6px;">
+                            <i class="fas fa-folder-open"></i> Sistem Raporu
+                        </div>
+                        <p style="font-size: 0.75rem; color: #94a3b8; margin: 0; line-height: 1.4;">Sistem işlem logları, hata kayıtları ve denetim izleri.</p>
+                    </div>
+                    <button class="btn-chip admin-only" onclick="app.navigateTo('admin-reports'); app.closeModal('report-center-modal');" style="background: rgba(6,182,212,0.15); color: #06b6d4; border: 1px solid rgba(6,182,212,0.4); justify-content: center; font-weight: 700;">
+                        <i class="fas fa-arrow-right"></i> Panele Git
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="device-detail-modal" class="modal-backdrop" style="display: none;" onclick="app.closeDeviceDetailWithCheck(event)">
         <div class="card modal-card-lg" style="max-width: 600px;">
             <div class="flex-between mb-3">

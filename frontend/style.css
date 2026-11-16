@@ -431,6 +431,9 @@ textarea.search-bar {
 .status-is_faulty { background: rgba(255, 75, 43, 0.1); color: var(--status-offline); }
 .status-depoda { background: rgba(255, 180, 0, 0.1); color: var(--status-warning); }
 .status-servis { background: rgba(124, 58, 237, 0.15); color: #a78bfa; border: 1px solid rgba(124, 58, 237, 0.2); }
+.status-kutulu { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+.status-hazir { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+.status-ekransiz { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
 .status-kurulum { background: rgba(0, 210, 255, 0.15); color: var(--accent); border: 1px solid rgba(0, 210, 255, 0.2); }
 
 .logo {
@@ -2005,6 +2008,45 @@ textarea.search-bar {
 @keyframes dropdownFade {
     from { opacity: 0; transform: translateY(10px) scale(0.95); }
     to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Flyout Submenus for Profile Dropdown */
+.dropdown-flyout-parent {
+    position: relative;
+}
+.dropdown-flyout-parent > a {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+}
+.dropdown-flyout-parent .flyout-arrow {
+    font-size: 0.65rem;
+    opacity: 0.5;
+    margin-left: auto;
+    transition: transform 0.2s;
+}
+.dropdown-flyout-menu {
+    position: absolute;
+    top: -5px;
+    right: 100%;
+    min-width: 210px;
+    background: rgba(15, 23, 42, 0.98);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 8px 0;
+    margin-right: 6px;
+    display: none;
+    z-index: 5100;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+.dropdown-flyout-parent:hover .dropdown-flyout-menu {
+    display: block;
+    animation: dropdownFade 0.2s ease-out;
+}
+.dropdown-flyout-parent:hover .flyout-arrow {
+    opacity: 1;
+    transform: translateX(-3px);
 }
 
 /* Modal Interaction Lockdown */

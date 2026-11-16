@@ -437,7 +437,8 @@ def update_inventory():
                 'tarayici_seri': 'scanner_serial',
                 'monitor_seri': 'monitor_serial',
                 'monitor2_seri': 'monitor2_serial',
-                'bagli_yazicilar': 'connected_printers'
+                'bagli_yazicilar': 'connected_printers',
+                'kutulu': 'kutulu'
             },
             'queing_machines': {
                 'location_code': 'location_code',
@@ -545,7 +546,7 @@ def update_inventory():
                 'pc_serial', 'monitor_serial', 'monitor2_serial', 'connected_printers',
                 'by_serial', 'bo_serial', 'scanner_serial', 'pr6900', 'pr5200', 'pr8690',
                 'on_field', 'warehouse', 'is_faulty', 'without_location', 'windows', 'keyos', 'rdp',
-                'rdp_address', 'rdp_reason', 'pending_installation', 'hostname_mismatch', 'device_type'
+                'rdp_address', 'rdp_reason', 'pending_installation', 'hostname_mismatch', 'device_type', 'kutulu'
             ],
             'queing_machines': [
                 'pc_no', 'location_code', 'ip', 'mac', 'serial_no',

@@ -883,6 +883,8 @@ checkLoginStatus: function() {
         
         const navAdminReports = document.getElementById('menu-admin-reports');
         if(navAdminReports) navAdminReports.style.display = (isAdmin || allowedViews.includes('admin-reports')) ? 'block' : 'none';
+        const navReportCenter = document.getElementById('menu-report-center');
+        if(navReportCenter) navReportCenter.style.display = (isAdmin || this.isDepotRole(role) || allowedViews.includes('inventory') || allowedViews.includes('depot')) ? 'flex' : 'none';
         // Admin-only butonları/alanları göster
         document.querySelectorAll('.admin-only').forEach(el => {
             el.style.setProperty('display', isAdmin ? 'block' : 'none', 'important');
@@ -1781,8 +1783,8 @@ checkLoginStatus: function() {
 
         const html = chunk.map(i => {
             const pcLabel = this.formatPcLabel(i.pc_no, i.device_type, i.id);
-            const durumHtml = this.getDurumBadge(i.status || (i.is_faulty == 1 ? 'ARIZALI' : (i.warehouse == 1 ? 'DEPO' : (i.without_location == 1 ? 'KAYIP' : 'KURULU'))), (i.location_code || i.location_code) && (i.location_code || i.location_code) !== '-');
-            const osBadge = this.getOSBadge(i.windows == 1 || String(i.windows || "").toUpperCase().includes("WIN"), i.keyos == 1 || String(i.keyos || "").toUpperCase().includes("KEY"), this.isTrue(i.rdp));
+            const durumHtml = (this.state.invCategory === 'PC') ? this.getPcDurumBadges(i) : this.getDurumBadge(i.status || (i.is_faulty == 1 ? 'ARIZALI' : (i.warehouse == 1 ? 'DEPO' : (i.without_location == 1 ? 'KAYIP' : 'KURULU'))), (i.location_code || i.location_code) && (i.location_code || i.location_code) !== '-');
+            const osBadge = (!this.isTrue(i.warehouse) && !this.isTrue(i.without_location)) ? this.getOSBadge(i.windows == 1 || String(i.windows || "").toUpperCase().includes("WIN"), i.keyos == 1 || String(i.keyos || "").toUpperCase().includes("KEY"), this.isTrue(i.rdp)) : '';
 
             const noteInfo = nc[String(i.id)];
             let noteBubble = '';
@@ -2196,11 +2198,28 @@ checkLoginStatus: function() {
         });
         noInput.value = String(maxNo + 1);
     },
-        setInvBlock: function(block) {
+    setInvBlock: function(block) {
         this.state.invBlock = block || 'ALL';
         this.state.invKat = 'ALL'; // Reset floor when block changes
+        if (block !== 'DEPO') {
+            this.state.depoSubFilter = 'ALL';
+        }
         document.querySelectorAll('#inventory-filters .btn-chip').forEach(btn => btn.classList.toggle('active', btn.dataset.block === block));
-        this.renderKatFilters(block);
+        
+        const depoContainer = document.getElementById('depo-sub-filters-container');
+        const floorContainer = document.getElementById('floor-filters');
+        if (block === 'DEPO') {
+            if (floorContainer) floorContainer.style.display = 'none';
+            if (depoContainer) {
+                depoContainer.style.display = 'flex';
+                document.querySelectorAll('#depo-sub-filters-container .btn-chip').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.depoSub === (this.state.depoSubFilter || 'ALL'));
+                });
+            }
+        } else {
+            if (depoContainer) depoContainer.style.display = 'none';
+            this.renderKatFilters(block);
+        }
         
         const isPrinterCat = ['PRINTER', 'BARCODE_PRINTER', 'BARCODE_READER', 'SCANNER'].includes(this.state.invCategory);
         if (isPrinterCat) {
@@ -2208,6 +2227,13 @@ checkLoginStatus: function() {
         } else {
             this.filterInventory();
         }
+    },
+    setDepoSubFilter: function(sub) {
+        this.state.depoSubFilter = sub || 'ALL';
+        document.querySelectorAll('#depo-sub-filters-container .btn-chip').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.depoSub === this.state.depoSubFilter);
+        });
+        this.filterInventory();
     },
     getBlockFromMahal: function(kod) {
         if (!kod) return null;
@@ -2335,8 +2361,33 @@ checkLoginStatus: function() {
             
             if (!catMatch) return false;
             
-            // Block
-            if (block !== 'ALL') {
+            // Block & DEPO Filter
+            if (block === 'DEPO') {
+                const isWh = this.isTrue(i.warehouse) || (this.isTrue(i.is_faulty) && !this.isTrue(i.on_field) && !this.isTrue(i.without_location)) || ((i.location_code || i.mahal || '').toUpperCase().includes('DEPO'));
+                if (!isWh) return false;
+
+                const sub = this.state.depoSubFilter || 'ALL';
+                if (sub !== 'ALL') {
+                    const isFaulty = this.isTrue(i.is_faulty);
+                    const isKutulu = this.isTrue(i.kutulu) || ((i.description || i.aciklama || '').toUpperCase().includes('[KUTULU]'));
+                    const hasScreen = Boolean(
+                        (i.monitor_seri && i.monitor_seri.trim() !== '' && i.monitor_seri.trim() !== '0' && i.monitor_seri.trim() !== '---') ||
+                        (i.monitor_serial && i.monitor_serial.trim() !== '' && i.monitor_serial.trim() !== '0' && i.monitor_serial.trim() !== '---') ||
+                        (i.monitor2_seri && i.monitor2_seri.trim() !== '' && i.monitor2_seri.trim() !== '0' && i.monitor2_seri.trim() !== '---') ||
+                        (i.monitor2_serial && i.monitor2_serial.trim() !== '' && i.monitor2_serial.trim() !== '0' && i.monitor2_serial.trim() !== '---')
+                    );
+
+                    if (sub === 'HAZIR') {
+                        if (!(hasScreen && !isFaulty && !isKutulu)) return false;
+                    } else if (sub === 'ARIZALI') {
+                        if (!isFaulty) return false;
+                    } else if (sub === 'KUTULU') {
+                        if (!isKutulu) return false;
+                    } else if (sub === 'EKRANSIZ') {
+                        if (!(!hasScreen && !isFaulty && !isKutulu)) return false;
+                    }
+                }
+            } else if (block !== 'ALL') {
                 const tower = (i.tower || "").toUpperCase();
                 let kod = (i.location_code || i.mahal || "").toUpperCase();
                 if (!kod || !kod.includes('.')) {
@@ -2621,7 +2672,10 @@ checkLoginStatus: function() {
             let mahalUP = (p.mahal || "").toUpperCase();
             mahalUP = mahalUP.replace(/^(SERVİSTE|SERVISTE|KONTROLDE|DEPO|KAYIP|HURDA)[\.\s-]+/g, '');
 
-            if (block !== 'ALL') {
+            if (block === 'DEPO') {
+                const isDepo = (p.warehouse == 1 || (p.mahal || p.location_code || '').toUpperCase().includes('DEPO') || (p.status || '').toUpperCase().includes('DEPO'));
+                if (!isDepo) return false;
+            } else if (block !== 'ALL') {
                 const tower = (p.tower || "").toUpperCase();
                 let kod = (p.mahal || p.location_code || "").toUpperCase();
                 if (!kod || !kod.includes('.')) {
@@ -4797,6 +4851,9 @@ rmdir "$M" 2>/dev/null`;
         }
         // Load edit form
         this.loadEditForm(item, type);
+        if (type === 'pc') {
+            setTimeout(() => this.updatePcModalStatusState(), 10);
+        }
         // Render History Button (Image references "Düzenleme geçmii")
         const historyBtn = document.getElementById('btn-show-history');
         if (historyBtn) {
@@ -5233,26 +5290,21 @@ rmdir "$M" 2>/dev/null`;
                     </div>
                     <!-- Bottom Status Bar -->
                     <div class="flex-column gap-2" style="border-top:1px solid rgba(255,255,255,0.05); padding-top:10px;">
-                        <div class="flex-row gap-2" style="align-items:center; flex-wrap:wrap;">
-                            <label class="check-container" style="font-size:0.7rem;">Sahada
-                                <input type="checkbox" id="edit-on_field" ${this.isTrue(item.on_field) ? 'checked' : ''} onclick="app.handleExclusiveCheck('status', 'edit-on_field')">
+                        <div class="flex-row gap-3" style="align-items:center; flex-wrap:wrap;">
+                            <label class="check-container" style="font-size:0.75rem; font-weight:700;">Sahada
+                                <input type="checkbox" id="edit-on_field" ${this.isTrue(item.on_field) ? 'checked' : ''} onclick="app.handlePcStatusCheck('edit-on_field')">
                                 <span class="checkmark"></span>
                             </label>
-                            <label class="check-container" style="font-size:0.7rem;">Depoda
-                                <input type="checkbox" id="edit-warehouse" ${this.isTrue(item.warehouse) ? 'checked' : ''} onclick="app.handleExclusiveCheck('status', 'edit-warehouse')">
+                            <label class="check-container" style="font-size:0.75rem; font-weight:700;">Depoda
+                                <input type="checkbox" id="edit-warehouse" ${(this.isTrue(item.warehouse) || (this.isTrue(item.is_faulty) && !this.isTrue(item.on_field) && !this.isTrue(item.without_location))) ? 'checked' : ''} onclick="app.handlePcStatusCheck('edit-warehouse')">
                                 <span class="checkmark"></span>
                             </label>
-                            <label class="check-container" style="font-size:0.7rem;">Arızalı
-                                <input type="checkbox" id="edit-is_faulty" ${this.isTrue(item.is_faulty) ? 'checked' : ''} onclick="app.handleExclusiveCheck('status', 'edit-is_faulty')">
+                            <label class="check-container" style="font-size:0.75rem; font-weight:700;">Kayıp
+                                <input type="checkbox" id="edit-without_location" ${this.isTrue(item.without_location) ? 'checked' : ''} onclick="app.handlePcStatusCheck('edit-without_location')">
                                 <span class="checkmark"></span>
                             </label>
-                            <label class="check-container" style="font-size:0.7rem;">Kayıp
-                                <input type="checkbox" id="edit-without_location" ${this.isTrue(item.without_location) ? 'checked' : ''} onclick="app.handleExclusiveCheck('status', 'edit-without_location')">
-                                <span class="checkmark"></span>
-                            </label>
-
                         </div>
-                        <div class="flex-row gap-2" style="justify-content: flex-start; align-items:center;">
+                        <div class="flex-row gap-2" style="justify-content: flex-start; align-items:center; flex-wrap:wrap; margin-top:4px;">
                              <label class="check-container" style="font-size:0.75rem;">Windows
                                 <input type="checkbox" id="edit-windows" ${this.isTrue(item.windows) ? 'checked' : ''} onclick="app.handleExclusiveCheck('os', 'edit-windows')">
                                 <span class="checkmark"></span>
@@ -5271,6 +5323,14 @@ rmdir "$M" 2>/dev/null`;
                                     <input type="search" id="edit-rdp_reason" class="search-bar" placeholder="RDP AYlma Nedeni" value="${item.rdp_reason || ''}" style="padding: 4px; font-size: 0.75rem;">
                                 </div>
                             </div>
+                            <label class="check-container" style="font-size:0.75rem; color:#ff4b2b;">Arızalı
+                                <input type="checkbox" id="edit-is_faulty" ${this.isTrue(item.is_faulty) ? 'checked' : ''}>
+                                <span class="checkmark" style="border-color:#ff4b2b;"></span>
+                            </label>
+                            <label class="check-container" style="font-size:0.75rem; color:#c084fc;">Kutulu
+                                <input type="checkbox" id="edit-kutulu" ${(this.isTrue(item.kutulu) || ((item.description || item.aciklama || '').toUpperCase().includes('[KUTULU]'))) ? 'checked' : ''}>
+                                <span class="checkmark" style="border-color:#c084fc;"></span>
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -5513,7 +5573,7 @@ rmdir "$M" 2>/dev/null`;
     handleExclusiveCheck: function(group, currentId) {
         let targets = [];
         if (group === 'status') {
-            targets = ['edit-on_field', 'edit-warehouse', 'edit-is_faulty', 'edit-without_location'];
+            targets = ['edit-on_field', 'edit-warehouse', 'edit-without_location'];
         } else if (group === 'os') {
             targets = ['edit-windows', 'edit-keyos'];
         }
@@ -5525,6 +5585,79 @@ rmdir "$M" 2>/dev/null`;
                 if (el) el.checked = false;
             }
         });
+    },
+    handlePcStatusCheck: function(currentId) {
+        const list = ['edit-on_field', 'edit-warehouse', 'edit-without_location'];
+        const currentEl = document.getElementById(currentId);
+        if (currentEl && currentEl.checked) {
+            list.forEach(id => {
+                if (id !== currentId) {
+                    const el = document.getElementById(id);
+                    if (el) el.checked = false;
+                }
+            });
+        }
+        this.updatePcModalStatusState();
+    },
+    updatePcModalStatusState: function() {
+        const onField = document.getElementById('edit-on_field');
+        const warehouse = document.getElementById('edit-warehouse');
+        const lost = document.getElementById('edit-without_location');
+        const win = document.getElementById('edit-windows');
+        const keyos = document.getElementById('edit-keyos');
+        const rdp = document.getElementById('edit-rdp');
+        const faulty = document.getElementById('edit-is_faulty');
+        const kutulu = document.getElementById('edit-kutulu');
+        const rdpWrapper = document.getElementById('rdp-wrapper');
+
+        const isSahada = onField && onField.checked;
+        const isDepoda = warehouse && warehouse.checked;
+        const isKayip = lost && lost.checked;
+
+        if (isSahada) {
+            // Sahada: OS secilebilir
+            if (win) win.disabled = false;
+            if (keyos) keyos.disabled = false;
+            this.handleKeyOSChange();
+
+            // Arazali ve Kutulu devre disi ve secimsiz
+            if (faulty) { faulty.checked = false; faulty.disabled = true; }
+            if (kutulu) { kutulu.checked = false; kutulu.disabled = true; }
+        } else if (isDepoda) {
+            // Depoda: OS sifirlanir ve devre disi birakilir
+            if (win) { win.checked = false; win.disabled = true; }
+            if (keyos) { keyos.checked = false; keyos.disabled = true; }
+            if (rdp) { rdp.checked = false; rdp.disabled = true; }
+            if (rdpWrapper) {
+                rdpWrapper.style.opacity = '0.3';
+                rdpWrapper.style.pointerEvents = 'none';
+            }
+            const rdpDetails = document.getElementById('rdp-details');
+            if (rdpDetails) rdpDetails.style.display = 'none';
+
+            // Arazali ve Kutulu aktif
+            if (faulty) faulty.disabled = false;
+            if (kutulu) kutulu.disabled = false;
+        } else if (isKayip) {
+            // Kayip: tum alt secenekler devre disi
+            if (win) { win.checked = false; win.disabled = true; }
+            if (keyos) { keyos.checked = false; keyos.disabled = true; }
+            if (rdp) { rdp.checked = false; rdp.disabled = true; }
+            if (rdpWrapper) {
+                rdpWrapper.style.opacity = '0.3';
+                rdpWrapper.style.pointerEvents = 'none';
+            }
+            const rdpDetails = document.getElementById('rdp-details');
+            if (rdpDetails) rdpDetails.style.display = 'none';
+
+            if (faulty) { faulty.checked = false; faulty.disabled = true; }
+            if (kutulu) { kutulu.checked = false; kutulu.disabled = true; }
+        } else {
+            if (win) win.disabled = false;
+            if (keyos) keyos.disabled = false;
+            if (faulty) faulty.disabled = false;
+            if (kutulu) kutulu.disabled = false;
+        }
     },
     handleKeyOSChange: function() {
         const checkKeyOS = document.getElementById('edit-keyos');
@@ -5669,6 +5802,52 @@ rmdir "$M" 2>/dev/null`;
                     const el = document.getElementById('edit-' + k);
                     if(el) payload[k] = el.checked ? 1 : 0;
                 });
+
+                if (devType === 'PC') {
+                    // 1. Mahal Kodu zorunlu
+                    if (!payload.location_code || payload.location_code.trim() === '' || payload.location_code.trim() === '-') {
+                        return this.showToast('Mahal Kodu girilmesi zorunludur!', 'warning');
+                    }
+                    // 2. Durum Bildirme (Sahada, Depoda veya Kayıp) zorunlu
+                    const hasStatus = payload.on_field == 1 || payload.warehouse == 1 || payload.without_location == 1;
+                    if (!hasStatus) {
+                        return this.showToast('Lütfen durum seçiniz (Sahada, Depoda veya Kayıp)!', 'warning');
+                    }
+                    // 3. Sahada ise İşletim Sistemi (Windows veya KeyOS) zorunlu
+                    if (payload.on_field == 1) {
+                        const hasOs = payload.windows == 1 || payload.keyos == 1;
+                        if (!hasOs) {
+                            return this.showToast('Sahada olan cihazlar için İşletim Sistemi (Windows veya KeyOS) seçilmesi zorunludur!', 'warning');
+                        }
+                        payload.is_faulty = 0;
+                        payload.kutulu = 0;
+                    } else if (payload.warehouse == 1) {
+                        // Depoda ise İşletim Sistemi sıfırlanır
+                        payload.windows = 0;
+                        payload.keyos = 0;
+                        payload.rdp = 0;
+                        payload.rdp_address = '';
+                        payload.rdp_reason = '';
+                        const kutuluEl = document.getElementById('edit-kutulu');
+                        payload.kutulu = kutuluEl && kutuluEl.checked ? 1 : 0;
+                        // Description senkronizasyonu ([KUTULU])
+                        let desc = payload.description || '';
+                        if (payload.kutulu == 1) {
+                            if (!desc.includes('[KUTULU]')) {
+                                desc = ('[KUTULU] ' + desc).trim();
+                            }
+                        } else {
+                            desc = desc.replace(/\[KUTULU\]/gi, '').trim();
+                        }
+                        payload.description = desc;
+                    } else if (payload.without_location == 1) {
+                        payload.windows = 0;
+                        payload.keyos = 0;
+                        payload.rdp = 0;
+                        payload.is_faulty = 0;
+                        payload.kutulu = 0;
+                    }
+                }
                 let data;
                 let forceUpdate = false;
                 while (true) {
@@ -8851,7 +9030,7 @@ exit
     },
     handleExclusiveCheck: function(group, id) {
         if (group === 'status') {
-            const list = ['edit-on_field', 'edit-warehouse', 'edit-is_faulty', 'edit-without_location'];
+            const list = ['edit-on_field', 'edit-warehouse', 'edit-without_location'];
             list.forEach(item => { 
                 const el = document.getElementById(item);
                 if (el && item !== id) el.checked = false; 
@@ -9890,6 +10069,46 @@ exit
     // =========================================================================
     //  PHASE 4 - HELPER FUNCTIONS (INLINE HTML REDUCTION)
     // =========================================================================
+    getPcDurumBadges: function(i) {
+        const isFaulty = this.isTrue(i.is_faulty);
+        const isWarehouse = this.isTrue(i.warehouse) || (isFaulty && !this.isTrue(i.on_field) && !this.isTrue(i.without_location));
+        const isLost = this.isTrue(i.without_location);
+        const isKutulu = this.isTrue(i.kutulu) || ((i.description || i.aciklama || '').toUpperCase().includes('[KUTULU]'));
+        const hasScreen = Boolean(
+            (i.monitor_seri && i.monitor_seri.trim() !== '' && i.monitor_seri.trim() !== '0' && i.monitor_seri.trim() !== '---') ||
+            (i.monitor_serial && i.monitor_serial.trim() !== '' && i.monitor_serial.trim() !== '0' && i.monitor_serial.trim() !== '---') ||
+            (i.monitor2_seri && i.monitor2_seri.trim() !== '' && i.monitor2_seri.trim() !== '0' && i.monitor2_seri.trim() !== '---') ||
+            (i.monitor2_serial && i.monitor2_serial.trim() !== '' && i.monitor2_serial.trim() !== '0' && i.monitor2_serial.trim() !== '---')
+        );
+
+        let badges = [];
+        if (isWarehouse) {
+            badges.push('<span class="status-badge status-warehouse">DEPODA</span>');
+            if (isFaulty) {
+                badges.push('<span class="status-badge status-is_faulty">ARIZALI</span>');
+            }
+            if (isKutulu) {
+                badges.push('<span class="status-badge status-kutulu">KUTULU</span>');
+            }
+            if (!isFaulty && !isKutulu) {
+                if (hasScreen) {
+                    badges.push('<span class="status-badge status-hazir">HAZIR</span>');
+                } else {
+                    badges.push('<span class="status-badge status-ekransiz">EKRANSIZ</span>');
+                }
+            }
+        } else if (isLost) {
+            badges.push('<span class="status-badge status-is_faulty">KAYIP</span>');
+        } else {
+            badges.push('<span class="status-badge status-on_field">KURULU</span>');
+        }
+        return badges.join(' ');
+    },
+    openReportCenterModal: function() {
+        document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('show'));
+        const modal = document.getElementById('report-center-modal');
+        if (modal) modal.style.display = 'flex';
+    },
     getDurumBadge: function(status, isInstalled) {
         let text = "KURULU", css = "on_field";
         const s = (status || '').toUpperCase();
