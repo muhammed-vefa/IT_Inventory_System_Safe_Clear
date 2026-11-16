@@ -531,14 +531,12 @@ def update_keyos():
         row = cursor.fetchone()
         conn.close()
         
-        if not row or not row[0] or not row[1]:
-            return jsonify({"success": False, "error": "Profil ayarlarınızdan KeyOS MGT kullanıcı adı ve şifrenizi kaydetmelisiniz."}), 400
-            
-        keyos_u = row[0]
-        enc_pass = row[1]
+        keyos_u = data.get('keyos_user') or (row[0] if row and row[0] else None)
+        enc_pass = row[1] if row and row[1] else None
+        keyos_p = data.get('keyos_pass') or (decrypt_password(enc_pass) if enc_pass else None)
         
-        # Şifreyi çöz
-        keyos_p = decrypt_password(enc_pass)
+        if not keyos_u or not keyos_p:
+            return jsonify({"success": False, "error": "Profil ayarlarınızdan KeyOS MGT kullanıcı adı ve şifrenizi kaydetmelisiniz."}), 400
         
         # 2. KeyOS MGT Client'ı oluştur ve giriş yap
         client = KeyOSClient(keyos_u, keyos_p)
@@ -630,7 +628,8 @@ def update_keyos():
             "id": str(computer_id),
             "serialNumber": serial,
             "placeId": str(place_id_val),
-            "hostName": hostname
+            "hostName": hostname,
+            "hostname": hostname
         }
         update_headers = {
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
@@ -762,7 +761,8 @@ def push_hostname_to_keyos(user_id, serial, hostname, location_code):
                 "id": str(computer_id),
                 "serialNumber": ser,
                 "placeId": str(place_id_val),
-                "hostName": host
+                "hostName": host,
+                "hostname": host
             }
             update_headers = {
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",

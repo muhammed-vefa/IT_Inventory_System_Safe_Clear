@@ -6,6 +6,21 @@ Bu dosya, yapay zeka ajanlarının (Antigravity) geçmişte çözdüğü spesifi
 
 ## 📝 Kronik Sorunlar ve Çözüm Arşivi
 
+### [16.11.2026] - KeyOS MGT Mahal ve Hostname Eşzamanlı Güncelleme Çözümü
+* **Sorun:** Bilgisayar envanter güncellemesi sırasında mahal değiştirildiğinde, KeyOS MGT üzerinde mahal doğru güncelleniyor ancak hostname eski değerinde kalıyor (güncellenmiyordu).
+* **Kök Neden:** 
+  1. Frontend PC düzenleme modalında `edit-hostname` input'u `readonly` idi ve mahal değiştirildiğinde (`handleMahalSelection`) yeni ardışık hostname hesaplanıp input'a yazılmıyordu.
+  2. `saveEdit` fonksiyonundaki `fields` listesinde `hostname` bulunmuyordu.
+  3. `saveEdit` içindeki `/keyos/update` çağrısı `edit-hostname` elementinden değer okuyordu; bu input güncellenmediği için KeyOS MGT'ye eski hostname ve yeni mahal gönderiliyordu.
+  4. Backend `/inventory/update` endpoint'i mahal değiştiğinde `generated_host` üretip DB'ye yazmasına rağmen bu değeri JSON yanıtında frontend'e döndürmüyordu.
+  5. Backend `push_hostname_to_keyos` ile frontend `/keyos/update` çağrıları aynı anda KeyOS üzerinde oturum açarak yarış durumuna (race condition) yol açıyordu.
+* **Çözüm:**
+  1. **Frontend `handleMahalSelection` & `calculateNextHostname`:** Mahal seçildiğinde frontend envanter verilerini tarayarak o mahal için sıradaki boş ardışık hostname'i (`cleanLoc + 'x' + seq`) anında hesaplayıp `edit-hostname` alanına yazar. Kullanıcı yeni hostname'i modalda canlı görür.
+  2. **Frontend `saveEdit`:** `fields` listesine `hostname` eklendi. Backend'den dönen `data.hostname` veya modaldeki güncel hostname alınarak `/keyos/update`'e gönderildi. `client_keyos_sync: true` bayrağı iletildi.
+  3. **Backend `inventory_core.py`:** `/inventory/update` yanıtına `hostname: final_hostname` eklendi. `client_keyos_sync` bayrağı aktifse çifte istek ve oturum çakışmasını önlemek için arka plan `push_hostname_to_keyos` atlandı (fallback olarak korundu).
+  4. **Backend `keyos_service.py`:** `update_payload` içerisine hem camelCase (`hostName`) hem de küçük harf (`hostname`) parametresi eklendi.
+* **Dosya Değişiklikleri:** `frontend/UI_controller.js`, `modules/inventory_core.py`, `modules/keyos_service.py`
+
 ### [01.06.2026] - Çevre Birim Seri Numarası "0" Değer Temizliği
 * **Sorun:** Barkod yazıcı (`by_seri`), barkod okuyucu (`bo_seri`), tarayıcı (`tarayici_seri`), 1. ekran (`monitor_seri`) ve 2. ekran (`monitor2_seri`) alanlarında "0" yazıyorsa bu arayüzde gösteriliyordu. Kullanıcı bu "0" verisini "veri yok" anlamında girmişti.
 * **Kök Neden:** Veritabanında bu alanlar boş (NULL) yerine "0" veya "0.0" olarak kaydedilmişti. Frontend ve backend bu değeri geçerli seri numarası gibi işliyordu.
@@ -230,3 +245,13 @@ equire_editor rotalarında yazıcı yolu tespiti printer in path olarak genişle
 * **Depo Filtreleme Düzeltmesi (Mahal Adından Bağımsızlaştırma):**
   - Depo filtresinin mahal adı veya mahal kodunda 'DEPO' geçen ancak durumu 'KURULU' (Sahada) olan cihazları depoda gösterme sorunu giderildi.
   - Filtreleme doğrudan ve yalnızca cihazın durum alanlarına (`!on_field && !without_location && (warehouse || is_faulty)`) kilitlendi; mahal adı bağımlılığı tamamen kaldırıldı.
+
+### [16.11.2026] - Tanımsız Yazıcı & PC Alakasız Yazıcı Çift Taraflı Uyarı Sistemi
+* **1. Tanımsız Yazıcı Uyarısı (Yazıcı Kartında 'TANIMSIZ' Yanıp Sönmesi):**
+  - Bir yazıcı sahada/kurulu olduğu halde (`!status.includes('DEPO') && !status.includes('KAYIP')`) hiçbir bilgisayara tanımlı değilse (`connectedPcs.length === 0`), kartında ünlem yerine **yanıp sönen 'TANIMSIZ'** rozeti (`printer-undefined-badge`) gösterilir.
+  - Yazıcı detay modalında (`openDeviceDetail`) hem başlıkta hem de bağlı bilgisayarlar listesinde "TANIMSIZ (Hiçbir bilgisayara eklenmemiş)" uyarısı belirir.
+* **2. PC Envanter Kartında Alakasız Yazıcı Uyarısı (Rose/Magenta):**
+  - Bilgisayara bağlı yazıcılar (`bagli_yazicilar`) taranarak yazıcının mahal konumu ile bilgisayarın mahal konumu (`getMahalBlockAndFloor`) çapraz kontrol edilir.
+  - Farklı blok/katta olan veya depoda/serviste olan yazıcılar tespit edildiğinde (`getPcMismatchedPrinters`), PC kartının başlığında yanıp sönen `pc-printer-mismatch-badge` (<i class="fas fa-print"></i>) ve kart gövdesinde `pc-printer-mismatch-pill` uyarı şeridi ("Alakasız Yazıcı: PR-XXX - Farklı Kat/Blok") gösterilir.
+  - PC düzenleme modalında "BAĞLI YAZICILAR" alanı altında alakasız yazıcının no'su, mahali ve uyuşmazlık nedeni net olarak listelenir.
+* **Dosya Değişiklikleri:** `frontend/UI_controller.js`, `frontend/style.css`, `index.html` (cache buster: `20261116_mismatch`).

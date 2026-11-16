@@ -1839,6 +1839,33 @@ checkLoginStatus: function() {
                 }
             }
 
+            // Bilgisayara Bağlı Alakasız Yazıcı Uyarısı (Rose/Magenta)
+            const mismatchedPrs = (this.state.invCategory === 'PC' || !this.state.invCategory || this.state.invCategory === 'ALL') ? this.getPcMismatchedPrinters(i) : [];
+            const hasPcPrMismatch = mismatchedPrs.length > 0;
+            let pcPrinterMismatchBadgeHtml = '';
+            let pcPrinterMismatchPillHtml = '';
+
+            if (hasPcPrMismatch) {
+                const prNames = mismatchedPrs.map(m => m.prNo).join(', ');
+                const tooltipText = `UYARI: Bu bilgisayara bağlı ${mismatchedPrs.length} yazıcı farklı kat/blokta tanımlı!\n` + mismatchedPrs.map(m => `${m.prNo}: ${m.reason} (${m.prMahal})`).join('\n');
+                
+                pcPrinterMismatchBadgeHtml = `
+                <span class="pc-printer-mismatch-badge" title="${tooltipText}" onclick="event.stopPropagation(); app.openDeviceDetail(${i.id}, 'pc')">
+                    <i class="fas fa-print"></i>
+                    <span style="font-size: 0.65rem; margin-left: 2px;">${mismatchedPrs.length}</span>
+                </span>`;
+                
+                pcPrinterMismatchPillHtml = `
+                <div class="pc-printer-mismatch-pill" title="${tooltipText}" onclick="event.stopPropagation(); app.openDeviceDetail(${i.id}, 'pc')">
+                    <i class="fas fa-print" style="color: #fb7185; font-size: 0.75rem;"></i>
+                    <div style="display: flex; flex-direction: column; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
+                        <span style="font-size: 0.72rem; color: #fecdd3; font-weight: 700;">Alakasız Yazıcı: <b>${prNames}</b></span>
+                        <span style="font-size: 0.62rem; color: #fda4af;">${mismatchedPrs[0].reason}</span>
+                    </div>
+                    <i class="fas fa-exclamation-triangle" style="font-size: 0.7rem; color: #fb7185; margin-left: auto;"></i>
+                </div>`;
+            }
+
             return `
             <div class="card printer-card-modern fade-in ${this.state.countMode && countedAt ? 'counted-card' : ''}" 
                  onclick="app.openDeviceDetail(${i.id}, 'pc')"
@@ -1853,6 +1880,7 @@ checkLoginStatus: function() {
                         </div>
                         ${keyosBadgeHtml}
                         ${durumHtml}
+                        ${pcPrinterMismatchBadgeHtml}
                     </div>
                     <div class="flex-row gap-2" style="align-items: center;">
                         ${this.state.invCategory === 'PC' ? `
@@ -1894,6 +1922,7 @@ checkLoginStatus: function() {
                     </div>
                 </div>
                 ` : ''}
+                ${pcPrinterMismatchPillHtml}
 
                 ${(this.state.invCategory === 'PC' || this.state.invCategory === 'SK' || this.state.invCategory === 'TABLET') ? '' : `
                 <!-- İÇERİK 3. SATIR: SERİ NO & IP ADRESİ -->
@@ -2585,6 +2614,14 @@ checkLoginStatus: function() {
             });
             this.state.printers = data;
             this.applyPrinterFilters(); // Filtreleri uygula ve render et
+            // PC görünümündeyse yazıcı uyuşmazlık rozetlerini anlık güncelle
+            if (this.state.inventory && (!this.state.invCategory || this.state.invCategory === 'PC' || this.state.invCategory === 'ALL')) {
+                const grid = document.getElementById('inventory-grid');
+                if (grid && grid.children.length > 0 && !this._invPrRefreshedOnce) {
+                    this._invPrRefreshedOnce = true;
+                    this.filterInventory();
+                }
+            }
         } catch (e) { console.error("Yazıcılar yüklenemedi:", e); }
     },
         applyPrinterFilters: function() {
@@ -2813,6 +2850,13 @@ renderPrintersChunk: function() {
                 <span style="font-size: 0.65rem; margin-left: 3px;">${mismatchedPcs.length}</span>
             </span>` : '';
 
+            // Tanımlı PC Yok Uyarısı (TANIMSIZ - Yanıp Sönen Rozet)
+            const isFieldPrinter = !status.includes('DEPO') && !status.includes('KAYIP');
+            const undefinedBadgeHtml = (!isSpecial && dClass === 'PRINTER' && connectedPcs.length === 0 && isFieldPrinter) ? `
+            <span class="printer-undefined-badge" title="UYARI: Bu yazıcıya tanımlı hiçbir bilgisayar bulunamadı!" onclick="event.stopPropagation(); app.openDeviceDetail(${p.id}, 'pr', '${p.device_class || 'PRINTER'}')">
+                TANIMSIZ
+            </span>` : '';
+
             return `
             <div class="card printer-card-modern fade-in" style="cursor:pointer; min-height: ${isSpecial ? 'auto' : '280px'};" onclick="app.openDeviceDetail(${p.id}, 'pr', '${p.device_class || 'PRINTER'}')">
                 <div class="flex-row mb-3" style="align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
@@ -2820,6 +2864,7 @@ renderPrintersChunk: function() {
                         <div style="color: #38bdf8; font-weight: 900; font-size: 1.3rem; letter-spacing: -0.5px;">${prNoDisplay}</div>
                         ${durumHtml}
                         ${mismatchBadgeHtml}
+                        ${undefinedBadgeHtml}
                     </div>
                     <div class="flex-row gap-3" style="align-items: center;">
                         <div class="flex-row gap-2">
@@ -3016,6 +3061,82 @@ renderPrintersChunk: function() {
                 if (!a.isMismatch && b.isMismatch) return 1;
                 return (a.displayName || '').localeCompare(b.displayName || '');
             });
+    },
+
+    getPcMismatchedPrinters: function(pc) {
+        if (!pc || !pc.bagli_yazicilar || !this.state.printers) return [];
+        const pcLoc = (pc.location_code || '').trim();
+        const pcInfo = this.getMahalBlockAndFloor(pcLoc);
+        if (!pcInfo.block || !pcInfo.floor || ['DEPO', 'ARŞİV', 'ARZ', 'BİLİNMİYOR', 'KAYIP'].includes(pcInfo.block)) {
+            return [];
+        }
+
+        const rawStr = String(pc.bagli_yazicilar || '');
+        const tokens = rawStr.match(/PR-?\d+/gi) || [];
+        if (tokens.length === 0) return [];
+
+        const uniqueTokens = [...new Set(tokens.map(t => {
+            let clean = t.toUpperCase().replace(/\s+/g, '');
+            if (!clean.startsWith('PR-')) {
+                const num = clean.replace('PR', '');
+                clean = `PR-${num.padStart(3, '0')}`;
+            }
+            return clean;
+        }))];
+
+        const mismatched = [];
+
+        uniqueTokens.forEach(prNo => {
+            const pr = this.state.printers.find(p => {
+                const pNo = (p.pr_no || p.name || '').toUpperCase().trim();
+                return pNo === prNo || pNo.startsWith(prNo);
+            });
+
+            if (pr) {
+                const prStatus = (pr.status || '').toUpperCase();
+                const prLoc = (pr.mahal || pr.location_code || '').trim();
+                const prInfo = this.getMahalBlockAndFloor(prLoc);
+
+                let isMismatch = false;
+                let reason = '';
+
+                if (prStatus.includes('DEPO') || prStatus.includes('DEPODA')) {
+                    isMismatch = true;
+                    reason = 'Yazıcı Depoda';
+                } else if (prStatus.includes('SERVİS') || prStatus.includes('SERVIS')) {
+                    isMismatch = true;
+                    reason = 'Yazıcı Serviste';
+                } else if (prInfo.block && prInfo.floor) {
+                    const blockDiff = (pcInfo.block !== prInfo.block);
+                    const floorDiff = (pcInfo.floor !== prInfo.floor);
+                    if (blockDiff || floorDiff) {
+                        isMismatch = true;
+                        if (blockDiff && floorDiff) {
+                            reason = `Farklı Blok (${prInfo.block}) ve Kat (${prInfo.floor})`;
+                        } else if (blockDiff) {
+                            reason = `Farklı Blok (${prInfo.block})`;
+                        } else {
+                            reason = `Farklı Kat (${prInfo.floor})`;
+                        }
+                    }
+                } else if (prLoc && !prInfo.block) {
+                    isMismatch = true;
+                    reason = `Farklı Konum (${prLoc})`;
+                }
+
+                if (isMismatch) {
+                    mismatched.push({
+                        prId: pr.id,
+                        prNo: prNo,
+                        prMahal: prLoc || 'Belirtilmemiş',
+                        prStatus: prStatus || 'KURULU',
+                        reason: reason
+                    });
+                }
+            }
+        });
+
+        return mismatched;
     },
 
     removePrinterFromSpecificPc: async function(pcId, pcName, pcIp, prNo, printerId) {
@@ -5252,6 +5373,24 @@ rmdir "$M" 2>/dev/null`;
                         <div class="form-group">
                             <label>BAĞLI YAZICILAR</label>
                             <input type="search" class="search-bar" id="edit-bagli_yazicilar" value="${item.bagli_yazicilar || ''}" readonly style="background:rgba(255,255,255,0.02); color:#64748b;">
+                            ${(() => {
+                                const pcMismatchedPrs = this.getPcMismatchedPrinters(item);
+                                if (pcMismatchedPrs.length === 0) return '';
+                                return `
+                                <div style="margin-top: 5px; padding: 6px 10px; background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.35); border-radius: 6px;">
+                                    <div style="display: flex; align-items: center; gap: 6px; color: #fb7185; font-size: 0.72rem; font-weight: 800; margin-bottom: 3px;">
+                                        <i class="fas fa-exclamation-triangle"></i> DİKKAT: Kat/Blok Dışı Alakasız Yazıcı!
+                                    </div>
+                                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                                        ${pcMismatchedPrs.map(m => `
+                                            <div style="font-size: 0.68rem; color: #fecdd3; display: flex; justify-content: space-between; align-items: center;">
+                                                <span><b>${m.prNo}</b>: ${m.reason}</span>
+                                                <span style="color: #94a3b8; font-size: 0.65rem;">[Yazıcı: ${m.prMahal}]</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>`;
+                            })()}
                         </div>
                     </div>
                     <!-- Row 4: Barkod, Tarayıcı -->
@@ -5470,9 +5609,13 @@ rmdir "$M" 2>/dev/null`;
                             <label id="printer-connected-pcs-title" style="font-weight: 800; font-size: 0.8rem; color: #38bdf8; text-transform: uppercase; margin: 0; display: flex; align-items: center; gap: 6px;">
                                 <i class="fas fa-desktop"></i> BU YAZICININ TANIMLI OLDUĞU BİLGİSAYARLAR (${connectedPcs.length})
                             </label>
-                            <span id="printer-mismatch-header-badge" style="display: ${mismatchedCount > 0 ? 'inline-flex' : 'none'}; align-items: center; gap: 5px; color: #ef4444; font-size: 0.72rem; font-weight: 800; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); padding: 2px 8px; border-radius: 4px;">
+                            ${connectedPcs.length === 0 ? `
+                            <span class="printer-undefined-badge" style="font-size: 0.72rem; padding: 2px 8px;">
+                                TANIMSIZ
+                            </span>` : (mismatchedCount > 0 ? `
+                            <span id="printer-mismatch-header-badge" style="display: inline-flex; align-items: center; gap: 5px; color: #ef4444; font-size: 0.72rem; font-weight: 800; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); padding: 2px 8px; border-radius: 4px;">
                                 <i class="fas fa-exclamation-triangle"></i> ${mismatchedCount} Kat/Blok Dışı Uyuşmazlık!
-                            </span>
+                            </span>` : '')}
                         </div>
                         
                         <div id="printer-connected-pcs-container" style="max-height: 220px; overflow-y: auto; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 6px;">
@@ -5480,8 +5623,9 @@ rmdir "$M" 2>/dev/null`;
                     
                     if (connectedPcs.length === 0) {
                         html += `
-                            <div style="padding: 15px; text-align: center; color: #64748b; font-size: 0.8rem;">
-                                Bu yazıcının tanımlı olduğu bilgisayar bulunamadı.
+                            <div style="padding: 16px; text-align: center; color: #ef4444; font-size: 0.85rem; background: rgba(239,68,68,0.06); border-radius: 6px; border: 1px dashed rgba(239,68,68,0.3); display: flex; flex-direction: column; align-items: center; gap: 6px;">
+                                <span class="printer-undefined-badge" style="font-size: 0.8rem; padding: 3px 10px;">TANIMSIZ</span>
+                                <span>Bu yazıcının tanımlı olduğu hiçbir bilgisayar bulunamadı.</span>
                             </div>
                         `;
                     } else {
@@ -5560,6 +5704,44 @@ rmdir "$M" 2>/dev/null`;
         setVal('tower', info.tower);
         setVal('floor', info.floor);
         setVal('phone_number', info.phone);
+        
+        // PC Düzenleme Modalında Mahal Değiştiğinde Hostname'i Otomatik Güncelle
+        if (code) {
+            const editHostnameEl = document.getElementById('edit-hostname');
+            if (editHostnameEl && editHostnameEl.offsetParent !== null) {
+                const nextHost = this.calculateNextHostname(code, this.state.editingId);
+                if (nextHost) {
+                    editHostnameEl.value = nextHost;
+                }
+            }
+        }
+    },
+    calculateNextHostname: function(locationCode, excludeId) {
+        if (!locationCode) return '';
+        const cleanLoc = locationCode.replace(/\./g, '').trim().toUpperCase();
+        if (!cleanLoc) return '';
+        
+        const existingPCs = (this.state.inventory || []).filter(p => {
+            if (excludeId && p.id == excludeId) return false;
+            const pLoc = (p.location_code || '').trim().toUpperCase();
+            return pLoc === locationCode.trim().toUpperCase() && (p.is_deleted === 0 || p.is_deleted === '0' || !p.is_deleted);
+        });
+        
+        const suffixes = new Set();
+        existingPCs.forEach(p => {
+            const h = p.hostname || '';
+            if (h && h.toLowerCase().includes('x')) {
+                const parts = h.toLowerCase().split('x');
+                const suffixNum = parseInt(parts[parts.length - 1], 10);
+                if (!isNaN(suffixNum)) suffixes.add(suffixNum);
+            }
+        });
+        
+        let seq = 1;
+        while (suffixes.has(seq)) {
+            seq++;
+        }
+        return `${cleanLoc}x${String(seq).padStart(2, '0')}`;
     },
     handleAddExclusiveCheck: function(currentId) {
         const list = ['add-on_field', 'add-warehouse', 'add-is_faulty'];
@@ -5721,7 +5903,7 @@ rmdir "$M" 2>/dev/null`;
                     fields = ['name', 'location_code', 'location_name', 'ip', 'pc_no', 'serial_no', 'mac', 'monitor_type', 'model'];
                     checks = ['on_field', 'warehouse', 'is_faulty', 'without_location'];
                 } else {
-                    fields = ['tower', 'floor', 'location_code', 'location_name', 'ip', 'description', 'pc_serial', 'monitor_seri', 'monitor2_seri', 'mac', 'assigned_to', 'bagli_yazicilar', 'by_seri', 'bo_seri', 'tarayici_seri', 'rdp_address', 'rdp_reason'];
+                    fields = ['tower', 'floor', 'location_code', 'location_name', 'hostname', 'ip', 'description', 'pc_serial', 'monitor_seri', 'monitor2_seri', 'mac', 'assigned_to', 'bagli_yazicilar', 'by_seri', 'bo_seri', 'tarayici_seri', 'rdp_address', 'rdp_reason'];
                     checks = ['on_field', 'warehouse', 'is_faulty', 'without_location', 'windows', 'keyos', 'rdp'];
                 }
 
@@ -5850,6 +6032,7 @@ rmdir "$M" 2>/dev/null`;
                 }
                 let data;
                 let forceUpdate = false;
+                payload.client_keyos_sync = (devType === 'PC' && this.state.activeUser && !!this.state.activeUser.keyos_user);
                 while (true) {
                     payload.force_update = forceUpdate;
                     data = await this.apiRequest('/inventory/update', {
@@ -5872,10 +6055,11 @@ rmdir "$M" 2>/dev/null`;
                 // === OTOMATIK KEYOS GÜNCELLEMESİ ===
                 if (devType === 'PC' && this.state.activeUser && this.state.activeUser.keyos_user) {
                     const item = this.state.inventory.find(i => i.id == id);
-                    if (item && item.pc_serial && payload.location_code) {
+                    const pcSerial = (payload.pc_serial || (item ? item.pc_serial : '') || '').trim();
+                    if (pcSerial && payload.location_code) {
                         try {
-                            const hNameEl = document.getElementById('edit-hostname');
-                            const hName = hNameEl ? hNameEl.value : item.hostname;
+                            const finalHostname = (data && data.hostname) || payload.hostname || (document.getElementById('edit-hostname') ? document.getElementById('edit-hostname').value : '') || (item ? item.hostname : '');
+                            const hName = finalHostname || '';
                             
                             this.showToast('KeyOS MGT verileri eşitleniyor...', 'info');
                             
@@ -5884,8 +6068,8 @@ rmdir "$M" 2>/dev/null`;
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
-                                    serial: item.pc_serial,
-                                    hostname: hName || '',
+                                    serial: pcSerial,
+                                    hostname: hName,
                                     placeId: (payload.location_code || '').replace(/\./g, '-').trim().toUpperCase()
                                 })
                             }).then(keyosResp => {

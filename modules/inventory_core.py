@@ -529,7 +529,7 @@ def update_inventory():
                         
                         # Mahal değişikliği varsa KeyOS Auto-Sync verisi hazırla
                         if new_loc and new_loc != old_loc:
-                            pc_serial = old_data.get('pc_serial', '')
+                            pc_serial = (data.get('pc_serial') or old_data.get('pc_serial') or '').strip()
                             user_id = request.current_user.get('user_id')
                             if pc_serial and str(pc_serial).strip() not in ('', '-', 'None', 'NULL') and user_id:
                                 _keyos_auto_sync_data = {
@@ -781,8 +781,11 @@ def update_inventory():
         conn.close()
         
         # KeyOS Auto-Sync: Mahal değişikliği varsa arka planda KeyOS MGT'yi güncelle
+        # NOT: Eğer istek frontend'den geldiyse ve frontend doğrudan /keyos/update çağrısı yapacaksa
+        # çifte oturum açma ve yarış durumunu (race condition) önlemek için arka plan görevi atlanır.
         keyos_sync_msg = None
-        if _keyos_auto_sync_data:
+        client_keyos_sync = data.get('client_keyos_sync', False)
+        if _keyos_auto_sync_data and not client_keyos_sync:
             try:
                 from modules.keyos_service import push_hostname_to_keyos
                 push_hostname_to_keyos(
@@ -800,7 +803,12 @@ def update_inventory():
         if keyos_sync_msg:
             resp_msg += f" {keyos_sync_msg}"
         
-        return jsonify({"success": True, "message": resp_msg})
+        final_hostname = data.get('hostname') or old_data.get('hostname')
+        return jsonify({
+            "success": True, 
+            "message": resp_msg,
+            "hostname": final_hostname
+        })
     except Exception as e:
         print(f"[UPDATE ERROR] {e}")
         return jsonify({"error": str(e)}), 500
