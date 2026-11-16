@@ -1843,10 +1843,8 @@ checkLoginStatus: function() {
             const mismatchedPrs = (this.state.invCategory === 'PC' || !this.state.invCategory || this.state.invCategory === 'ALL') ? this.getPcMismatchedPrinters(i) : [];
             const hasPcPrMismatch = mismatchedPrs.length > 0;
             let pcPrinterMismatchBadgeHtml = '';
-            let pcPrinterMismatchPillHtml = '';
 
             if (hasPcPrMismatch) {
-                const prNames = mismatchedPrs.map(m => m.prNo).join(', ');
                 const tooltipText = `UYARI: Bu bilgisayara bağlı ${mismatchedPrs.length} yazıcı farklı kat/blokta tanımlı!\n` + mismatchedPrs.map(m => `${m.prNo}: ${m.reason} (${m.prMahal})`).join('\n');
                 
                 pcPrinterMismatchBadgeHtml = `
@@ -1854,16 +1852,6 @@ checkLoginStatus: function() {
                     <i class="fas fa-print"></i>
                     <span style="font-size: 0.65rem; margin-left: 2px;">${mismatchedPrs.length}</span>
                 </span>`;
-                
-                pcPrinterMismatchPillHtml = `
-                <div class="pc-printer-mismatch-pill" title="${tooltipText}" onclick="event.stopPropagation(); app.openDeviceDetail(${i.id}, 'pc')">
-                    <i class="fas fa-print" style="color: #fb7185; font-size: 0.75rem;"></i>
-                    <div style="display: flex; flex-direction: column; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
-                        <span style="font-size: 0.72rem; color: #fecdd3; font-weight: 700;">Alakasız Yazıcı: <b>${prNames}</b></span>
-                        <span style="font-size: 0.62rem; color: #fda4af;">${mismatchedPrs[0].reason}</span>
-                    </div>
-                    <i class="fas fa-exclamation-triangle" style="font-size: 0.7rem; color: #fb7185; margin-left: auto;"></i>
-                </div>`;
             }
 
             return `
@@ -1922,7 +1910,6 @@ checkLoginStatus: function() {
                     </div>
                 </div>
                 ` : ''}
-                ${pcPrinterMismatchPillHtml}
 
                 ${(this.state.invCategory === 'PC' || this.state.invCategory === 'SK' || this.state.invCategory === 'TABLET') ? '' : `
                 <!-- İÇERİK 3. SATIR: SERİ NO & IP ADRESİ -->
@@ -5373,24 +5360,6 @@ rmdir "$M" 2>/dev/null`;
                         <div class="form-group">
                             <label>BAĞLI YAZICILAR</label>
                             <input type="search" class="search-bar" id="edit-bagli_yazicilar" value="${item.bagli_yazicilar || ''}" readonly style="background:rgba(255,255,255,0.02); color:#64748b;">
-                            ${(() => {
-                                const pcMismatchedPrs = this.getPcMismatchedPrinters(item);
-                                if (pcMismatchedPrs.length === 0) return '';
-                                return `
-                                <div style="margin-top: 5px; padding: 6px 10px; background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.35); border-radius: 6px;">
-                                    <div style="display: flex; align-items: center; gap: 6px; color: #fb7185; font-size: 0.72rem; font-weight: 800; margin-bottom: 3px;">
-                                        <i class="fas fa-exclamation-triangle"></i> DİKKAT: Kat/Blok Dışı Alakasız Yazıcı!
-                                    </div>
-                                    <div style="display: flex; flex-direction: column; gap: 2px;">
-                                        ${pcMismatchedPrs.map(m => `
-                                            <div style="font-size: 0.68rem; color: #fecdd3; display: flex; justify-content: space-between; align-items: center;">
-                                                <span><b>${m.prNo}</b>: ${m.reason}</span>
-                                                <span style="color: #94a3b8; font-size: 0.65rem;">[Yazıcı: ${m.prMahal}]</span>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                </div>`;
-                            })()}
                         </div>
                     </div>
                     <!-- Row 4: Barkod, Tarayıcı -->
@@ -5424,6 +5393,24 @@ rmdir "$M" 2>/dev/null`;
                         <label>AÇIKLAMA</label>
                         <textarea class="search-bar" id="edit-description" style="min-height:80px; height:80px; resize:none; width:100%; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.02); color:#fff; border-radius:4px; padding:8px;">${item.description || ''}</textarea>
                     </div>
+                    ${(() => {
+                        const pcMismatchedPrs = this.getPcMismatchedPrinters(item);
+                        if (pcMismatchedPrs.length === 0) return '';
+                        return `
+                        <div style="margin-top: 8px; margin-bottom: 8px; padding: 10px 14px; background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.35); border-radius: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px; color: #fb7185; font-size: 0.8rem; font-weight: 800; margin-bottom: 6px;">
+                                <i class="fas fa-exclamation-triangle"></i> DİKKAT: Kat/Blok Dışı Alakasız Yazıcı Tanımı!
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                ${pcMismatchedPrs.map(m => `
+                                    <div style="font-size: 0.75rem; color: #fecdd3; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 5px 10px; border-radius: 6px;">
+                                        <span><i class="fas fa-print" style="color:#fb7185; margin-right: 6px;"></i><b>${m.prNo}</b>: ${m.reason}</span>
+                                        <span style="color: #94a3b8; font-size: 0.7rem;">[Yazıcı Mahali: ${m.prMahal}]</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>`;
+                    })()}
                     <div id="duplicate-warning" style="display:none; color:#ff4b2b; font-size:0.7rem; font-weight:700; background:rgba(255,75,43,0.1); padding:5px 10px; border-radius:4px; text-align:center; margin-top:5px;">
                         <i class="fas fa-exclamation-triangle"></i> DİKKAT: <span id="duplicate-warning-text"></span>
                     </div>
